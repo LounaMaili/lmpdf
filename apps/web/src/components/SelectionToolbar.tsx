@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type Props = {
   containerRef: HTMLElement | null;
@@ -15,30 +15,34 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
-  const updatePosition = useCallback(() => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return;
-    setVisible(true);
-    setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
+  // Fallback: poll selection every 100ms since mouseup/selectionchange may not fire inside contentEditable
+  useEffect(() => {
+    const poll = setInterval(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+      setVisible(true);
+      setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
+    }, 100);
+    return () => clearInterval(poll);
   }, []);
 
+  // Also try mouseup on window as a backup
   useEffect(() => {
-    const onUp = () => { setTimeout(updatePosition, 50); };
-    const onSel = () => {
+    const onUp = () => {
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) { setVisible(false); return; }
-      updatePosition();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+      setVisible(true);
+      setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
     };
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('selectionchange', onSel);
-    return () => {
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('selectionchange', onSel);
-    };
-  }, [updatePosition]);
+    window.addEventListener('mouseup', onUp);
+    return () => window.removeEventListener('mouseup', onUp);
+  }, []);
 
   if (!visible) return null;
 
