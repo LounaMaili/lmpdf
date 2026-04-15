@@ -336,6 +336,7 @@ export default function FieldOverlay({
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
       color: field.style.color,
+      padding: '0 2px',
     };
 
     // In fill mode or when selected, use rich text editor for inline formatting support
@@ -355,10 +356,19 @@ export default function FieldOverlay({
           <SelectionToolbar
             containerRef={richTextEl}
             onFormat={(cmd, val) => {
-              // Ensure focus is on the contentEditable for execCommand to work
-              textEditorRef.current?.focus();
+              const editor = textEditorRef.current;
+              if (!editor) return;
+              // Save selection, focus editor, restore selection, then execute command
+              const sel = window.getSelection();
+              let savedRange: Range | null = null;
+              if (sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
+              editor.focus();
+              if (savedRange) {
+                sel?.removeAllRanges();
+                sel?.addRange(savedRange);
+              }
               document.execCommand(cmd, false, val);
-              if (textEditorRef.current) onValueChange(textEditorRef.current.innerHTML);
+              onValueChange(editor.innerHTML);
             }}
           />
         </div>
