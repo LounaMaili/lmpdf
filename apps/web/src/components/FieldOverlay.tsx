@@ -82,14 +82,9 @@ export default function FieldOverlay({
     if ((tag === 'INPUT' || tag === 'TEXTAREA') && selected) return;
     if ((e.target as HTMLElement).closest('.checkbox-display')) return;
     if ((e.target as HTMLElement).closest('.counter-display, .checkbox-display')) return;
+    // Preserve native text editing when clicking inside the contentEditable rich text editor
+    if ((e.target as HTMLElement).closest('[contentEditable]') && selected) return;
 
-    e.preventDefault();
-    e.stopPropagation();
-    onSelect(e.ctrlKey || e.metaKey);
-    if (structureLocked) {
-      if (!fillMode) onStructureLockedAttempt?.();
-      return; // No drag/resize in fill mode; filler also cannot drag locked fields.
-    }
     setDragging(true);
 
     const startX = e.clientX;
@@ -340,21 +335,24 @@ export default function FieldOverlay({
     // In fill mode or when selected, use rich text editor for inline formatting support
     if (selected || fillMode) {
       return (
-        <RichTextEditor
-          value={valueOverride ?? field.value}
-          onChange={(html) => onValueChange(html)}
-          style={textEditStyle}
-          placeholder={field.label}
-          onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
-        />
+        <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%' }}>
+          <RichTextEditor
+            value={valueOverride ?? field.value}
+            onChange={(html) => onValueChange(html)}
+            style={textEditStyle}
+            placeholder={field.label}
+            onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
+          />
+        </div>
       );
     }
 
-    // When not selected, render HTML content directly
+    // When not selected, render content (click to reselect)
     return (
       <div
         className="field-input field-textarea"
-        style={{ ...textEditStyle, pointerEvents: 'none', overflow: 'hidden', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
+        style={{ ...textEditStyle, overflow: 'hidden', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
+        onClick={() => onSelect(false)}
         dangerouslySetInnerHTML={{ __html: valueOverride ?? field.value }}
       />
     );
