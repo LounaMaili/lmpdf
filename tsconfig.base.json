@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  }
+}

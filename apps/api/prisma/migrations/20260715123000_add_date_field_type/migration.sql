@@ -1,0 +1,1 @@
+ALTER TYPE "FieldType" ADD VALUE IF NOT EXISTS 'date';

@@ -1,0 +1,259 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───── Enums ─────
+
+enum FieldType {
+  text
+  checkbox
+  counter_tally    @map("counter-tally")
+  counter_numeric  @map("counter-numeric")
+  date
+}
+
+enum Role {
+  admin
+  editor
+  viewer
+}
+
+enum AuthSource {
+  local
+  ldap
+}
+
+enum DocRole {
+  owner
+  editor
+  filler
+}
+
+// ───── Users & Groups ─────
+
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  passwordHash   String
+  displayName    String
+  role           Role           @default(editor)
+  authSource     AuthSource     @default(local)
+  externalId     String?
+  externalDn     String?
+  isActive       Boolean        @default(true)
+  mfaEnabled     Boolean        @default(false)
+  mfaSecret      String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  memberships    GroupMember[]
+  documents      Document[]
+  templates      Template[]
+  folders        Folder[]
+  docPermissions DocumentPermission[]
+  createdGroups  Group[]      @relation("CreatedGroups")
+  drafts         Draft[]
+  backupCodes    UserBackupCode[]
+  webauthnCredentials UserWebAuthnCredential[]
+}
+
+// ───── WebAuthn Credentials (V2 MFA) ─────
+
+model UserWebAuthnCredential {
+  id              String   @id @default(uuid())
+  userId          String
+  credentialId    String   @unique          // base64url-encoded credential ID
+  publicKey       Bytes                     // raw public key bytes (COSE)
+  counter         BigInt   @default(0)
+  transports      String[] @default([])     // e.g. ["usb", "nfc", "ble", "internal"]
+  label           String   @default("Clé de sécurité")
+  createdAt       DateTime @default(now())
+  lastUsedAt      DateTime?
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserBackupCode {
+  id        String   @id @default(uuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Group {
+  id          String         @id @default(uuid())
+  name        String         @unique
+  description String?
+  createdById String?
+  createdBy   User?          @relation("CreatedGroups", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  members        GroupMember[]
+  documents      Document[]
+  templates      Template[]
+  folders        Folder[]
+  docPermissions DocumentPermission[]
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  userId    String
+  groupId   String
+  role      Role     @default(editor)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+}
+
+// ───── Documents & Templates ─────
+
+model Document {
+  id           String     @id @default(uuid())
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+  createdAt    DateTime   @default(now())
+
+  ownerId      String?
+  owner        User?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  groupId      String?
+  group        Group?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  folderId     String?
+  folder       Folder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  templates    Template[]
+  permissions  DocumentPermission[]
+}
+
+model Template {
+  id           String    @id @default(uuid())
+  name         String
+  sourceFileId String?
+  sourceFile   Document? @relation(fields: [sourceFileId], references: [id])
+  rotation     Int       @default(0)
+  fields       Field[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  ownerId      String?
+  owner        User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  groupId      String?
+  group        Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  folderId     String?
+  folder       Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+}
+
+model Field {
+  id         String    @id @default(uuid())
+  label      String
+  value      String    @default("")
+  style      Json?
+  x          Float
+  y          Float
+  w          Float
+  h          Float
+  type       FieldType
+  locked         Boolean   @default(false)
+  overlayVisible Boolean   @default(true)
+  pageNumber     Int       @default(1)
+  templateId     String
+  template   Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// ───── Logical Folders ─────
+
+model Folder {
+  id         String    @id @default(uuid())
+  name       String
+  parentId   String?
+  parent     Folder?   @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Folder[]  @relation("FolderTree")
+
+  ownerId    String?
+  owner      User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  groupId    String?
+  group      Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  documents  Document[]
+  templates  Template[]
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([parentId, name, ownerId])
+}
+
+// ───── Autosave Drafts ─────
+
+model Draft {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  templateId   String?
+  sourceFileId String?
+  payload      Json
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, templateId])
+  @@unique([userId, sourceFileId])
+}
+
+// ───── Export Logs ─────
+
+model ExportLog {
+  id                String   @id @default(uuid())
+  createdAt         DateTime @default(now())
+  userId            String
+  userEmail         String
+  userDisplayName   String
+  templateName      String?
+  templateId        String?
+  ruleLabelMatched  String?
+  destinationName   String?
+  conflictStrategy  String?
+  finalPath         String?
+  status            String   // written | skipped | renamed | error
+  errorMessage      String?
+  fileSizeBytes     Int?
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// ───── Document Permissions ─────
+
+model DocumentPermission {
+  id         String   @id @default(uuid())
+  docRole    DocRole  @default(filler)
+  createdAt  DateTime @default(now())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId    String?
+  group      Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@unique([documentId, groupId])
+}

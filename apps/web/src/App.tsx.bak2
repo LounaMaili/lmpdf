@@ -1,0 +1,1454 @@
+const DEBUG_FUSED = false;
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { deleteTemplate, detectFields, getDocumentUrl, getMyDocRole, getMyPermissions, listFolders, listTemplates, moveTemplateToFolder, renameTemplate, saveTemplate, uploadDocument, type RolePermissions } from './api';
+import FieldOverlay from './components/FieldOverlay';
+import PdfViewer from './components/PdfViewer';
+import PropertiesPanel from './components/PropertiesPanel';
+import FolderTree, { buildBreadcrumb } from './components/FolderTree';
+import type { FolderModel } from './api';
+import ShareModal from './components/ShareModal';
+import { defaultDocumentPreset, defaultFieldStyle } from './types';
+import { exportFilledPdf } from './exportPdf';
+import { displayDims, findNearestField } from './utils';
+import type { Rotation } from './utils';
+import type { DocumentPreset, FieldModel, FieldType, TemplateModel } from './types';
+import { getStoredUser } from './auth';
+
+const DEFAULT_WIDTH = 794;
+const DEFAULT_HEIGHT = 1123;
+const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 2];
+
+function docRoleLabel(role: 'owner' | 'editor' | 'filler' | null) {
+  if (role === 'owner') return 'Propriétaire';
+  if (role === 'editor') return 'Éditeur';
+  if (role === 'filler') return 'Remplisseur';
+  return 'Aucun accès';
+}
+
+function fallbackPermissionsForRole(role?: string): RolePermissions {
+  if (role === 'admin' || role === 'editor') {
+    return {
+      uploadDocument: true,
+      createTemplate: true,
+      manageTemplate: true,
+      editStructure: true,
+      createPage: true,
+      exportPdf: true,
+      printDocument: true,
+    };
+  }
+  return {
+    uploadDocument: false,
+    createTemplate: false,
+    manageTemplate: false,
+    editStructure: false,
+    createPage: false,
+    exportPdf: false,
+    printDocument: false,
+  };
+}
+
+export default function App() {
+  const currentUser = getStoredUser();
+  const [rolePermissions, setRolePermissions] = useState<RolePermissions>(fallbackPermissionsForRole(currentUser?.role));
+  const [name, setName] = useState('template-a4');
+  const [fields, setFields] = useState<FieldModel[]>([]);
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  const [multiSelectedIds, setMultiSelectedIds] = useState<Set<string>>(new Set());
+  const [sourceFileId, setSourceFileId] = useState<string | undefined>();
+  const [sourceUrl, setSourceUrl] = useState<string | undefined>();
+  const [sourceMime, setSourceMime] = useState<string | undefined>();
+  const [templates, setTemplates] = useState<TemplateModel[]>([]);
+  const [status, setStatus] = useState('Prêt');
+  const [dirty, setDirty] = useState(false); // Warn before destructive resets when there are unsaved edits.
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [docRole, setDocRole] = useState<'owner' | 'editor' | 'filler' | null>(null);
+  const canEditStructure = rolePermissions.editStructure && docRole !== 'filler';
+  const canSaveTemplate = rolePermissions.createTemplate && (docRole === 'owner' || docRole === 'editor' || docRole === null);
+  const canManageTemplate = rolePermissions.manageTemplate && (docRole === 'owner' || docRole === 'editor' || docRole === null);
+  const canExport = rolePermissions.exportPdf && docRole !== 'filler';
+  const canPrintDoc = rolePermissions.printDocument && docRole !== 'filler';
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [allFolders, setAllFolders] = useState<FolderModel[]>([]);
+  const [pageCount, setPageCount] = useState(1);
+  const [activePage, setActivePage] = useState(1);
+
+  // Keep field geometry in natural page units; zoom/rotation are view-only transforms.
+  const [pageW, setPageW] = useState(DEFAULT_WIDTH);
+  const [pageH, setPageH] = useState(DEFAULT_HEIGHT);
+  // Source dimensions are kept only for diagnostics.
+  const [srcW, setSrcW] = useState(0);
+  const [srcH, setSrcH] = useState(0);
+
+  const [rotation, setRotation] = useState<Rotation>(0);
+
+  const [zoomIndex, setZoomIndex] = useState(4);
+  const zoom = ZOOM_STEPS[zoomIndex];
+
+  const [preset, setPreset] = useState<DocumentPreset>({ ...defaultDocumentPreset });
+  const [fillMode, setFillMode] = useState(true);
+  const [showDebugOrder, setShowDebugOrder] = useState(false);
+  const [fusedUiState, setFusedUiState] = useState<Record<string, { anchorFieldId: string; usedFieldIds: string[]; globalText: string; version: number }>>({});
+  const [fitMode, setFitMode] = useState<'page' | 'width'>('page');
+  const [detectSensitivity, setDetectSensitivity] = useState<'low' | 'normal' | 'high'>('normal');
+  const editorRef = useRef<HTMLDivElement>(null);
+  const pendingFocusRef = useRef<string | null>(null);
+
+  const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
+
+  // Wrapper dimensions follow rotation to keep the editor scroll area aligned.
+  const [dispW, dispH] = displayDims(pageW, pageH, rotation);
+
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+
+  const toVisualRect = (f: FieldModel) => {
+    if (rotation === 90) {
+      return { x: pageH - (f.y + f.h), y: f.x, w: f.h, h: f.w };
+    }
+    if (rotation === 180) {
+      return { x: pageW - (f.x + f.w), y: pageH - (f.y + f.h), w: f.w, h: f.h };
+    }
+    if (rotation === 270) {
+      return { x: f.y, y: pageW - (f.x + f.w), w: f.h, h: f.w };
+    }
+    return { x: f.x, y: f.y, w: f.w, h: f.h };
+  };
+
+  useEffect(() => {
+    listTemplates().then(setTemplates).catch(() => undefined);
+    getMyPermissions().then(setRolePermissions).catch(() => undefined);
+  }, []);
+
+  // Fetch user's effective role on the current document
+  useEffect(() => {
+    if (!sourceFileId) { setDocRole(null); return; }
+    getMyDocRole(sourceFileId).then((r) => setDocRole(r.docRole as any)).catch(() => setDocRole(null));
+  }, [sourceFileId]);
+
+  const applyFitZoom = useCallback((w: number, h: number) => {
+    const el = editorRef.current;
+    if (!el || w <= 0 || h <= 0) return;
+
+    const availableW = Math.max(200, el.clientWidth - 32);
+    const availableH = Math.max(200, el.clientHeight - 32);
+    const fit = fitMode === 'width' ? (availableW / w) : Math.min(availableW / w, availableH / h);
+    const clamped = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], fit));
+
+    let best = 0;
+    let bestDiff = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < ZOOM_STEPS.length; i++) {
+      const diff = Math.abs(ZOOM_STEPS[i] - clamped);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = i;
+      }
+    }
+    setZoomIndex(best);
+  }, [fitMode]);
+
+  // Keep keyboard shortcuts global while scoping Tab cycling to the editor area.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && fields.length > 0) {
+        const target = e.target as HTMLElement;
+        if (target.closest('.editor') || target.closest('.field')) {
+          e.preventDefault();
+          e.stopPropagation();
+          const currentIdx = selectedFieldId
+            ? fields.findIndex((f) => f.id === selectedFieldId)
+            : -1;
+          let nextIdx: number;
+          if (e.shiftKey) {
+            nextIdx = currentIdx <= 0 ? fields.length - 1 : currentIdx - 1;
+          } else {
+            nextIdx = (currentIdx + 1) % fields.length;
+          }
+          const next = fields[nextIdx];
+          setSelectedFieldId(next.id);
+          setMultiSelectedIds(new Set([next.id]));
+          pendingFocusRef.current = next.id;
+          return;
+        }
+      }
+
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const target = e.target as HTMLElement;
+        const isTextInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+
+        // Navigation between fields works with Ctrl+Arrow OR Alt+Arrow always.
+        // In text inputs, plain arrows keep native caret behavior.
+        const wantsFieldNavigation = e.ctrlKey || e.altKey;
+        if (isTextInput && !wantsFieldNavigation) return;
+
+        e.preventDefault();
+
+        if (!selectedFieldId) {
+          const pageFields = fields.filter((f) => (f.pageNumber ?? 1) === activePage);
+          if (pageFields.length > 0) {
+            const first = pageFields[0];
+            setSelectedFieldId(first.id);
+            setMultiSelectedIds(new Set([first.id]));
+            pendingFocusRef.current = first.id;
+          }
+          return;
+        }
+
+        // Always filter by active page for consistent physical navigation
+        const pageFields = fields.filter((f) => (f.pageNumber ?? 1) === activePage);
+        const projected = pageFields.map((f) => {
+          const r = toVisualRect(f);
+          return { ...f, x: r.x, y: r.y, w: r.w, h: r.h };
+        });
+        const next = findNearestField(selectedFieldId, projected, e.key as any);
+        if (next) {
+          setSelectedFieldId(next.id);
+          setMultiSelectedIds(new Set([next.id]));
+          pendingFocusRef.current = next.id;
+        }
+        return;
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (fillMode) return;
+        // Never intercept Delete/Backspace while the user is editing a form control.
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+        e.preventDefault();
+        if (multiSelectedIds.size > 0) {
+          setFields((prev) => prev.filter((f) => !multiSelectedIds.has(f.id)));
+          setSelectedFieldId(null);
+          setMultiSelectedIds(new Set());
+          setDirty(true);
+        } else if (selectedFieldId) {
+          setFields((prev) => prev.filter((f) => f.id !== selectedFieldId));
+          setSelectedFieldId(null);
+          setDirty(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedFieldId, multiSelectedIds, fields, fillMode, activePage, rotation, pageW, pageH]);
+
+  // After Tab selection, move DOM focus to the field control for immediate typing.
+  useEffect(() => {
+    const targetId = pendingFocusRef.current;
+    if (!targetId) return;
+    pendingFocusRef.current = null;
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-field-id="${targetId}"]`);
+      if (!el) return;
+      const focusable = el.querySelector('textarea, input, .checkbox-display, .counter-display') as HTMLElement;
+      if (focusable) focusable.focus();
+    });
+  }, [selectedFieldId]);
+
+  const onPdfDimensions = useCallback((w: number, h: number, origW: number, origH: number) => {
+    setPageW(w);
+    setPageH(h);
+    setSrcW(origW);
+    setSrcH(origH);
+    applyFitZoom(w, h);
+  }, [applyFitZoom]);
+
+  useEffect(() => {
+    applyFitZoom(pageW, pageH);
+  }, [fitMode, pageW, pageH, applyFitZoom]);
+
+  const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setSrcW(img.naturalWidth);
+    setSrcH(img.naturalHeight);
+    setPageW(img.naturalWidth);
+    setPageH(img.naturalHeight);
+    applyFitZoom(img.naturalWidth, img.naturalHeight);
+  }, [applyFitZoom]);
+
+  // Ctrl/Cmd keeps additive selection behavior consistent between canvas and side panel.
+  const handleSelectField = (id: string | null, ctrlKey = false) => {
+    if (id === null) {
+      setSelectedFieldId(null);
+      setMultiSelectedIds(new Set());
+      return;
+    }
+    const targetField = fields.find((f) => f.id === id);
+    if (targetField?.pageNumber) setActivePage(targetField.pageNumber);
+    if (ctrlKey) {
+      setMultiSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      setSelectedFieldId(id);
+    } else {
+      setSelectedFieldId(id);
+      setMultiSelectedIds(new Set([id]));
+    }
+  };
+
+  const addField = () => {
+    if (!canEditStructure) {
+      setStatus('Droits insuffisants pour créer des champs');
+      return;
+    }
+    const newField: FieldModel = {
+      id: crypto.randomUUID(),
+      label: `Champ ${fields.length + 1}`,
+      value: '',
+      x: 100,
+      y: 100 + (fields.length % 20) * 36,
+      w: 220,
+      h: 30,
+      type: 'text',
+      style: {
+        fontFamily: preset.fontFamily,
+        fontSize: preset.fontSize,
+        fontWeight: preset.fontWeight,
+        textAlign: 'left',
+        color: preset.color,
+      },
+      locked: false,
+      overlayVisible: true,
+      pageNumber: activePage,
+    };
+    setFields((prev) => [...prev, newField]);
+    handleSelectField(newField.id);
+    setDirty(true);
+  };
+
+  const addPage = () => {
+    if (!canEditStructure) {
+      setStatus('Droits insuffisants pour créer une page');
+      return;
+    }
+    const newPage = pageCount + 1;
+    const carryFromPage = fields.filter((f) => (f.pageNumber ?? 1) === activePage && Boolean(f.style.carryToNextPage));
+    const clones: FieldModel[] = carryFromPage.map((f) => ({
+      ...f,
+      id: crypto.randomUUID(),
+      pageNumber: newPage,
+      value: f.style.carryValueMode === 'clear' ? '' : f.value,
+    }));
+    if (clones.length > 0) {
+      setFields((prev) => [...prev, ...clones]);
+      setDirty(true);
+    }
+    setPageCount(newPage);
+    setActivePage(newPage);
+    setStatus(clones.length > 0
+      ? `Nouvelle page ${newPage} créée (${clones.length} champ(s) reporté(s))`
+      : `Nouvelle page ${newPage} créée`);
+  };
+
+  const duplicateActivePage = () => {
+    if (!canEditStructure) {
+      setStatus('Droits insuffisants pour dupliquer une page');
+      return;
+    }
+    const newPage = pageCount + 1;
+    const sourceFields = fields.filter((f) => (f.pageNumber ?? 1) === activePage);
+    const clones: FieldModel[] = sourceFields.map((f) => ({ ...f, id: crypto.randomUUID(), pageNumber: newPage }));
+    if (clones.length > 0) {
+      setFields((prev) => [...prev, ...clones]);
+      setDirty(true);
+    }
+    setPageCount(newPage);
+    setActivePage(newPage);
+    setStatus(`Page ${activePage} dupliquée vers page ${newPage}`);
+  };
+
+  const deleteActivePage = () => {
+    if (!canEditStructure) {
+      setStatus('Droits insuffisants pour supprimer une page');
+      return;
+    }
+    if (pageCount <= 1) {
+      setStatus('Impossible de supprimer la dernière page');
+      return;
+    }
+    if (!window.confirm(`Supprimer la page ${activePage} ?`)) return;
+
+    setFields((prev) => prev
+      .filter((f) => (f.pageNumber ?? 1) !== activePage)
+      .map((f) => {
+        const pn = f.pageNumber ?? 1;
+        return pn > activePage ? { ...f, pageNumber: pn - 1 } : f;
+      }));
+    setPageCount((p) => p - 1);
+    setActivePage((p) => Math.max(1, Math.min(p - 1, pageCount - 1)));
+    setSelectedFieldId(null);
+    setMultiSelectedIds(new Set());
+    setDirty(true);
+    setStatus(`Page ${activePage} supprimée`);
+  };
+
+  const duplicateField = (id: string) => {
+    const source = fields.find((f) => f.id === id);
+    if (!source) return;
+    const dup: FieldModel = {
+      ...source,
+      id: crypto.randomUUID(),
+      value: '',
+      x: source.x + 10,
+      y: source.y + source.h + 4,
+      label: `${source.label} (copie)`,
+    };
+    setFields((prev) => [...prev, dup]);
+    handleSelectField(dup.id);
+    setDirty(true);
+  };
+
+  const updateField = (id: string, partial: Partial<FieldModel>) => {
+    setFields((prev) => prev.map((f) => (f.id === id ? { ...f, ...partial } : f)));
+    setDirty(true);
+  };
+
+  const bulkUpdateFields = (ids: string[], partial: Partial<FieldModel>) => {
+    const setIds = new Set(ids);
+    setFields((prev) => prev.map((f) => (setIds.has(f.id) ? { ...f, ...partial } : f)));
+    setDirty(true);
+  };
+
+  const bulkPatchFieldStyle = (ids: string[], stylePatch: Partial<FieldModel['style']>) => {
+    const setIds = new Set(ids);
+    setFields((prev) => prev.map((f) => {
+      if (!setIds.has(f.id) || f.type !== 'text') return f;
+      return { ...f, style: { ...f.style, ...stylePatch } };
+    }));
+    setDirty(true);
+  };
+
+  const estimateFieldCapacity = (field: FieldModel): number => {
+    if (field.type !== 'text') return Number.MAX_SAFE_INTEGER;
+    const fontSize = field.style.fontSize || 14;
+    const innerW = Math.max(8, field.w - 6);
+    const innerH = Math.max(8, field.h - 4);
+    const charsPerLine = Math.max(1, Math.floor(innerW / (fontSize * 0.54)));
+    const lines = Math.max(1, Math.floor(innerH / (fontSize * 1.2)));
+    return charsPerLine * lines;
+  };
+
+  const takeFieldChunk = (text: string, field: FieldModel) => {
+    const cap = estimateFieldCapacity(field);
+    if (text.length <= cap) {
+      return { chunk: text, consumed: text.length, cap };
+    }
+
+    // Prefer cutting at a word boundary to avoid brutal word splits between fields.
+    let cut = cap;
+    const candidate = text.slice(0, cap);
+    const ws = Math.max(candidate.lastIndexOf(' '), candidate.lastIndexOf('\t'), candidate.lastIndexOf('\n'));
+    if (ws >= Math.floor(cap * 0.55)) {
+      cut = ws + 1; // consume separator, trim chunk later
+    }
+
+    let chunk = text.slice(0, cut).replace(/[ \t]+$/g, '');
+    let consumed = cut;
+
+    // Skip leading horizontal spaces for next field (keep explicit newlines).
+    while (consumed < text.length && /[ \t]/.test(text[consumed])) consumed++;
+
+    return { chunk, consumed, cap };
+  };
+
+  /** Strict capacity slice for fused mode: no word-boundary trimming, chunk === consumed always. */
+  const takeFieldChunkStrict = (text: string, field: FieldModel) => {
+    const cap = estimateFieldCapacity(field);
+    const chunk = text.slice(0, cap);
+    return { chunk, consumed: chunk.length, cap };
+  };
+
+  /**
+   * Deterministic runtime order based on VISUAL coordinates (after rotation).
+   * Left→right, then next line left→right.
+   */
+  const sortOverflowGroup = (group: FieldModel[]): FieldModel[] => {
+    if (group.length <= 1) return [...group];
+    const items = group.map((f) => ({ f, r: toVisualRect(f) }));
+    const avgH = items.length ? items.reduce((sum, it) => sum + it.r.h, 0) / items.length : 20;
+    const tol = Math.max(6, avgH * 0.5);
+
+    const rows: Array<typeof items> = [];
+    for (const item of [...items].sort((a, b) => a.r.y - b.r.y)) {
+      const row = rows.find((r) => Math.abs(r[0].r.y - item.r.y) <= tol);
+      if (row) row.push(item);
+      else rows.push([item]);
+    }
+
+    return rows
+      .sort((a, b) => a[0].r.y - b[0].r.y)
+      .flatMap((r) => r.sort((a, b) => a.r.x - b.r.x).map((x) => x.f));
+  };
+
+  const updateFieldValueWithOverflow = (id: string, newValue: string, caretPosition?: number) => {
+    const source = fields.find((f) => f.id === id);
+    if (!source || source.type !== 'text') {
+      updateField(id, { value: newValue });
+      return;
+    }
+
+    const groupId = (source.style.overflowGroupId || '').trim();
+    if (!groupId) {
+      updateField(id, { value: newValue });
+      return;
+    }
+
+    const group = sortOverflowGroup(
+      fields.filter((f) => (f.pageNumber ?? 1) === (source.pageNumber ?? 1) && f.type === 'text' && (f.style.overflowGroupId || '').trim() === groupId)
+    );
+
+    if (group.length <= 1) {
+      updateField(id, { value: newValue });
+      return;
+    }
+
+    const maxFields = source.style.overflowMaxFields && source.style.overflowMaxFields > 0
+      ? source.style.overflowMaxFields
+      : undefined;
+    const activeChain = maxFields ? group.slice(0, maxFields) : group;
+    const changedIdx = activeChain.findIndex((f) => f.id === id);
+
+    if (changedIdx < 0) {
+      updateField(id, { value: newValue });
+      return;
+    }
+
+    // ── CONTINUOUS MODE ──────────────────────────────────────────────────
+    const interactionMode = source.style.overflowInteractionMode || 'distributed';
+    if (interactionMode === 'continuous') {
+      // Concatenate ALL group field values as one global string
+      const oldGlobal = activeChain.map((f) => f.value || '').join('');
+      // Compute prefix length (chars in fields before this one)
+      let prefixLen = 0;
+      for (let i = 0; i < changedIdx; i++) prefixLen += (activeChain[i].value || '').length;
+      const oldLocal = activeChain[changedIdx].value || '';
+      const localCap = estimateFieldCapacity(activeChain[changedIdx]);
+      const localCaret = caretPosition ?? newValue.length;
+      const caretAtEnd = localCaret >= oldLocal.length;
+
+      let newGlobal: string;
+
+      // ── Fast-path: full field, caret at end, user appending characters ──
+      if (
+        oldLocal.length >= localCap &&
+        caretAtEnd &&
+        newValue.length > oldLocal.length &&
+        newValue.startsWith(oldLocal)
+      ) {
+        // Append the new suffix to the END of the global stream (not at A/B junction)
+        const suffix = newValue.slice(oldLocal.length);
+        newGlobal = oldGlobal + suffix;
+
+      // ── Fast-path: full field, caret at end, user deleting trailing chars ──
+      } else if (
+        oldLocal.length >= localCap &&
+        caretAtEnd &&
+        newValue.length < oldLocal.length &&
+        oldLocal.startsWith(newValue)
+      ) {
+        // Delete from the END of the global stream
+        const removed = oldLocal.length - newValue.length;
+        newGlobal = oldGlobal.slice(0, oldGlobal.length - removed);
+
+      // ── Generic diff path for all other edits ──
+      } else {
+        let left = 0;
+        while (left < oldLocal.length && left < newValue.length && oldLocal[left] === newValue[left]) left++;
+        let oldRight = oldLocal.length - 1;
+        let newRight = newValue.length - 1;
+        while (oldRight >= left && newRight >= left && oldLocal[oldRight] === newValue[newRight]) { oldRight--; newRight--; }
+        const inserted = newValue.slice(left, newRight + 1);
+        const removeEnd = oldRight + 1;
+        const globalLeft = prefixLen + left;
+        const globalRemoveEnd = prefixLen + removeEnd;
+        newGlobal = oldGlobal.slice(0, globalLeft) + inserted + oldGlobal.slice(globalRemoveEnd);
+      }
+      // Redistribute across fields
+      const onEnd = source.style.overflowOnEnd || 'truncate';
+      const cValueById = new Map<string, string>();
+      let cursor = 0;
+      let truncated = false;
+      for (const f of activeChain) {
+        const rest = newGlobal.slice(cursor);
+        const { chunk, consumed } = takeFieldChunk(rest, f);
+        cValueById.set(f.id, chunk);
+        cursor += consumed;
+      }
+      truncated = cursor < newGlobal.length;
+      if (truncated && onEnd === 'block') {
+        setStatus("⚠️ Zone d'extension pleine : saisie bloquée");
+        return;
+      }
+      // Clear fields beyond maxFields
+      if (maxFields) {
+        for (const f of group.slice(maxFields)) cValueById.set(f.id, '');
+      }
+      setFields((prev) => prev.map((f) => (cValueById.has(f.id) ? { ...f, value: cValueById.get(f.id) as string } : f)));
+      setDirty(true);
+      if (truncated) setStatus("⚠️ Zone d'extension pleine : texte tronqué");
+      return;
+    }
+    // ── END CONTINUOUS MODE ──────────────────────────────────────────────
+
+    // ── FUSED MODE ───────────────────────────────────────────────────────
+    if (interactionMode === 'fused') {
+      if (DEBUG_FUSED) console.log('[FUSED] edit triggered', { id, groupId, changedIdx, newValue: newValue.slice(0, 40) });
+      // In fused mode, editing can start from any field. Fields before the edited one stay intact.
+      const suffixFields = activeChain.slice(changedIdx);
+      const oldGlobal = suffixFields.map((f) => f.value || '').join('');
+      const fusedKey = `${source.pageNumber ?? 1}:${groupId}`;
+      const state = fusedUiState[fusedKey];
+      const isAnchorEditing = state?.anchorFieldId === id;
+
+      let newGlobal: string;
+
+      if (isAnchorEditing) {
+        // Anchor textarea carries the global stream from anchor onward.
+        newGlobal = newValue;
+      } else {
+        // First edit (or non-anchor fallback): apply local diff into suffix stream only.
+        const oldLocal = suffixFields[0].value || '';
+        let left = 0;
+        while (left < oldLocal.length && left < newValue.length && oldLocal[left] === newValue[left]) left++;
+        let oldRight = oldLocal.length - 1;
+        let newRight = newValue.length - 1;
+        while (oldRight >= left && newRight >= left && oldLocal[oldRight] === newValue[newRight]) { oldRight--; newRight--; }
+        const inserted = newValue.slice(left, newRight + 1);
+        const removeEnd = oldRight + 1;
+        newGlobal = oldGlobal.slice(0, left) + inserted + oldGlobal.slice(removeEnd);
+      }
+
+      const onEnd = source.style.overflowOnEnd || 'truncate';
+      const fValueById = new Map<string, string>();
+
+      // Keep prefix fields intact.
+      for (let i = 0; i < changedIdx; i++) {
+        fValueById.set(activeChain[i].id, activeChain[i].value || '');
+      }
+
+      // Redistribute from anchor/suffix onward using strict slicing (no word-boundary trim).
+      let cursor = 0;
+      for (const f of suffixFields) {
+        const rest = newGlobal.slice(cursor);
+        const { chunk, consumed } = takeFieldChunkStrict(rest, f);
+        fValueById.set(f.id, chunk);
+        cursor += consumed;
+      }
+      const truncated = cursor < newGlobal.length;
+      if (truncated && onEnd === 'block') {
+        setStatus("⚠️ Zone d'extension pleine : saisie bloquée");
+        return;
+      }
+      if (maxFields) {
+        for (const f of group.slice(maxFields)) fValueById.set(f.id, '');
+      }
+
+      // Used fields: include fields while total consumed chars < globalText length.
+      // Always include anchor. With strict slicing chunk.length === consumed,
+      // so we track placement precisely without gaps.
+      const usedFieldIds: string[] = [];
+      let totalPlaced = 0;
+      for (let i = changedIdx; i < activeChain.length; i++) {
+        const val = fValueById.get(activeChain[i].id) || '';
+        const isAnchorField = i === changedIdx;
+        if (isAnchorField || totalPlaced < newGlobal.length) {
+          usedFieldIds.push(activeChain[i].id);
+        }
+        totalPlaced += val.length;
+        if (totalPlaced >= newGlobal.length && !isAnchorField) break;
+      }
+
+      // Cleanup: if globalText is empty, remove this fused key entirely.
+      if (newGlobal.length === 0) {
+        setFusedUiState((prev) => {
+          const next = { ...prev };
+          delete next[fusedKey];
+          if (DEBUG_FUSED) console.log('[FUSED] cleanup empty key', fusedKey);
+          return next;
+        });
+      } else {
+        setFusedUiState((prev) => ({
+          ...prev,
+          [fusedKey]: { anchorFieldId: id, usedFieldIds, globalText: newGlobal, version: (prev[fusedKey]?.version ?? 0) + 1 },
+        }));
+        if (DEBUG_FUSED) console.log('[FUSED] set', fusedKey, { anchorFieldId: id, usedFieldIds, globalText: newGlobal });
+      }
+
+      setFields((prev) => prev.map((f) => (fValueById.has(f.id) ? { ...f, value: fValueById.get(f.id) as string } : f)));
+      setDirty(true);
+      if (truncated) setStatus("⚠️ Zone d'extension pleine : texte tronqué");
+      return;
+    }
+    // ── END FUSED MODE ───────────────────────────────────────────────────
+
+    const onEnd = source.style.overflowOnEnd || 'truncate';
+    const valueById = new Map<string, string>();
+
+    // Fields BEFORE edited one: keep intact (never reorder backward)
+    for (let i = 0; i < changedIdx; i++) {
+      valueById.set(activeChain[i].id, activeChain[i].value || '');
+    }
+
+    // Fields from edited index onward.
+    const suffixFields = activeChain.slice(changedIdx);
+    const oldCurrent = suffixFields[0].value || '';
+    const oldSuffixTail = suffixFields.slice(1).map((f) => (f.value || '')).join('');
+    const oldStream = oldCurrent + oldSuffixTail;
+    const currentCap = estimateFieldCapacity(suffixFields[0]);
+
+    let flowText = oldStream;
+
+    // Common case when field 1 is visually full and user keeps typing:
+    // browser still emits newValue = oldCurrent + typedChar(s), which should append
+    // to the end of the global stream (not prepend in next field).
+    if (
+      oldCurrent.length >= currentCap &&
+      newValue.length > oldCurrent.length &&
+      newValue.startsWith(oldCurrent)
+    ) {
+      flowText = oldStream + newValue.slice(oldCurrent.length);
+    } else {
+      // Generic edit diff oldCurrent -> newValue (LCP/LCS) and apply to oldStream.
+      let left = 0;
+      while (left < oldCurrent.length && left < newValue.length && oldCurrent[left] === newValue[left]) {
+        left++;
+      }
+
+      let oldRight = oldCurrent.length - 1;
+      let newRight = newValue.length - 1;
+      while (oldRight >= left && newRight >= left && oldCurrent[oldRight] === newValue[newRight]) {
+        oldRight--;
+        newRight--;
+      }
+
+      const inserted = newValue.slice(left, newRight + 1);
+      const removeEnd = oldRight + 1; // exclusive in oldCurrent
+      flowText = oldStream.slice(0, left) + inserted + oldStream.slice(removeEnd);
+    }
+
+    let cursor = 0;
+    const caps: number[] = [];
+    for (const field of suffixFields) {
+      const rest = flowText.slice(cursor);
+      const { chunk, consumed, cap } = takeFieldChunk(rest, field);
+      valueById.set(field.id, chunk);
+      caps.push(cap);
+      cursor += consumed;
+    }
+
+    // Normalization pass: keep text visually continuous when deleting/backspacing
+    // at the end of a filled field (pull first chars from next fields to the left).
+    const normalized = suffixFields.map((f) => valueById.get(f.id) || '');
+    for (let i = 0; i < normalized.length - 1; i++) {
+      while (normalized[i].length < caps[i] && normalized[i + 1].length > 0) {
+        normalized[i] += normalized[i + 1][0];
+        normalized[i + 1] = normalized[i + 1].slice(1);
+      }
+    }
+    suffixFields.forEach((f, i) => valueById.set(f.id, normalized[i]));
+
+    if (maxFields) {
+      for (const f of group.slice(maxFields)) {
+        valueById.set(f.id, '');
+      }
+    }
+
+    const truncated = cursor < flowText.length;
+
+    if (truncated && onEnd === 'block') {
+      setStatus("⚠️ Zone d'extension pleine : saisie bloquée");
+      return;
+    }
+
+    setFields((prev) => prev.map((f) => (valueById.has(f.id) ? { ...f, value: valueById.get(f.id) as string } : f)));
+
+    // ── DISTRIBUTED: auto-advance focus to next field when current overflows ──
+    const currentValue = valueById.get(id) || '';
+    const currentCap2 = estimateFieldCapacity(source);
+    if (currentValue.length >= currentCap2 && changedIdx < activeChain.length - 1) {
+      const nextField = activeChain[changedIdx + 1];
+      setSelectedFieldId(nextField.id);
+      pendingFocusRef.current = nextField.id;
+    }
+    setDirty(true);
+    if (truncated) {
+      setStatus("⚠️ Zone d'extension pleine : texte tronqué au périmètre défini");
+    }
+  };
+
+  const autoOrderOverflowGroup = (groupId: string, _mode: 'rows' | 'right' | 'down' = 'rows') => {
+    const gid = groupId.trim();
+    if (!gid) return;
+
+    const groupFields = fields.filter((f) => (f.pageNumber ?? 1) === activePage && f.type === 'text' && (f.style.overflowGroupId || '').trim() === gid);
+    const ordered = sortOverflowGroup(groupFields);
+
+    if (ordered.length === 0) return;
+
+    const orderById = new Map(ordered.map((f, idx) => [f.id, idx + 1] as const));
+    setFields((prev) => prev.map((f) => (
+      orderById.has(f.id)
+        ? { ...f, style: { ...f.style, overflowOrder: orderById.get(f.id) } }
+        : f
+    )));
+    setDirty(true);
+    setStatus("Ordre d'extension auto-appliqué");
+  };
+
+  const bulkAssignOverflowGroup = (ids: string[], groupId: string, _mode: 'rows' | 'right' | 'down' = 'rows') => {
+    const gid = groupId.trim();
+    if (!gid) return;
+    const selectedSet = new Set(ids);
+    const selectedTextFields = fields.filter((f) => selectedSet.has(f.id) && f.type === 'text');
+    if (selectedTextFields.length === 0) {
+      setStatus('Aucun champ texte sélectionné');
+      return;
+    }
+
+    // Sort using the same deterministic algorithm
+    const ordered = sortOverflowGroup(selectedTextFields);
+    const orderById = new Map(ordered.map((f, idx) => [f.id, idx + 1] as const));
+
+    // Atomic: set group AND order in a single setFields call
+    setFields((prev) => prev.map((f) => {
+      if (!selectedSet.has(f.id) || f.type !== 'text') return f;
+      return {
+        ...f,
+        style: {
+          ...f.style,
+          overflowGroupId: gid,
+          overflowOrder: orderById.get(f.id),
+          overflowMaxFields: undefined,
+        },
+      };
+    }));
+    setDirty(true);
+    setStatus(`Groupe d'extension appliqué à ${ordered.length} champ(s)`);
+  };
+
+  const bulkUpdateType = (ids: string[], type: FieldType) => {
+    const newValue = type === 'counter-tally' || type === 'counter-numeric' ? '0' : '';
+    setFields((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, type, value: newValue } : f)));
+    setDirty(true);
+  };
+
+  const deleteField = (id: string) => {
+    setFields((prev) => prev.filter((f) => f.id !== id));
+    if (selectedFieldId === id) setSelectedFieldId(null);
+    setMultiSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+    setDirty(true);
+  };
+
+  const reorderField = (id: string, direction: 'up' | 'down') => {
+    setFields((prev) => {
+      const idx = prev.findIndex((f) => f.id === id);
+      if (idx < 0) return prev;
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      return next;
+    });
+    setDirty(true);
+  };
+
+
+  // Centralize reset logic so every new document/template load shares the same guardrails.
+  const resetFieldsForNewDoc = (): boolean => {
+    if (fields.length > 0 && dirty) {
+      const ok = window.confirm(
+        `Vous avez ${fields.length} champ(s) non sauvegardé(s). Charger un nouveau document va les supprimer.\n\nContinuer ?`,
+      );
+      if (!ok) return false;
+    }
+    setFields([]);
+    setSelectedFieldId(null);
+    setMultiSelectedIds(new Set());
+    setDirty(false);
+    setRotation(0);
+    setPageCount(1);
+    setActivePage(1);
+    return true;
+  };
+
+  const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!rolePermissions.uploadDocument) {
+      setStatus('Droits insuffisants pour importer un document');
+      return;
+    }
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!resetFieldsForNewDoc()) {
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      setStatus('Upload en cours...');
+      const uploaded = await uploadDocument(file);
+      setSourceFileId(uploaded.id);
+      const docInfo = await getDocumentUrl(uploaded.id);
+      if (!docInfo) throw new Error('Impossible de charger le document uploadé');
+      setSourceUrl(docInfo.url);
+      setSourceMime(docInfo.mimeType || uploaded.mimeType || file.type);
+      setPageW(DEFAULT_WIDTH);
+      setPageH(DEFAULT_HEIGHT);
+      setStatus(`Upload OK: ${uploaded.originalName}`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Erreur upload');
+    }
+  };
+
+  const loadTemplate = async (t: TemplateModel) => {
+    setName(t.name);
+    setRotation((t.rotation ?? 0) as Rotation);
+    setFields(
+      t.fields.map((f) => ({
+        ...f,
+        value: (f as FieldModel).value ?? '',
+        style: (f as FieldModel).style ?? { ...defaultFieldStyle },
+        locked: (f as any).locked ?? false,
+        overlayVisible: (f as any).overlayVisible ?? true,
+        pageNumber: (f as any).pageNumber ?? 1,
+      })),
+    );
+    setSourceFileId(t.sourceFileId);
+    const maxPage = Math.max(1, ...t.fields.map((f: any) => (f.pageNumber ?? 1)));
+    setPageCount(maxPage);
+    setActivePage(1);
+    handleSelectField(null);
+    setDirty(false);
+
+    if (t.sourceFileId) {
+      setStatus('Chargement du document...');
+      const docInfo = await getDocumentUrl(t.sourceFileId);
+      if (docInfo) {
+        setSourceUrl(docInfo.url);
+        setSourceMime(docInfo.mimeType);
+        setStatus(`Template chargé: ${t.name}`);
+      } else {
+        setSourceUrl(undefined);
+        setSourceMime(undefined);
+        setStatus(`Template chargé (document introuvable)`);
+      }
+    } else {
+      setSourceUrl(undefined);
+      setSourceMime(undefined);
+      setStatus(`Template chargé: ${t.name}`);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    try {
+      await deleteTemplate(id);
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+      setStatus('Template supprimé');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Erreur suppression');
+    }
+  };
+
+  const handleRenameTemplate = async (id: string) => {
+    const newName = prompt('Nouveau nom du template :');
+    if (!newName) return;
+    try {
+      const updated = await renameTemplate(id, newName);
+      setTemplates((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      setStatus('Template renommé');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Erreur renommage');
+    }
+  };
+
+  const handleMoveTemplate = async (templateId: string) => {
+    if (!canManageTemplate) { setStatus('Droits insuffisants'); return; }
+    // Build a simple prompt with available folders
+    try {
+      const folders = await listFolders();
+      if (folders.length === 0) {
+        setStatus('Aucun dossier disponible. Créez-en un d\'abord.');
+        return;
+      }
+      const options = folders.map((f, i) => `${i + 1}. ${f.name}`).join('\n');
+      const choice = prompt(`Déplacer vers quel dossier ?\n\n${options}\n\n(entrez le numéro)`);
+      if (!choice) return;
+      const idx = parseInt(choice, 10) - 1;
+      if (idx < 0 || idx >= folders.length) { setStatus('Choix invalide'); return; }
+      await moveTemplateToFolder(folders[idx].id, templateId);
+      // Update local state
+      setTemplates((prev) => prev.map((t) => t.id === templateId ? { ...t, folderId: folders[idx].id } : t));
+      setStatus(`Template déplacé vers "${folders[idx].name}" ✓`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Erreur déplacement');
+    }
+  };
+
+  const onSave = async () => {
+    if (!canSaveTemplate) {
+      setStatus('Droits insuffisants pour sauvegarder un template');
+      return;
+    }
+    try {
+      setStatus('Sauvegarde template...');
+      const created = await saveTemplate({ name, sourceFileId, rotation, fields });
+      setTemplates((prev) => [created, ...prev]);
+      setDirty(false);
+      setStatus('Template sauvegardé ✓');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Erreur sauvegarde');
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!sourceUrl) {
+      setStatus('Aucun document chargé');
+      return;
+    }
+    if (!canExport) {
+      setStatus('Droits insuffisants pour exporter');
+      return;
+    }
+    try {
+      setStatus('Export PDF en cours...');
+      await exportFilledPdf(sourceUrl, fields, rotation, name, pageCount);
+      setStatus('PDF exporté ✓');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Erreur export');
+    }
+  };
+
+  const handlePrint = () => {
+    if (!canPrintDoc) {
+      setStatus('Droits insuffisants pour imprimer');
+      return;
+    }
+    window.print();
+  };
+
+  const rotateBy = (deg: 90 | -90) => {
+    setRotation((prev) => (((prev + deg) % 360 + 360) % 360) as Rotation);
+  };
+
+  const isPdf = sourceMime === 'application/pdf';
+
+  // Compose transform once so all overlays/background stay in the same coordinate space.
+  const pageTransform = (() => {
+    const parts: string[] = [`scale(${zoom})`];
+    if (rotation === 90) parts.push(`translate(${pageH}px, 0) rotate(90deg)`);
+    else if (rotation === 180) parts.push(`translate(${pageW}px, ${pageH}px) rotate(180deg)`);
+    else if (rotation === 270) parts.push(`translate(0, ${pageW}px) rotate(270deg)`);
+    return parts.join(' ');
+  })();
+
+
+  const handleFieldKeyDown = useCallback((fieldId: string, e: React.KeyboardEvent) => {
+    if (e.key !== 'Backspace') return;
+    const f = fields.find((ff) => ff.id === fieldId);
+    if (!f || f.type !== 'text') return;
+    const groupId = (f.style.overflowGroupId || ''). trim();
+    if (!groupId) return;
+    const mode = f.style.overflowInteractionMode ?? 'distributed';
+    if (mode !== 'distributed') return;
+    // Only trigger when field is empty
+    if ((f.value || ''). length > 0) return;
+    const group = sortOverflowGroup(
+      fields.filter((g) => (g.pageNumber ?? 1) === (f.pageNumber ?? 1) && g.type === 'text' && (g.style.overflowGroupId || ''). trim() === groupId)
+    );
+    const idx = group.findIndex((g) => g.id === fieldId);
+    if (idx <= 0) return;
+    const prevField = group[idx - 1];
+    setSelectedFieldId(prevField.id);
+    pendingFocusRef.current = prevField.id;
+    e.preventDefault();
+  }, [fields]);
+
+  return (
+    <main className="app">
+      <aside className="panel">
+        <h1>LMPdf</h1>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du template" />
+
+        <label className="upload-label">
+          📄 Import PDF / Image
+          <input type="file" accept="application/pdf,image/*" onChange={onUpload} disabled={!rolePermissions.uploadDocument} />
+        </label>
+
+        <div className="buttons">
+          <button onClick={addField} disabled={!canEditStructure}>+ Champ</button>
+          <button onClick={addPage} disabled={!canEditStructure}>+ Nouvelle page</button>
+          <button onClick={duplicateActivePage} disabled={!sourceUrl || !canEditStructure}>⧉ Dupliquer page</button>
+          <button onClick={deleteActivePage} disabled={pageCount <= 1 || !canEditStructure}>🗑 Suppr. page</button>
+          <button onClick={onSave} disabled={!canSaveTemplate}>💾 Sauvegarder</button>
+        </div>
+        <div className="buttons" style={{ marginTop: 6 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+            Page active
+            <select value={activePage} onChange={(e) => setActivePage(Number(e.target.value))}>
+              {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>Page {n}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="status" style={{ marginTop: 4 }}>Page active: {activePage} / {pageCount}</p>
+        {fields.length > 0 && (
+          <button
+            className="btn-delete-all"
+            disabled={fillMode}
+            onClick={() => {
+              if (window.confirm(`Supprimer les ${fields.length} champ(s) ?\n\nCette action est irréversible.`)) {
+                setFields([]);
+                setSelectedFieldId(null);
+                setMultiSelectedIds(new Set());
+                setDirty(true);
+                setStatus(`${fields.length} champs supprimés`);
+              }
+            }}
+          >
+            🗑 Supprimer tous les champs
+          </button>
+        )}
+
+        <div className="buttons">
+          <button onClick={handleExportPdf} disabled={!sourceUrl || !canExport}>📥 Exporter PDF</button>
+          <button onClick={handlePrint} disabled={!sourceUrl || !canPrintDoc}>🖨 Imprimer</button>
+          <button onClick={() => setShowShareModal(true)} disabled={!sourceFileId}>🔗 Partager</button>
+        </div>
+
+        <button
+          className={`btn-fill-mode ${fillMode ? 'active' : ''}`}
+          onClick={() => setFillMode((v) => !v)}
+          title="Mode remplissage : masque les overlays, révèle au survol"
+        >
+          {fillMode ? '👁️ Mode remplissage ON' : '👁️‍🗨️ Mode remplissage'}
+        </button>
+
+        <button
+          className={`btn-fill-mode ${showDebugOrder ? 'active' : ''}`}
+          onClick={() => setShowDebugOrder((v) => !v)}
+          title="Affiche le numéro d'ordre d'extension sur chaque champ"
+          style={{ fontSize: '0.85em' }}
+        >
+          {showDebugOrder ? '🔢 Debug ordre ON' : '🔢 Debug ordre'}
+        </button>
+
+        {sourceFileId && (
+          <div className={`doc-role-badge ${docRole ?? 'none'}`}>
+            Rôle sur ce document : <strong>{docRoleLabel(docRole)}</strong>
+          </div>
+        )}
+
+        {sourceFileId && (
+          <>
+            <label>
+              Sensibilité détection
+              <select
+                value={detectSensitivity}
+                onChange={(e) => setDetectSensitivity(e.target.value as 'low' | 'normal' | 'high')}
+              >
+                <option value="low">Faible (moins de faux positifs)</option>
+                <option value="normal">Normale</option>
+                <option value="high">Élevée (scan difficile)</option>
+              </select>
+            </label>
+            <button
+              className="btn-detect"
+              disabled={!canEditStructure}
+              onClick={async () => {
+                if (!canEditStructure) {
+                  setStatus('Droits insuffisants pour modifier la structure');
+                  return;
+                }
+                if (!sourceFileId) return;
+                try {
+                  setStatus('🔍 Détection en cours...');
+                  const detectPreset = {
+                    low: { sensitivity: 'low', maxDetectWidth: 1500 },
+                    normal: { sensitivity: 'normal', maxDetectWidth: 1800 },
+                    high: { sensitivity: 'high', maxDetectWidth: 2400 },
+                  } as const;
+
+                  const result = await detectFields(sourceFileId, {
+                    targetWidth: pageW,
+                    targetHeight: pageH,
+                    rotation,
+                    ...detectPreset[detectSensitivity],
+                  });
+                  if (result.error) {
+                    setStatus(`Détection: ${result.error}`);
+                    return;
+                  }
+                  if (!result.suggestedFields.length) {
+                    setStatus('Aucun champ détecté automatiquement');
+                    return;
+                  }
+                  const newFields: FieldModel[] = result.suggestedFields.map((sf) => ({
+                    id: sf.id || crypto.randomUUID(),
+                    label: sf.label || `Zone`,
+                    value: '',
+                    x: sf.x,
+                    y: sf.y,
+                    w: Math.max(16, sf.w),
+                    h: Math.max(10, sf.h),
+                    type: (sf.type === 'checkbox' ? 'checkbox' : 'text') as FieldType,
+                    style: {
+                      fontFamily: preset.fontFamily,
+                      fontSize: preset.fontSize,
+                      fontWeight: preset.fontWeight,
+                      textAlign: 'left' as const,
+                      color: preset.color,
+                    },
+                    locked: false,
+                    overlayVisible: true,
+                    pageNumber: activePage,
+                  }));
+                  setFields((prev) => [...prev, ...newFields]);
+                  setDirty(true);
+                  setStatus(`${newFields.length} champs détectés et ajoutés ✓`);
+                } catch (err) {
+                  setStatus(err instanceof Error ? err.message : 'Erreur détection');
+                }
+              }}
+            >
+              🔍 Détecter les champs
+            </button>
+          </>
+        )}
+
+        <p className="status">{status}</p>
+
+        <div className="zoom-controls">
+          <button disabled={zoomIndex <= 0} onClick={() => setZoomIndex((i) => i - 1)}>−</button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button disabled={zoomIndex >= ZOOM_STEPS.length - 1} onClick={() => setZoomIndex((i) => i + 1)}>+</button>
+        </div>
+
+        <div className="fit-mode-controls">
+          <button className={fitMode === 'page' ? 'active' : ''} onClick={() => setFitMode('page')}>Ajuster page</button>
+          <button className={fitMode === 'width' ? 'active' : ''} onClick={() => setFitMode('width')}>Ajuster largeur</button>
+        </div>
+
+        <div className="rotation-controls">
+          <button onClick={() => rotateBy(-90)} title="Rotation anti-horaire">↺</button>
+          <span>{rotation}°</span>
+          <button onClick={() => rotateBy(90)} title="Rotation horaire">↻</button>
+        </div>
+
+        <details className="diagnostic-section">
+          <summary>📐 Diagnostic rendu</summary>
+          <div className="diagnostic-grid">
+            <span>Source :</span><span>{srcW} × {srcH} px</span>
+            <span>Affichage :</span><span>{pageW} × {pageH} px</span>
+            <span>Rotation :</span><span>{rotation}°</span>
+            <span>Affiché (rot) :</span><span>{dispW} × {dispH} px</span>
+            <span>Zoom :</span><span>{Math.round(zoom * 100)}%</span>
+            <span>DPR :</span><span>{dpr.toFixed(1)}</span>
+            <span>Rendu canvas :</span><span>{Math.round(pageW * dpr)} × {Math.round(pageH * dpr)} px</span>
+          </div>
+        </details>
+
+        <details className="preset-section">
+          <summary>⚙️ Style par défaut du document</summary>
+          <label>
+            Police
+            <select value={preset.fontFamily} onChange={(e) => setPreset((p) => ({ ...p, fontFamily: e.target.value }))}>
+              {['Arial, sans-serif', 'Helvetica, sans-serif', 'Times New Roman, serif', 'Courier New, monospace', 'Georgia, serif', 'Verdana, sans-serif'].map((f) => (
+                <option key={f} value={f}>{f.split(',')[0]}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Taille
+            <select value={preset.fontSize} onChange={(e) => setPreset((p) => ({ ...p, fontSize: Number(e.target.value) }))}>
+              {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32].map((s) => (
+                <option key={s} value={s}>{s}px</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Graisse
+            <select value={preset.fontWeight} onChange={(e) => setPreset((p) => ({ ...p, fontWeight: e.target.value as 'normal' | 'bold' }))}>
+              <option value="normal">Normal</option>
+              <option value="bold">Gras</option>
+            </select>
+          </label>
+          <label>
+            Couleur
+            <input type="color" value={preset.color} onChange={(e) => setPreset((p) => ({ ...p, color: e.target.value }))} />
+          </label>
+          <button onClick={() => {
+            setFields((prev) => prev.map((f) => ({ ...f, style: { ...f.style, fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, color: preset.color } })));
+            setStatus('Preset appliqué à tous les champs ✓');
+          }}>Appliquer à tous les champs</button>
+        </details>
+
+        <FolderTree selectedFolderId={selectedFolderId} onSelectFolder={setSelectedFolderId} onFoldersLoaded={setAllFolders} />
+
+        <h3>{selectedFolderId ? 'Templates du dossier' : 'Templates récents'}</h3>
+        <ul className="templates-list">
+          {templates
+            .filter((t) => selectedFolderId === null ? true : (t.folderId ?? null) === selectedFolderId)
+            .slice(0, 20)
+            .map((t) => (
+            <li key={t.id}>
+              <strong>{t.name}</strong>
+              <span>{t.fields.length} champs</span>
+              <div className="template-actions">
+                <button onClick={() => loadTemplate(t)}>Charger</button>
+                <button onClick={() => handleRenameTemplate(t.id)} title="Renommer" disabled={!canManageTemplate}>✏️</button>
+                <button onClick={() => handleMoveTemplate(t.id)} title="Déplacer" disabled={!canManageTemplate}>📁</button>
+                <button onClick={() => handleDeleteTemplate(t.id)} title="Supprimer" className="btn-delete-small" disabled={!canManageTemplate}>🗑</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </aside>
+
+      <section ref={editorRef} className="editor" tabIndex={-1} onClick={() => handleSelectField(null)}>
+        {selectedFolderId && (
+          <div className="breadcrumb">
+            <span className="breadcrumb-item" onClick={() => setSelectedFolderId(null)}>🏠 Tous</span>
+            {buildBreadcrumb(allFolders, selectedFolderId).map((f) => (
+              <span key={f.id}>
+                <span className="breadcrumb-sep"> › </span>
+                <span
+                  className={`breadcrumb-item ${f.id === selectedFolderId ? 'active' : ''}`}
+                  onClick={() => setSelectedFolderId(f.id)}
+                >
+                  📁 {f.name}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="multi-pages-stack" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
+            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
+              <div
+                className="page"
+                style={{
+                  width: pageW,
+                  height: pageH,
+                  transform: pageTransform,
+                  transformOrigin: 'top left',
+                  outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
+                }}
+                aria-label={`Page document ${pageNum}`}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                    setActivePage(pageNum);
+                    handleSelectField(null);
+                  }
+                }}
+              >
+                <div style={{ position: 'absolute', top: -22, right: 0, fontSize: 12, color: '#666' }}>Page {pageNum}</div>
+                {sourceUrl ? (
+                  isPdf ? (
+                    <PdfViewer url={sourceUrl} onDimensionsDetected={onPdfDimensions} showPagination={false} />
+                  ) : (
+                    <img src={sourceUrl} className="scan-image" alt="Document importé" onLoad={onImageLoad} />
+                  )
+                ) : (
+                  <div className="scan-bg"><p>Importez un PDF ou une image pour commencer</p></div>
+                )}
+
+                {fields.filter((f) => (f.pageNumber ?? 1) === pageNum).map((f) => (
+                  <FieldOverlay
+                    key={f.id}
+                    field={f}
+                    selected={f.id === selectedFieldId || multiSelectedIds.has(f.id)}
+                    zoom={zoom}
+                    rotation={rotation}
+                    docRole={docRole}
+                    fillMode={fillMode}
+                    onSelect={(ctrlKey) => {
+                      setActivePage(pageNum);
+                      handleSelectField(f.id, ctrlKey);
+                    }}
+                    onMove={(x, y) => updateField(f.id, { x, y })}
+                    onResize={(w, h) => updateField(f.id, { w, h })}
+                    onValueChange={(value, caret) => updateFieldValueWithOverflow(f.id, value, caret)}
+                    onFieldKeyDown={handleFieldKeyDown}
+                    onStructureLockedAttempt={() => setStatus('Champ verrouillé : vous pouvez remplir, mais pas modifier la structure')}
+                    pageWidth={pageW}
+                    pageHeight={pageH}
+                    debugOrder={showDebugOrder ? (() => {
+                      const gid = (f.style.overflowGroupId || '').trim();
+                      if (!gid) return undefined;
+                      const grp = sortOverflowGroup(fields.filter((g) => (g.pageNumber ?? 1) === (f.pageNumber ?? 1) && g.type === 'text' && (g.style.overflowGroupId || '').trim() === gid));
+                      const idx = grp.findIndex((g) => g.id === f.id);
+                      return idx >= 0 ? idx + 1 : undefined;
+                    })() : undefined}
+                    valueOverride={(() => {
+                      const gid = (f.style.overflowGroupId || '').trim();
+                      if (!gid) return undefined;
+                      const fusedKey = `${f.pageNumber ?? 1}:${gid}`;
+                      const state = fusedUiState[fusedKey];
+                      if (!state || state.anchorFieldId !== f.id) return undefined;
+                      // Use stored globalText for persistence
+                      return state.globalText;
+                    })()}
+                    fusedMeta={(() => {
+                      const gid = (f.style.overflowGroupId || '').trim();
+                      if (!gid) return undefined;
+                      const fusedKey = `${f.pageNumber ?? 1}:${gid}`;
+                      const state = fusedUiState[fusedKey];
+                      if (!state) return undefined;
+                      const isAnchor = state.anchorFieldId === f.id;
+                      const isUsed = state.usedFieldIds.includes(f.id);
+                      // Strict scoping: field must belong to THIS key's usedFieldIds
+                      if (!isUsed && !isAnchor) return undefined;
+                      if (isAnchor) {
+                        // Compute union bounding rect of all used fields
+                        const usedFields = state.usedFieldIds.map((uid) => fields.find((ff) => ff.id === uid)).filter(Boolean) as FieldModel[];
+                        if (usedFields.length <= 1) return { hidden: false, anchor: true };
+                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                        for (const uf of usedFields) {
+                          minX = Math.min(minX, uf.x);
+                          minY = Math.min(minY, uf.y);
+                          maxX = Math.max(maxX, uf.x + uf.w);
+                          maxY = Math.max(maxY, uf.y + uf.h);
+                        }
+                        return { hidden: false, anchor: true, bounds: { x: minX, y: minY, w: maxX - minX, h: maxY - minY } };
+                      }
+                      // Non-anchor used field: hide it (only within this key)
+                      return { hidden: true, anchor: false };
+                    })()}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <PropertiesPanel
+        field={selectedField}
+        fields={fields}
+        selectedFieldId={selectedFieldId}
+        multiSelectedIds={multiSelectedIds}
+        onSelectField={(id, ctrlKey) => handleSelectField(id, ctrlKey)}
+        onUpdate={updateField}
+        onBulkUpdateFields={bulkUpdateFields}
+        onBulkPatchFieldStyle={bulkPatchFieldStyle}
+        onBulkUpdateType={bulkUpdateType}
+        onBulkAssignOverflowGroup={bulkAssignOverflowGroup}
+        onReorder={reorderField}
+        onDelete={deleteField}
+        onDuplicate={duplicateField}
+        onAutoOrderOverflowGroup={autoOrderOverflowGroup}
+        docRole={docRole}
+        fillMode={fillMode}
+      />
+
+      {showShareModal && sourceFileId && (
+        <ShareModal docId={sourceFileId} onClose={() => setShowShareModal(false)} />
+      )}
+    </main>
+  );
+}
+

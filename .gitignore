@@ -1,0 +1,5 @@
+node_modules/
+infra/postgres-data/
+infra/garage-meta/
+uploads/
+.env
