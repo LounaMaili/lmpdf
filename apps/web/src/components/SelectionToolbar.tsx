@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 type Props = {
   containerRef: HTMLElement | null;
@@ -15,34 +15,36 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
-  // Fallback: poll selection every 100ms since mouseup/selectionchange may not fire inside contentEditable
-  useEffect(() => {
-    const poll = setInterval(() => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) return;
-      setVisible(true);
-      setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
-    }, 100);
-    return () => clearInterval(poll);
+  const showToolbar = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return;
+    setVisible(true);
+    setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
   }, []);
 
-  // Also try mouseup on window as a backup
   useEffect(() => {
-    const onUp = () => {
+    const onUp = () => { setTimeout(showToolbar, 50); };
+    const onSel = () => {
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) return;
-      setVisible(true);
-      setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
+      if (!sel || sel.isCollapsed) { /* don't hide — mouseup is authoritative */ return; }
+      showToolbar();
     };
-    window.addEventListener('mouseup', onUp);
-    return () => window.removeEventListener('mouseup', onUp);
-  }, []);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('selectionchange', onSel);
+    return () => {
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('selectionchange', onSel);
+    };
+  }, [showToolbar]);
+
+  // Fallback polling — in case events don't fire inside contentEditable
+  useEffect(() => {
+    const poll = setInterval(showToolbar, 200);
+    return () => clearInterval(poll);
+  }, [showToolbar]);
 
   if (!visible) return null;
 

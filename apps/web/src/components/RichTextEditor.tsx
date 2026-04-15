@@ -81,6 +81,8 @@ export default function RichTextEditor({
         wordWrap: 'break-word',
         whiteSpace: 'pre-wrap',
         cursor: 'text',
+        paddingLeft: '2px',
+        boxSizing: 'border-box',
       }}
     />
   );
