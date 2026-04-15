@@ -288,7 +288,12 @@ export default function FieldOverlay({
             unicodeBidi: 'plaintext',
             fontFamily: field.style.fontFamily,
             fontSize: field.style.fontSize,
+            fontWeight: field.style.fontWeight,
+            fontStyle: field.style.fontStyle,
+            textDecoration: field.style.textDecoration,
+            textAlign: field.style.textAlign,
             color: field.style.color,
+            backgroundColor: field.style.highlightColor ? 'transparent' : undefined,
           }}
         >
           {isCounterTally ? tallyMarks(counterVal) : String(counterVal)}
@@ -312,6 +317,8 @@ export default function FieldOverlay({
             fontFamily: field.style.fontFamily,
             fontSize: field.style.fontSize,
             fontWeight: field.style.fontWeight,
+            fontStyle: field.style.fontStyle,
+            textDecoration: field.style.textDecoration,
             textAlign: field.style.textAlign,
             color: field.style.color,
           }}
@@ -345,6 +352,8 @@ export default function FieldOverlay({
           fontFamily: field.style.fontFamily,
           fontSize: field.style.fontSize,
           fontWeight: field.style.fontWeight,
+          fontStyle: field.style.fontStyle,
+          textDecoration: field.style.textDecoration,
           textAlign: field.style.textAlign,
           color: field.style.color,
         }}
@@ -383,7 +392,9 @@ export default function FieldOverlay({
         className="field-content"
         style={{
           ...(contentStyle ?? {}),
-          background: field.style.maskBackground ? (field.style.backgroundColor || '#ffffff') : undefined,
+          background: field.style.maskBackground
+            ? (field.style.backgroundColor || '#ffffff')
+            : (field.style.highlightColor ? field.style.highlightColor : undefined),
         }}
       >
         {renderContent()}

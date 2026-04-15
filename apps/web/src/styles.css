@@ -836,6 +836,55 @@ body {
   cursor: pointer;
 }
 
+/* Style toggle buttons (B/I/U/S) */
+.style-toggles {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.style-toggle-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: bold;
+  color: #555;
+  transition: all 0.15s;
+}
+.style-toggle-btn:hover {
+  background: #f0f0f0;
+}
+.style-toggle-btn.active {
+  background: #3498db;
+  color: #fff;
+  border-color: #3498db;
+}
+
+/* Color palette swatches */
+.color-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.color-palette-swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.color-palette-swatch:hover {
+  transform: scale(1.15);
+}
+.color-palette-swatch.selected {
+  border: 2px solid #3498db;
+}
+
 .properties-panel hr {
   border: none;
   border-top: 1px solid #eee;

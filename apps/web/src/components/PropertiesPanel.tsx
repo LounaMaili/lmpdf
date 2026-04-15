@@ -594,18 +594,63 @@ export default function PropertiesPanel({
             </select>
           </label>
 
+          <div className="style-toggles">
+            <button
+              type="button"
+              title={t('fields.italic')}
+              className={`style-toggle-btn ${field.style.fontStyle === 'italic' ? 'active' : ''}`}
+              onClick={() => updateStyle('fontStyle', field.style.fontStyle === 'italic' ? 'normal' : 'italic')}
+            >I</button>
+            <button
+              type="button"
+              title={t('fields.underline')}
+              className={`style-toggle-btn ${field.style.textDecoration === 'underline' ? 'active' : ''}`}
+              onClick={() => updateStyle('textDecoration', field.style.textDecoration === 'underline' ? 'none' : 'underline')}
+            >U</button>
+            <button
+              type="button"
+              title={t('fields.lineThrough')}
+              className={`style-toggle-btn ${field.style.textDecoration === 'line-through' ? 'active' : ''}`}
+              onClick={() => updateStyle('textDecoration', field.style.textDecoration === 'line-through' ? 'none' : 'line-through')}
+            >S</button>
+          </div>
+
           <label>
             {t('fields.alignment')}
-            <select value={field.style.textAlign} onChange={(e) => updateStyle('textAlign', e.target.value)}>
-              <option value="left">{t('fields.alignLeft')}</option>
-              <option value="center">{t('fields.alignCenter')}</option>
-              <option value="right">{t('fields.alignRight')}</option>
-            </select>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <button type="button" className={`style-toggle-btn ${field.style.textAlign === 'left' ? 'active' : ''}`} title={t('fields.alignLeft')} onClick={() => updateStyle('textAlign', 'left')}>◀</button>
+              <button type="button" className={`style-toggle-btn ${field.style.textAlign === 'center' ? 'active' : ''}`} title={t('fields.alignCenter')} onClick={() => updateStyle('textAlign', 'center')}>◆</button>
+              <button type="button" className={`style-toggle-btn ${field.style.textAlign === 'right' ? 'active' : ''}`} title={t('fields.alignRight')} onClick={() => updateStyle('textAlign', 'right')}>▶</button>
+              <button type="button" className={`style-toggle-btn ${field.style.textAlign === 'justify' ? 'active' : ''}`} title={t('fields.alignJustify')} onClick={() => updateStyle('textAlign', 'justify')}>☰</button>
+              <select value={field.style.textAlign} onChange={(e) => updateStyle('textAlign', e.target.value)} style={{ marginLeft: 4 }}>
+                <option value="left">{t('fields.alignLeft')}</option>
+                <option value="center">{t('fields.alignCenter')}</option>
+                <option value="right">{t('fields.alignRight')}</option>
+                <option value="justify">{t('fields.alignJustify')}</option>
+              </select>
+            </div>
           </label>
 
           <label>
             {t('panel.color')}
             <input type="color" value={field.style.color} onChange={(e) => updateStyle('color', e.target.value)} />
+          </label>
+
+          <div className="color-palette">
+            {['#000000','#ffffff','#e74c3c','#3498db','#2ecc71','#f1c40f','#e67e22','#9b59b6','#ff69b4','#95a5a6'].map((c) => (
+              <div
+                key={c}
+                className={`color-palette-swatch ${field.style.color === c ? 'selected' : ''}`}
+                style={{ backgroundColor: c }}
+                title={c}
+                onClick={() => updateStyle('color', c)}
+              />
+            ))}
+          </div>
+
+          <label>
+            {t('fields.highlightColor')}
+            <input type="color" value={field.style.highlightColor || '#ffff00'} onChange={(e) => updateStyle('highlightColor', e.target.value)} />
           </label>
 
           <label className="checkbox-toggle">

@@ -21,7 +21,7 @@ import { useTranslation } from './i18n';
 
 const DEFAULT_WIDTH = 794;
 const DEFAULT_HEIGHT = 1123;
-const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 2];
+const ZOOM_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.75, 2.0];
 const ShareModal = lazy(() => import('./components/ShareModal'));
 
 /** Strip field values to produce a clean template (structure only). */
