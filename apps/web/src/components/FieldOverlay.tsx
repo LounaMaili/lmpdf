@@ -73,6 +73,7 @@ export default function FieldOverlay({
   const dateCursorRef = useRef<number>(-1);
   const textCursorRef = useRef<number>(-1);
   const textEditorRef = useRef<HTMLDivElement>(null);
+  const [richTextEl, setRichTextEl] = useState<HTMLDivElement | null>(null);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     // Alt+drag is reserved for marquee selection from anywhere, including on top of a field.
@@ -348,10 +349,10 @@ export default function FieldOverlay({
             placeholder={field.label}
             onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
             editorRef={textEditorRef}
-            onContainerRef={(el) => { textEditorRef.current = el; }}
+            onContainerRef={(el) => { textEditorRef.current = el; setRichTextEl(el); }}
           />
           <SelectionToolbar
-            containerRef={textEditorRef.current}
+            containerRef={richTextEl}
             onFormat={(cmd, val) => {
               if (textEditorRef.current?.contains(document.activeElement)) {
                 document.execCommand(cmd, false, val);

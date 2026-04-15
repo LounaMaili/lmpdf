@@ -17,6 +17,7 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
 
   const updatePosition = useCallback(() => {
     const sel = window.getSelection();
+    console.log('[SelectionToolbar] updatePosition called', { hasSel: !!sel, collapsed: sel?.isCollapsed, rangeCount: sel?.rangeCount, hasContainer: !!containerRef });
     if (!sel || sel.isCollapsed || !sel.rangeCount || !containerRef) {
       setVisible(false);
       return;
