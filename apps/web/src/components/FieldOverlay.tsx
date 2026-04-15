@@ -341,7 +341,7 @@ export default function FieldOverlay({
     // In fill mode or when selected, use rich text editor for inline formatting support
     if (selected || fillMode) {
       return (
-        <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%' }}>
+        <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%', userSelect: 'text' }}>
           <RichTextEditor
             key={`${field.id}-${fillMode}`}
             value={valueOverride ?? field.value}
