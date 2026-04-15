@@ -1,5 +1,7 @@
 node_modules/
 infra/postgres-data/
+infra/minio-data/
+infra/garage-data/
 infra/garage-meta/
 uploads/
 .env
