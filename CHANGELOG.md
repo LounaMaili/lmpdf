@@ -1,6 +1,43 @@
 # CHANGELOG
 
-Toutes les modifications significatives du projet sont documentées ici. Format : `AAAA-MM-DD`.
+Toutes les modifications significatives du projet sont documentées ici. Format `AAAA-MM-DD`.
+
+---
+
+## [2026-04-15] Éditeur rich text + toolbar de formatage
+
+### Added
+- **RichTextEditor** : composant `contentEditable` avec support inline formatting (gras, italique, souligné, barré)
+- **SelectionToolbar** : toolbar flottante apparaissant à côté de la sélection de texte (B/I/U/S, surlignage, couleur texte)
+- **Surlignage** : 8 couleurs de surlignage via `hiliteColor`
+- **Couleur du texte** : 8 couleurs via `foreColor`
+- **Palette de couleurs** : 10 couleurs dans le panneau propriétés (en plus de la toolbar)
+- **Boutons de style** : I (italique), U (souligné), S (barré) dans le panneau propriétés
+- **Alignement** : boutons gauche/centre/droite/justifié dans le panneau propriétés
+- **Zoom fin** : pas de zoom à 10% (au lieu de 25%) pour un contrôle plus précis
+- **Drag & drop fichier** : overlay visuel pendant le drag, upload au drop
+- **Indicateur mode remplissage** : badge ✏️ édition / 🔒 remplissage + badge rôle
+- **user-select:text** en fillMode pour permettre la sélection native du texte
+- **SelectionToolbar via Portal** : rendu dans `document.body` pour éviter les conflits avec `transform: scale()`
+
+### Changed
+- `FieldStyle` étendu avec `fontStyle`, `textDecoration`, `highlightColor`
+- Le champ texte en fillMode utilise un `RichTextEditor` (contentEditable) au lieu d'un simple `div`
+- `paddingLeft: 4px` dans le RichTextEditor pour éviter le rognage du texte
+- Correction de la perte de texte en fillMode via `key={field.id}-${fillMode}`
+- Ménage projet : suppression de `audit_lmpdf.md`, `audit_lmpdf_v2.md`, `services/processing/`, `packages/shared/`
+- `.gitignore` mis à jour avec `infra/`
+
+### Fixed
+- Texte qui disparaissait en mode remplissage quand fillMode changeait
+- Toolbar invisible à cause de `transform: scale()` sur le container PDF → corrigé via React Portal
+- Sélection impossible à cause de `user-select: none` sur `.field` → corrigé en fillMode
+- Formatage (`execCommand`) ne fonctionnait pas car `activeElement` n'était plus le contentEditable → sauvegarde/restauration de la sélection
+- Marge gauche du texte trop réduite dans les champs
+
+### Known Issues
+- Le **gras** peut être peu visible selon la police et la taille de caractère utilisées
+- Le `user-select: text` en fillMode pourrait interférer avec le drag des champs dans certains cas marginaux
 
 ---
 
@@ -21,7 +58,7 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 
 ### Added
 - `User.authSource` : distingue les comptes locaux (`local`) des comptes LDAP
-- Support基礎 de l'authentification LDAP dans `ldap.service.ts`
+- Support de l'authentification LDAP dans `ldap.service.ts`
 
 ---
 
@@ -65,7 +102,7 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 ## [2026-02-14] Sécurité et exports
 
 ### Added
-- **Renforcement JWT** : bloquage en production si `JWT_SECRET` encore par défaut
+- **Renforcement JWT** : blocage en production si `JWT_SECRET` encore par défaut
 - **Ownership scoping** : les documents/templates ont un propriétaire, règles d'accès admin owner-only
 - Support des propriétés `value` et `style` persistées sur les champs de template
 
@@ -73,7 +110,7 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 - Champs texte : support multiligne (textarea avec retour à la ligne automatique)
 - Rotation des pages mieux gérée dans le viewer et l'export
 - Coche PDF passée du style "✗" à "✓" avec adaptation de taille automatique
-- Logging et commentaires homogenisés dans le code
+- Logging et commentaires homogénéisés dans le code
 
 ---
 
