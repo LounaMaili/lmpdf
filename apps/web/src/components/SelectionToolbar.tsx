@@ -35,7 +35,7 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     };
     const onSelectionChange = () => {
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) return; // Don't touch visibility on collapse — mouseup is authoritative
+      if (!sel || sel.isCollapsed) return;
       updatePosition();
     };
     document.addEventListener('mouseup', onUp);
@@ -46,18 +46,24 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     };
   }, [updatePosition]);
 
-// DEBUG: force visible
+  // eslint-disable-next-line no-console
+  console.log('[DEBUG toolbar] rendered, visible:', visible, 'sel:', !!window.getSelection(), 'rangeCount:', window.getSelection()?.rangeCount);
+
+  // DEBUG: always show when there's a selection
   if (true) {
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
       const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
+      // eslint-disable-next-line no-console
+      console.log('[DEBUG toolbar] selection rect:', rect);
       return (
-        <div style={{ position: 'fixed', top: rect.top - 46, left: rect.left + rect.width / 2, transform: 'translateX(-50%)', background: '#222', color: '#fff', padding: '4px 8px', borderRadius: 4, zIndex: 9999, fontSize: 12 }}>
-          DEBUG TOOLBAR (always visible when selection exists)
+        <div style={{ position: 'fixed', top: rect.top - 46, left: rect.left + rect.width / 2, transform: 'translateX(-50%)', background: '#f00', color: '#fff', padding: '8px 16px', borderRadius: 4, zIndex: 9999, fontSize: 14, fontWeight: 'bold' }}>
+          DEBUG TOOLBAR
         </div>
       );
     }
+    return null;
   }
 
   if (!visible) return null;
