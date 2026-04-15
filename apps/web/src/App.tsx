@@ -145,6 +145,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [rotation, setRotation] = useState<Rotation>(0);
 
   const [zoomIndex, setZoomIndex] = useState(4);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const zoom = ZOOM_STEPS[zoomIndex];
 
   const [preset, setPreset] = useState<DocumentPreset>({ ...defaultDocumentPreset });
@@ -255,6 +256,39 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       });
     }
   }, [fusedUiState, fields]);
+
+  // ── Drag & drop file upload ──
+  useEffect(() => {
+    const el = document.documentElement;
+    const onDragEnter = (e: DragEvent) => { e.preventDefault(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingOver(true); };
+    const onDragOver = (e: DragEvent) => { e.preventDefault(); };
+    const onDragLeave = (e: DragEvent) => {
+      if (e.clientX === 0 && e.clientY === 0) setIsDraggingOver(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDraggingOver(false);
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) return;
+      const input = document.querySelector<HTMLInputElement>('input[type=file]');
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      if (input) { input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); }
+    };
+    el.addEventListener('dragenter', onDragEnter);
+    el.addEventListener('dragover', onDragOver);
+    el.addEventListener('dragleave', onDragLeave);
+    el.addEventListener('drop', onDrop);
+    return () => {
+      el.removeEventListener('dragenter', onDragEnter);
+      el.removeEventListener('dragover', onDragOver);
+      el.removeEventListener('dragleave', onDragLeave);
+      el.removeEventListener('drop', onDrop);
+    };
+  }, []);
+
   const [detectSensitivity, setDetectSensitivity] = useState<'low' | 'normal' | 'high'>('normal');
   const [detectDottedAsLine, setDetectDottedAsLine] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -1802,7 +1836,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   }, [fields]);
 
   return (
-    <main className="app">
+    <main className={`app${isDraggingOver ? ' app-drag-over' : ''}`}>
+      {isDraggingOver && <div className="drag-overlay"><span>📥 Déposez le fichier ici</span></div>}
       <header className="app-toolbar app-toolbar-single-row">
         {/* ── Left: Brand + File menu ── */}
         <div className="toolbar-group toolbar-group-brand">
@@ -1857,6 +1892,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 {docRoleLabel(docRole)}
               </span>
             )}
+            <span className={`fill-mode-badge compact ${fillMode ? 'active' : ''}`}>
+              {fillMode ? '✏️' : '🔒'}
+            </span>
           </div>
         </div>
 
