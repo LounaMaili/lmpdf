@@ -434,6 +434,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           setDirty(true);
         }
       }
+
+      // Ctrl+L: lock all selected fields; Ctrl+Shift+L: unlock all selected
+      if (e.key === 'l' || e.key === 'L') {
+        if ((e.ctrlKey || e.metaKey) && multiSelectedIds.size > 0 && canEditStructure && !fillMode) {
+          e.preventDefault();
+          bulkUpdateFields(Array.from(multiSelectedIds), { locked: !e.shiftKey });
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -1895,6 +1903,30 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             <span className={`fill-mode-badge compact ${fillMode ? 'active' : ''}`}>
               {fillMode ? '✏️' : '🔒'}
             </span>
+            {multiSelectedIds.size > 0 && !fillMode && canEditStructure && (
+              <>
+                <button
+                  className="toolbar-action-btn"
+                  title="Lock all selected (Ctrl+L)"
+                  onClick={() => bulkUpdateFields(Array.from(multiSelectedIds), { locked: true })}
+                >🔒</button>
+                <button
+                  className="toolbar-action-btn"
+                  title="Unlock all selected (Ctrl+Shift+L)"
+                  onClick={() => bulkUpdateFields(Array.from(multiSelectedIds), { locked: false })}
+                >🔓</button>
+                <button
+                  className="toolbar-action-btn"
+                  title="Delete all selected"
+                  onClick={() => {
+                    setFields((prev) => prev.filter((f) => !multiSelectedIds.has(f.id)));
+                    setSelectedFieldId(null);
+                    setMultiSelectedIds(new Set());
+                    setDirty(true);
+                  }}
+                >🗑️</button>
+              </>
+            )}
           </div>
         </div>
 

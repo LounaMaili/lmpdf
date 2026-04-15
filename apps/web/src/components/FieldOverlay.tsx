@@ -4,6 +4,8 @@ import type { FieldModel } from '../types';
 import { screenToFieldDelta } from '../utils';
 import type { Rotation } from '../utils';
 import { useTranslation } from '../i18n';
+import RichTextEditor from './RichTextEditor';
+import SelectionToolbar from './SelectionToolbar';
 
 type Props = {
   field: FieldModel;
@@ -70,6 +72,8 @@ export default function FieldOverlay({
   const dateInputRef = useRef<HTMLInputElement>(null);
   const dateCursorRef = useRef<number>(-1);
   const textCursorRef = useRef<number>(-1);
+  const textEditorRef = useRef<HTMLDivElement>(null);
+  const [richTextEl, setRichTextEl] = useState<HTMLDivElement | null>(null);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     // Alt+drag is reserved for marquee selection from anywhere, including on top of a field.
@@ -81,14 +85,12 @@ export default function FieldOverlay({
     if ((tag === 'INPUT' || tag === 'TEXTAREA') && selected) return;
     if ((e.target as HTMLElement).closest('.checkbox-display')) return;
     if ((e.target as HTMLElement).closest('.counter-display, .checkbox-display')) return;
+    // Preserve native text editing when clicking inside the contentEditable rich text editor
+    if ((e.target as HTMLElement).closest('[contentEditable]') && selected) return;
 
-    e.preventDefault();
-    e.stopPropagation();
-    onSelect(e.ctrlKey || e.metaKey);
-    if (structureLocked) {
-      if (!fillMode) onStructureLockedAttempt?.();
-      return; // No drag/resize in fill mode; filler also cannot drag locked fields.
-    }
+    // In fill mode, no dragging of any field is allowed
+    if (fillMode) return;
+
     setDragging(true);
 
     const startX = e.clientX;
@@ -326,37 +328,59 @@ export default function FieldOverlay({
       );
     }
 
+    const textEditStyle = {
+      fontFamily: field.style.fontFamily,
+      fontSize: field.style.fontSize,
+      fontWeight: field.style.fontWeight,
+      fontStyle: field.style.fontStyle,
+      textDecoration: field.style.textDecoration,
+      textAlign: field.style.textAlign,
+      color: field.style.color,
+    };
+
+    // In fill mode or when selected, use rich text editor for inline formatting support
+    if (selected || fillMode) {
+      return (
+        <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%', userSelect: 'text' }}>
+          <RichTextEditor
+            key={`${field.id}-${fillMode}`}
+            value={valueOverride ?? field.value}
+            onChange={(html) => onValueChange(html)}
+            style={textEditStyle}
+            placeholder={field.label}
+            onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
+            editorRef={textEditorRef}
+            onContainerRef={(el) => { textEditorRef.current = el; setRichTextEl(el); }}
+          />
+          <SelectionToolbar
+            containerRef={richTextEl}
+            onFormat={(cmd, val) => {
+              const editor = textEditorRef.current;
+              if (!editor) return;
+              // Save selection, focus editor, restore selection, then execute command
+              const sel = window.getSelection();
+              let savedRange: Range | null = null;
+              if (sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
+              editor.focus();
+              if (savedRange) {
+                sel?.removeAllRanges();
+                sel?.addRange(savedRange);
+              }
+              document.execCommand(cmd, false, val);
+              onValueChange(editor.innerHTML);
+            }}
+          />
+        </div>
+      );
+    }
+
+    // When not selected, render content (click to reselect)
     return (
-      <textarea
-        ref={inputRef}
+      <div
         className="field-input field-textarea"
-        onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
-        tabIndex={-1}
-        value={valueOverride ?? field.value}
-        onChange={(e) => {
-          const hasOverflowGroup = Boolean((field.style.overflowGroupId || '').trim());
-          const mode = field.style.overflowInteractionMode || 'distributed';
-          const isDistributed = mode === 'distributed';
-          const target = e.target;
-          // Expansion should be driven by vertical overflow (extra wrapped line),
-          // not by horizontal metrics that can jitter early.
-          const overflowed = (target.scrollHeight - target.clientHeight) > 2;
-          textCursorRef.current = (hasOverflowGroup && isDistributed)
-            ? target.value.length
-            : (target.selectionStart ?? target.value.length);
-          onValueChange(target.value, target.selectionStart ?? target.value.length, { overflowed });
-        }}
-        placeholder={field.label}
-        rows={1}
-        style={{
-          fontFamily: field.style.fontFamily,
-          fontSize: field.style.fontSize,
-          fontWeight: field.style.fontWeight,
-          fontStyle: field.style.fontStyle,
-          textDecoration: field.style.textDecoration,
-          textAlign: field.style.textAlign,
-          color: field.style.color,
-        }}
+        style={{ ...textEditStyle, overflow: 'hidden', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
+        onClick={() => onSelect(false)}
+        dangerouslySetInnerHTML={{ __html: valueOverride ?? field.value }}
       />
     );
   };
