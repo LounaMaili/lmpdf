@@ -4,6 +4,7 @@ import type { FieldModel } from '../types';
 import { screenToFieldDelta } from '../utils';
 import type { Rotation } from '../utils';
 import { useTranslation } from '../i18n';
+import RichTextEditor from './RichTextEditor';
 
 type Props = {
   field: FieldModel;
@@ -326,37 +327,35 @@ export default function FieldOverlay({
       );
     }
 
+    const textEditStyle = {
+      fontFamily: field.style.fontFamily,
+      fontSize: field.style.fontSize,
+      fontWeight: field.style.fontWeight,
+      fontStyle: field.style.fontStyle,
+      textDecoration: field.style.textDecoration,
+      textAlign: field.style.textAlign,
+      color: field.style.color,
+    };
+
+    // In fill mode or when selected, use rich text editor for inline formatting support
+    if (selected || fillMode) {
+      return (
+        <RichTextEditor
+          value={valueOverride ?? field.value}
+          onChange={(html) => onValueChange(html)}
+          style={textEditStyle}
+          placeholder={field.label}
+          onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
+        />
+      );
+    }
+
+    // When not selected, render HTML content directly
     return (
-      <textarea
-        ref={inputRef}
+      <div
         className="field-input field-textarea"
-        onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
-        tabIndex={-1}
-        value={valueOverride ?? field.value}
-        onChange={(e) => {
-          const hasOverflowGroup = Boolean((field.style.overflowGroupId || '').trim());
-          const mode = field.style.overflowInteractionMode || 'distributed';
-          const isDistributed = mode === 'distributed';
-          const target = e.target;
-          // Expansion should be driven by vertical overflow (extra wrapped line),
-          // not by horizontal metrics that can jitter early.
-          const overflowed = (target.scrollHeight - target.clientHeight) > 2;
-          textCursorRef.current = (hasOverflowGroup && isDistributed)
-            ? target.value.length
-            : (target.selectionStart ?? target.value.length);
-          onValueChange(target.value, target.selectionStart ?? target.value.length, { overflowed });
-        }}
-        placeholder={field.label}
-        rows={1}
-        style={{
-          fontFamily: field.style.fontFamily,
-          fontSize: field.style.fontSize,
-          fontWeight: field.style.fontWeight,
-          fontStyle: field.style.fontStyle,
-          textDecoration: field.style.textDecoration,
-          textAlign: field.style.textAlign,
-          color: field.style.color,
-        }}
+        style={{ ...textEditStyle, pointerEvents: 'none', overflow: 'hidden', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
+        dangerouslySetInnerHTML={{ __html: valueOverride ?? field.value }}
       />
     );
   };

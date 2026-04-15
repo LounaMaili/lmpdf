@@ -84,6 +84,23 @@ export default function PropertiesPanel({
     });
   };
 
+  // Document defaults
+  const [docDefaults, setDocDefaults] = useState<{ fontFamily: string; fontSize: number; fontWeight: 'normal' | 'bold'; color: string }>({
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 14,
+    fontWeight: 'normal',
+    color: '#000000',
+  });
+  const applyDocDefaults = () => {
+    const ids = fields.map(f => f.id);
+    onBulkPatchFieldStyle(ids, {
+      fontFamily: docDefaults.fontFamily,
+      fontSize: docDefaults.fontSize,
+      fontWeight: docDefaults.fontWeight,
+      color: docDefaults.color,
+    });
+  };
+
   const hasMultiSelection = multiSelectedIds.size > 1;
   const isCounter = field?.type === 'counter-tally' || field?.type === 'counter-numeric';
   const [isFieldListOpen, setIsFieldListOpen] = useState(true);
@@ -723,6 +740,43 @@ export default function PropertiesPanel({
           </>
         )}
       </div>
+
+      {/* ── Document Defaults ── */}
+      {!fillMode && (
+        <details className="panel-card" style={{ marginTop: 2 }}>
+          <summary>{t('panel.defaultStyleTitle')}</summary>
+          <label>
+            {t('panel.font')}
+            <select value={docDefaults.fontFamily} onChange={(e) => setDocDefaults(d => ({ ...d, fontFamily: e.target.value }))}>
+              {FONT_FAMILIES.map((f) => (
+                <option key={f} value={f}>{f.split(',')[0]}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t('panel.fontSize')}
+            <select value={docDefaults.fontSize} onChange={(e) => setDocDefaults(d => ({ ...d, fontSize: Number(e.target.value) }))}>
+              {FONT_SIZES.map((s) => (
+                <option key={s} value={s}>{s}px</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t('panel.fontWeight')}
+            <select value={docDefaults.fontWeight} onChange={(e) => setDocDefaults(d => ({ ...d, fontWeight: e.target.value as 'normal' | 'bold' }))}>
+              <option value="normal">{t('panel.fontWeightNormal')}</option>
+              <option value="bold">{t('panel.fontWeightBold')}</option>
+            </select>
+          </label>
+          <label>
+            {t('panel.color')}
+            <input type="color" value={docDefaults.color} onChange={(e) => setDocDefaults(d => ({ ...d, color: e.target.value }))} />
+          </label>
+          <button type="button" onClick={applyDocDefaults} style={{ marginTop: 6 }}>
+            {t('panel.applyToAllFields')}
+          </button>
+        </details>
+      )}
 
       {/* ── Library / Templates (moved from left panel) ── */}
       {templates && onSelectFolder && onFoldersLoaded && onLoadTemplate && (

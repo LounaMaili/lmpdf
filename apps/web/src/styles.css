@@ -3310,3 +3310,63 @@ body {
 .admin-table-logs td:nth-child(6) {
   white-space: nowrap;
 }
+
+/* ── Selection toolbar ── */
+.selection-toolbar {
+  background: #222;
+  border-radius: 6px;
+  padding: 3px 4px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+
+.selection-toolbar-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #fff;
+  font-size: 13px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.selection-toolbar-btn:hover {
+  background: #444;
+  border-color: #555;
+}
+
+.selection-color-picker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: #222;
+  border-radius: 6px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(4, 22px);
+  gap: 3px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+  z-index: 10000;
+}
+
+.color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid #555;
+}
+.color-swatch:hover {
+  border-color: #fff;
+  transform: scale(1.15);
+}
+
+/* ── Rich text editor ── */
+.rich-text-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #999;
+  pointer-events: none;
+}
