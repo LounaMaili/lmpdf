@@ -336,7 +336,6 @@ export default function FieldOverlay({
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
       color: field.style.color,
-      padding: '0 2px',
     };
 
     // In fill mode or when selected, use rich text editor for inline formatting support
