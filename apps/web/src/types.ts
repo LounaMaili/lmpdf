@@ -4,8 +4,11 @@ export type FieldStyle = {
   fontFamily: string;
   fontSize: number;
   fontWeight: 'normal' | 'bold';
-  textAlign: 'left' | 'center' | 'right';
+  fontStyle?: 'normal' | 'italic';
+  textDecoration?: 'none' | 'underline' | 'line-through';
+  textAlign: 'left' | 'center' | 'right' | 'justify';
   color: string;
+  highlightColor?: string;
   checkSize?: number;
   maskBackground?: boolean;
   backgroundColor?: string;
@@ -25,8 +28,11 @@ export const defaultFieldStyle: FieldStyle = {
   fontFamily: 'Arial, sans-serif',
   fontSize: 14,
   fontWeight: 'normal',
+  fontStyle: 'normal',
+  textDecoration: 'none',
   textAlign: 'left',
   color: '#000000',
+  highlightColor: '#ffff00',
   dateFormat: 'DD/MM/YYYY',
 };
 
