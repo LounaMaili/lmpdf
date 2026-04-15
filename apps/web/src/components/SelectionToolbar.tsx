@@ -10,8 +10,7 @@ const TEXT_COLORS = ['#000000', '#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#e6
 
 export default function SelectionToolbar({ containerRef, onFormat }: Props) {
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [selText, setSelText] = useState('');
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
@@ -21,32 +20,34 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return;
-    setVisible(true);
-    setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
+    if (toolbarRef.current) {
+      toolbarRef.current.style.top = `${rect.top - 46}px`;
+      toolbarRef.current.style.left = `${rect.left + rect.width / 2}px`;
+    }
+  }, []);
+
+  // Keep selection text in sync
+  useEffect(() => {
+    const sync = () => {
+      const sel = window.getSelection();
+      setSelText(sel && sel.rangeCount > 0 ? sel.toString() : '');
+    };
+    sync();
+    document.addEventListener('selectionchange', sync);
+    return () => document.removeEventListener('selectionchange', sync);
   }, []);
 
   useEffect(() => {
     const onUp = () => { setTimeout(showToolbar, 50); };
-    const onSel = () => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) { /* don't hide — mouseup is authoritative */ return; }
-      showToolbar();
-    };
     document.addEventListener('mouseup', onUp);
-    document.addEventListener('selectionchange', onSel);
-    return () => {
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('selectionchange', onSel);
-    };
+    return () => document.removeEventListener('mouseup', onUp);
   }, [showToolbar]);
 
-  // Fallback polling — in case events don't fire inside contentEditable
+  // Fallback polling
   useEffect(() => {
     const poll = setInterval(showToolbar, 200);
     return () => clearInterval(poll);
   }, [showToolbar]);
-
-  if (!visible) return null;
 
   const btn = (label: string, title: string, cmd: string, val?: string) => (
     <button
@@ -63,12 +64,13 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
       className="selection-toolbar"
       style={{
         position: 'fixed',
-        top: position.top,
-        left: position.left,
         transform: 'translateX(-50%)',
         zIndex: 9999,
+        opacity: selText.length > 0 ? 1 : 0,
+        pointerEvents: selText.length > 0 ? 'auto' : 'none',
       }}
     >
+      <span style={{ color: '#fff', fontSize: 11, marginRight: 8 }}>&quot;{selText.slice(0, 20)}&quot;</span>
       {btn('B', 'Gras', 'bold')}
       {btn('I', 'Italique', 'italic')}
       {btn('U', 'Souligné', 'underline')}
