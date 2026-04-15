@@ -96,25 +96,33 @@ pnpm dev
 
 ---
 
-## Installation sur une VM distante
+## Déploiement sur une VM distante
 
-Voir [DEPLOY_VM.md](./DEPLOY_VM.md) pour le déploiement production sur une machine virtuelle.
-
-Résumé des scripts disponibles :
+Le déploiement se fait via **git** :
 
 ```bash
-# Installe Docker/Compose sur une fresh Debian/Ubuntu/Rocky
+# 1. Installer les dépendances système (Docker, Compose)
 bash scripts/install-host-deps-linux.sh
 
-# Déploie LMPdf sur une VM (configure .env, build, lance les containers)
-bash scripts/install-vm.sh
+# 2. Cloner le dépôt sur la VM
+git clone https://github.com/winpoks/lmpdf.git
+cd lmpdf
 
-# Génère une archive portable du projet
-bash scripts/make-release.sh
+# 3. Configurer l'environnement
+cp .env.example .env
+# Éditer .env avec les secrets de production
 
-# Affiche les règles UFW à ouvrir pour une VM Traefik distante
-bash scripts/print-firewall-rules.sh
+# 4. Lancer les conteneurs
+docker compose up -d --build
 ```
+
+Pour mettre à jour :
+```bash
+git pull origin main
+docker compose up -d --build
+```
+
+> Les anciens scripts (`install-vm.sh`, `make-release.sh`) et `DEPLOY_VM.md` sont obsolètes depuis la migration git.
 
 ---
 
