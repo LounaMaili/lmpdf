@@ -1,7 +1,7 @@
 FROM node:22-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm install -g pnpm && pnpm install
 COPY . .
 EXPOSE 4173
-CMD ["npm", "run", "dev"]
+CMD ["pnpm", "run", "dev"]
