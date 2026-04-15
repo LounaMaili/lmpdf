@@ -19,11 +19,17 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
   const showToolbar = useCallback(() => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-    // Only show toolbar if selection is inside the editor container
-    if (containerRef && !containerRef.contains(sel.anchorNode)) return;
+    // Bug 2: When containerRef is null, NEVER show the toolbar
+    if (!containerRef) return;
+    if (!containerRef.contains(sel.anchorNode)) return;
+    // Bug 1: Check that actual selected text is non-empty
+    const selTextNow = sel.toString();
+    if (!selTextNow || selTextNow.length === 0) return;
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return;
+    // Bug 1: Guard against (0,0) position — definitely invalid
+    if (rect.top === 0 && rect.left === 0) return;
     const top = rect.top - 46;
     if (top <= 0 || rect.width === 0) return;
     setPosition({ top, left: rect.left + rect.width / 2 });
@@ -68,8 +74,8 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
       className="selection-toolbar"
       style={{
         position: 'fixed',
-        top: position.top,
-        left: position.left,
+        top: selText.length > 0 ? position.top : -9999,
+        left: selText.length > 0 ? position.left : -9999,
         transform: 'translateX(-50%)',
         zIndex: 99999,
         opacity: selText.length > 0 ? 1 : 0,
