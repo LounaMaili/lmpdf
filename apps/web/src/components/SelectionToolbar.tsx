@@ -20,9 +20,6 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
     const range = sel.getRangeAt(0);
-    const startInside = containerRef.contains(range.startContainer) || range.startContainer === containerRef;
-    const endInside = containerRef.contains(range.endContainer) || range.endContainer === containerRef;
-    if (!startInside && !endInside) return;
     const rect = range.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return;
     setVisible(true);
@@ -45,26 +42,6 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
       document.removeEventListener('selectionchange', onSelectionChange);
     };
   }, [updatePosition]);
-
-  // eslint-disable-next-line no-console
-  console.log('[DEBUG toolbar] rendered, visible:', visible, 'sel:', !!window.getSelection(), 'rangeCount:', window.getSelection()?.rangeCount);
-
-  // DEBUG: always show when there's a selection
-  if (true) {
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      // eslint-disable-next-line no-console
-      console.log('[DEBUG toolbar] selection rect:', rect);
-      return (
-        <div style={{ position: 'fixed', top: rect.top - 46, left: rect.left + rect.width / 2, transform: 'translateX(-50%)', background: '#f00', color: '#fff', padding: '8px 16px', borderRadius: 4, zIndex: 9999, fontSize: 14, fontWeight: 'bold' }}>
-          DEBUG TOOLBAR
-        </div>
-      );
-    }
-    return null;
-  }
 
   if (!visible) return null;
 

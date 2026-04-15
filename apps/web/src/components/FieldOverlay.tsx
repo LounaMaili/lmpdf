@@ -340,8 +340,6 @@ export default function FieldOverlay({
 
     // In fill mode or when selected, use rich text editor for inline formatting support
     if (selected || fillMode) {
-      // eslint-disable-next-line no-console
-      console.log('[DEBUG FieldOverlay] rendering rich text branch, selected:', selected, 'fillMode:', fillMode, 'richTextEl:', !!richTextEl);
       return (
         <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%' }}>
           <RichTextEditor
