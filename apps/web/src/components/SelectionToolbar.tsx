@@ -21,18 +21,21 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
       setVisible(false);
       return;
     }
-    // Check if selection is inside our container
     const range = sel.getRangeAt(0);
-    if (!containerRef.contains(range.commonAncestorContainer)) {
+    // Check if selection is inside our container by testing both boundary nodes
+    const startInside = containerRef.contains(range.startContainer) || range.startContainer === containerRef;
+    const endInside = containerRef.contains(range.endContainer) || range.endContainer === containerRef;
+    if (!startInside && !endInside) {
       setVisible(false);
       return;
     }
     const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      setVisible(false);
+      return;
+    }
     const tbHeight = 40;
-    setPosition({
-      top: rect.top - tbHeight - 6,
-      left: rect.left + rect.width / 2,
-    });
+    setPosition({ top: rect.top - tbHeight - 6, left: rect.left + rect.width / 2 });
     setVisible(true);
   }, [containerRef]);
 

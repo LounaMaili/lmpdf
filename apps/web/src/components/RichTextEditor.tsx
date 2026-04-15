@@ -13,21 +13,21 @@ export default function RichTextEditor({ value, onChange, style, placeholder, on
   const editorRef = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
 
-  // Initialize innerHTML on mount and when value changes while unfocused
+  // Sync HTML only when value changed externally (not during local edits that keep selection)
   useEffect(() => {
-    if (editorRef.current && !focused) {
-      if (editorRef.current.innerHTML !== value) {
-        editorRef.current.innerHTML = value;
+    if (!editorRef.current || editorRef.current.innerHTML === value) return;
+    // Save and restore selection to avoid collapsing on re-render
+    const sel = window.getSelection();
+    const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+    editorRef.current.innerHTML = value;
+    if (range) {
+      try {
+        const newSel = window.getSelection();
+        newSel?.removeAllRanges();
+        newSel?.addRange(range);
+      } catch {}
       }
-    }
-  }, [value, focused]);
-
-  // Also set on mount
-  useEffect(() => {
-    if (editorRef.current && value) {
-      editorRef.current.innerHTML = value;
-    }
-  }, []);
+  }, [value]);
 
   const handleInput = useCallback(() => {
     if (editorRef.current) {
