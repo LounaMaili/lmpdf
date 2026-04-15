@@ -46,6 +46,20 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     };
   }, [updatePosition]);
 
+// DEBUG: force visible
+  if (true) {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      return (
+        <div style={{ position: 'fixed', top: rect.top - 46, left: rect.left + rect.width / 2, transform: 'translateX(-50%)', background: '#222', color: '#fff', padding: '4px 8px', borderRadius: 4, zIndex: 9999, fontSize: 12 }}>
+          DEBUG TOOLBAR (always visible when selection exists)
+        </div>
+      );
+    }
+  }
+
   if (!visible) return null;
 
   const btn = (label: string, title: string, cmd: string, val?: string) => (
