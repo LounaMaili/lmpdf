@@ -85,6 +85,9 @@ export default function FieldOverlay({
     // Preserve native text editing when clicking inside the contentEditable rich text editor
     if ((e.target as HTMLElement).closest('[contentEditable]') && selected) return;
 
+    // In fill mode, no dragging of any field is allowed
+    if (fillMode) return;
+
     setDragging(true);
 
     const startX = e.clientX;

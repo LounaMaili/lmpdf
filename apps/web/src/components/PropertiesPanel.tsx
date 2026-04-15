@@ -92,7 +92,7 @@ export default function PropertiesPanel({
     color: '#000000',
   });
   const applyDocDefaults = () => {
-    const ids = fields.map(f => f.id);
+    const ids = hasMultiSelection ? Array.from(multiSelectedIds) : fields.map(f => f.id);
     onBulkPatchFieldStyle(ids, {
       fontFamily: docDefaults.fontFamily,
       fontSize: docDefaults.fontSize,
@@ -773,8 +773,14 @@ export default function PropertiesPanel({
             <input type="color" value={docDefaults.color} onChange={(e) => setDocDefaults(d => ({ ...d, color: e.target.value }))} />
           </label>
           <button type="button" onClick={applyDocDefaults} style={{ marginTop: 6 }}>
-            {t('panel.applyToAllFields')}
+            {hasMultiSelection ? t('panel.applyToSelectedFields', { count: multiSelectedIds.size }) : t('panel.applyToAllFields')}
           </button>
+          {hasMultiSelection && (
+            <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+              <button type="button" onClick={() => onBulkUpdateFields(Array.from(multiSelectedIds), { locked: true })}>🔒 Lock all</button>
+              <button type="button" onClick={() => onBulkUpdateFields(Array.from(multiSelectedIds), { locked: false })}>🔓 Unlock all</button>
+            </div>
+          )}
         </details>
       )}
 
