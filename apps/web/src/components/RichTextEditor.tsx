@@ -25,9 +25,9 @@ export default function RichTextEditor({
 
   // Expose the editor element to parent via callback
   useEffect(() => {
-    onContainerRef?.(internalRef.current);
+    onContainerRef?.(editorRef.current);
     return () => onContainerRef?.(null);
-  }, [onContainerRef]);
+  }, [onContainerRef, editorRef]);
 
   useEffect(() => {
     if (!editorRef.current) return;

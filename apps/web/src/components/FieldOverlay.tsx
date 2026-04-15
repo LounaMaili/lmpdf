@@ -343,6 +343,7 @@ export default function FieldOverlay({
       return (
         <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%' }}>
           <RichTextEditor
+            key={`${field.id}-${fillMode}`}
             value={valueOverride ?? field.value}
             onChange={(html) => onValueChange(html)}
             style={textEditStyle}
