@@ -38,6 +38,7 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 ### Known Issues
 - Le **gras** peut être peu visible selon la police et la taille de caractère utilisées
 - Le `user-select: text` en fillMode pourrait interférer avec le drag des champs dans certains cas marginaux
+- **Drag & drop fichier** depuis le bureau/explorateur non fonctionnel (overlay visuel présent mais upload incomplet)
 
 ---
 
