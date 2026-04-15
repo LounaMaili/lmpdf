@@ -1,80 +1,155 @@
 # LMPdf
 
-Scaffold monorepo pour une application web d'édition de formulaires PDF/images.
+> **LMPdf** — Éditeur local de formulaires PDF avec champs interactifs, modèles sauvegardables et export automatisé.
 
-## Structure
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Status: En développement](https://img.shields.io/badge/Status-Development-blue.svg)
 
-- `apps/web` : React + Vite + TypeScript (éditeur visuel)
-- `apps/api` : NestJS (API templates/upload)
-- `apps/vision` : FastAPI placeholder (OpenCV/OCR plus tard)
-- `packages/shared` : types partagés
-- `infra` : données locales Docker (Postgres/Garage)
+---
+
+## C'est quoi ?
+
+**LMPdf** est une application web self-hosted permettant de :
+
+- **Importer** un PDF ou une image comme fond de formulaire
+- **Positionner** des champs interactifs (texte, case à cocher, compteur, date) par drag & drop
+- **Sauvegarder** des modèles réutilisables en base de données
+- **Exporter** un PDF rempli avec les valeurs saisies
+- **Partager** des documents avec contrôle d'accès par utilisateur ou groupe
+
+L'objectif : fournir un outil local, léger et autonome pour générer des documentsPDF sans depender d'un service cloud.
+
+---
+
+## Fonctionnalités
+
+| Fonctionnalité | État |
+|---|---|
+| Import PDF / image | ✅ |
+| Éditeur drag & drop de champs | ✅ |
+| Types de champs : texte, case à cocher, compteur, date | ✅ |
+| Verrouillage de champs (structure vs contenu) | ✅ |
+| Sauvegarde de modèles (templates) | ✅ |
+| Export PDF rempli | ✅ |
+| Authentification JWT + MFA | ✅ |
+| Gestion d'utilisateurs et groupes | ✅ |
+| Permissions par document (owner/editor/filler) | ✅ |
+| Détection automatique de zones (OCR/Vision) | 🔜 |
+| LDAP / SSO | 🔜 |
+
+---
+
+## Architecture
+
+```
+apps/web        →  React + Vite + TypeScript  (frontend)
+apps/api        →  NestJS + Prisma            (backend)
+apps/vision     →  FastAPI + OpenCV           (service OCR/vision)
+packages/shared →  Types partagés
+infra           →  Docker (Postgres, Garage S3)
+```
+
+Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour les détails.
+
+---
 
 ## Prérequis
 
-- Node.js 22+
-- pnpm
-- Docker / Docker Compose
+- **Node.js** 22+
+- **pnpm** 8+
+- **Docker** + **Docker Compose**
+
+---
 
 ## Démarrage rapide
 
 ```bash
+# 1. Cloner le dépôt (si pas déjà fait)
+git clone https://github.com/winpoks/lmpdf.git
+cd lmpdf
+
+# 2. Configurer l'environnement
 cp .env.example .env
+# Éditer .env : ajuster les secrets et URLs si nécessaire
+
+# 3. Installer les dépendances
 pnpm install
+
+# 4. Lancer les services (Postgres + Garage)
 docker compose up -d
+
+# 5. Démarrer en développement
 pnpm dev
 ```
 
-## Installer facilement sur une autre VM
+---
 
-Voir `DEPLOY_VM.md`.
+## URLs par défaut
 
-Scripts prêts à l'emploi :
-- `scripts/make-release.sh` → crée une archive portable du projet
-- `scripts/install-host-deps-linux.sh` → installe Docker/Compose sur Debian/Ubuntu/Rocky
-- `scripts/install-vm.sh` → initialise `.env`, secrets, CORS/API URL puis lance `docker compose up -d --build`
-- `scripts/print-firewall-rules.sh` → génère des règles UFW (VM Traefik distante)
+| Service | URL |
+|---|---|
+| Web (frontend) | http://localhost:4173 |
+| API (backend) | http://localhost:3000/api/health |
+| Vision (OCR) | http://localhost:8001/health |
+| Garage S3 API | http://localhost:3900 (local uniquement) |
+| Garage Admin | http://localhost:3903 (local uniquement) |
 
-URLs utiles :
-- Web: http://localhost:4173
-- API: http://localhost:3000/api/health
-- Vision: http://localhost:8001/health
-- Garage S3 API: http://localhost:3900 (local only)
-- Garage Admin API: http://localhost:3903 (local only)
+---
+
+## Installation sur une VM distante
+
+Voir [DEPLOY_VM.md](./DEPLOY_VM.md) pour le déploiement production sur une machine virtuelle.
+
+Résumé des scripts disponibles :
+
+```bash
+# Installe Docker/Compose sur une fresh Debian/Ubuntu/Rocky
+bash scripts/install-host-deps-linux.sh
+
+# Déploie LMPdf sur une VM (configure .env, build, lance les containers)
+bash scripts/install-vm.sh
+
+# Génère une archive portable du projet
+bash scripts/make-release.sh
+
+# Affiche les règles UFW à ouvrir pour une VM Traefik distante
+bash scripts/print-firewall-rules.sh
+```
+
+---
 
 ## Base de données (Prisma)
 
-Depuis `apps/api` :
-
 ```bash
-DATABASE_URL="postgresql://lmpdf:lmpdf@localhost:5432/lmpdf" npx prisma migrate dev --name init
-DATABASE_URL="postgresql://lmpdf:lmpdf@localhost:5432/lmpdf" npx prisma generate
+# Générer le client Prisma
+cd apps/api
+npx prisma generate
+
+# Créer une migration
+npx prisma migrate dev --name ma_migration
+
+# Appliquer les migrations (en prod / Docker)
+npx prisma migrate deploy
 ```
 
-En Docker, les migrations sont appliquées au démarrage du backend (`prisma migrate deploy`).
+En environnement Docker, les migrations sont appliquées automatiquement au démarrage du conteneur API.
 
-## MVP visé
+---
 
-1. Import PDF/image
-2. Affichage fond + champs superposés
-3. Ajout/édition manuelle des champs
-4. Sauvegarde de modèles réutilisables
-5. Export PDF final
+## Gestion des secrets
 
-## État actuel (déjà en place)
+> ⚠️ **Jamais commiter le fichier `.env`.** Il contient des secrets (JWT, credentials S3, clés API).
 
-- API NestJS
-  - `GET /api/health`
-  - `POST /api/uploads/document` (PDF/image, stockage local `apps/api/uploads` + entrée DB)
-  - `POST /api/templates` (sauvegarde template en Postgres)
-  - `GET /api/templates` et `GET /api/templates/:id`
-  - `POST /api/detect` (pont API -> service Vision)
-- Web React
-  - import fichier PDF/image
-  - overlay de champs sur page A4
-  - déplacement souris + redimensionnement (poignée)
-  - double-clic sur un champ pour suppression
-  - sauvegarde template + rechargement d'un template récent
-- Vision
-  - `GET /health`
-  - `POST /detect` placeholder (contrat `suggestedFields[]`)
+Utiliser `.env.example` comme modèle — toutes les variables obligatoires y sont documentées.
+
+---
+
+## Licence
+
+MIT — Libre d'utilisation et de modification.
+
+---
+
+## Auteur
+
+Projet développé dans le cadre de l'infrastructure personnelle **maison-domotique**.
