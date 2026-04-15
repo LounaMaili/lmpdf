@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 type Props = {
   containerRef: HTMLElement | null;
@@ -11,6 +12,7 @@ const TEXT_COLORS = ['#000000', '#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#e6
 export default function SelectionToolbar({ containerRef, onFormat }: Props) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [selText, setSelText] = useState('');
+  const [position, setPosition] = useState({ top: 0, left: 0 });
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
@@ -20,10 +22,7 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return;
-    if (toolbarRef.current) {
-      toolbarRef.current.style.top = `${rect.top - 46}px`;
-      toolbarRef.current.style.left = `${rect.left + rect.width / 2}px`;
-    }
+    setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
   }, []);
 
   // Keep selection text in sync
@@ -37,16 +36,16 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     return () => document.removeEventListener('selectionchange', sync);
   }, []);
 
+  // Update position on mouseup and selectionchange
   useEffect(() => {
     const onUp = () => { setTimeout(showToolbar, 50); };
+    const onSel = () => { showToolbar(); };
     document.addEventListener('mouseup', onUp);
-    return () => document.removeEventListener('mouseup', onUp);
-  }, [showToolbar]);
-
-  // Fallback polling
-  useEffect(() => {
-    const poll = setInterval(showToolbar, 200);
-    return () => clearInterval(poll);
+    document.addEventListener('selectionchange', onSel);
+    return () => {
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('selectionchange', onSel);
+    };
   }, [showToolbar]);
 
   const btn = (label: string, title: string, cmd: string, val?: string) => (
@@ -58,19 +57,22 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     >{label}</button>
   );
 
-  return (
+  // Render via Portal into document.body — outside any transformed ancestor
+  return createPortal(
     <div
       ref={toolbarRef}
       className="selection-toolbar"
       style={{
         position: 'fixed',
+        top: position.top,
+        left: position.left,
         transform: 'translateX(-50%)',
-        zIndex: 9999,
+        zIndex: 99999,
         opacity: selText.length > 0 ? 1 : 0,
         pointerEvents: selText.length > 0 ? 'auto' : 'none',
+        transition: 'opacity 0.15s',
       }}
     >
-      <span style={{ color: '#fff', fontSize: 11, marginRight: 8 }}>&quot;{selText.slice(0, 20)}&quot;</span>
       {btn('B', 'Gras', 'bold')}
       {btn('I', 'Italique', 'italic')}
       {btn('U', 'Souligné', 'underline')}
@@ -119,6 +121,7 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
