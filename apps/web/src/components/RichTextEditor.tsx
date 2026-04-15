@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 
 interface Props {
@@ -23,10 +23,9 @@ export default function RichTextEditor({
   const internalRef = useRef<HTMLDivElement>(null);
   const editorRef = externalRef ?? internalRef;
 
-  // Expose the editor element to parent via callback (only on mount/unmount)
+  // Expose the editor element to parent after DOM mounts
   useEffect(() => {
-    onContainerRef?.(editorRef.current);
-    return () => onContainerRef?.(null);
+    onContainerRef?.(editorRef.current ?? null);
   }, []);
 
   useEffect(() => {
