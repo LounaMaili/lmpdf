@@ -16,6 +16,16 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
   const [showColorPicker, setShowColorPicker] = useState(false);
 
   const updatePosition = useCallback(() => {
+    console.log('[DEBUG updatePosition] containerRef:', !!containerRef, 'sel:', !!window.getSelection(), 'collapsed:', window.getSelection()?.isCollapsed, 'rangeCount:', window.getSelection()?.rangeCount);
+    if (containerRef) {
+      console.log('[DEBUG updatePosition] containerRef tag:', containerRef.tagName, 'content:', containerRef.innerHTML.slice(0, 50));
+      const _sel = window.getSelection();
+      if (_sel && _sel.rangeCount > 0) {
+        const range = _sel.getRangeAt(0);
+        console.log('[DEBUG updatePosition] range startContainer:', range.startContainer.nodeName, 'endContainer:', range.endContainer.nodeName);
+        console.log('[DEBUG updatePosition] startInside:', containerRef.contains(range.startContainer), 'endInside:', containerRef.contains(range.endContainer));
+      }
+    }
     if (!containerRef) return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) { setVisible(false); return; }
@@ -34,6 +44,7 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
       setTimeout(updatePosition, 10);
     };
     const onSelectionChange = () => {
+      console.log('[DEBUG selectionchange] fired, sel:', !!window.getSelection(), 'collapsed:', window.getSelection()?.isCollapsed);
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) {
         setVisible(false);
