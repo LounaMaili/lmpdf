@@ -5,6 +5,7 @@ import { screenToFieldDelta } from '../utils';
 import type { Rotation } from '../utils';
 import { useTranslation } from '../i18n';
 import RichTextEditor from './RichTextEditor';
+import SelectionToolbar from './SelectionToolbar';
 
 type Props = {
   field: FieldModel;
@@ -71,6 +72,7 @@ export default function FieldOverlay({
   const dateInputRef = useRef<HTMLInputElement>(null);
   const dateCursorRef = useRef<number>(-1);
   const textCursorRef = useRef<number>(-1);
+  const textEditorRef = useRef<HTMLDivElement>(null);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     // Alt+drag is reserved for marquee selection from anywhere, including on top of a field.
@@ -345,6 +347,17 @@ export default function FieldOverlay({
             style={textEditStyle}
             placeholder={field.label}
             onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
+            editorRef={textEditorRef}
+            onContainerRef={(el) => { textEditorRef.current = el; }}
+          />
+          <SelectionToolbar
+            containerRef={textEditorRef.current}
+            onFormat={(cmd, val) => {
+              if (textEditorRef.current?.contains(document.activeElement)) {
+                document.execCommand(cmd, false, val);
+                onValueChange(textEditorRef.current.innerHTML);
+              }
+            }}
           />
         </div>
       );
