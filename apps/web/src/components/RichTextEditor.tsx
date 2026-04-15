@@ -23,11 +23,11 @@ export default function RichTextEditor({
   const internalRef = useRef<HTMLDivElement>(null);
   const editorRef = externalRef ?? internalRef;
 
-  // Expose the editor element to parent via callback
+  // Expose the editor element to parent via callback (only on mount/unmount)
   useEffect(() => {
     onContainerRef?.(editorRef.current);
     return () => onContainerRef?.(null);
-  }, [onContainerRef, editorRef]);
+  }, []);
 
   useEffect(() => {
     if (!editorRef.current) return;

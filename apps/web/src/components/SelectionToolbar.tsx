@@ -16,28 +16,17 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
   const [showColorPicker, setShowColorPicker] = useState(false);
 
   const updatePosition = useCallback(() => {
+    if (!containerRef) return;
     const sel = window.getSelection();
-    console.log('[SelectionToolbar] updatePosition called', { hasSel: !!sel, collapsed: sel?.isCollapsed, rangeCount: sel?.rangeCount, hasContainer: !!containerRef });
-    if (!sel || sel.isCollapsed || !sel.rangeCount || !containerRef) {
-      setVisible(false);
-      return;
-    }
+    if (!sel || sel.isCollapsed || !sel.rangeCount) { setVisible(false); return; }
     const range = sel.getRangeAt(0);
-    // Check if selection is inside our container by testing both boundary nodes
     const startInside = containerRef.contains(range.startContainer) || range.startContainer === containerRef;
     const endInside = containerRef.contains(range.endContainer) || range.endContainer === containerRef;
-    if (!startInside && !endInside) {
-      setVisible(false);
-      return;
-    }
+    if (!startInside && !endInside) { setVisible(false); return; }
     const rect = range.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) {
-      setVisible(false);
-      return;
-    }
-    const tbHeight = 40;
-    setPosition({ top: rect.top - tbHeight - 6, left: rect.left + rect.width / 2 });
+    if (rect.width === 0 && rect.height === 0) { setVisible(false); return; }
     setVisible(true);
+    setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
   }, [containerRef]);
 
   useEffect(() => {
