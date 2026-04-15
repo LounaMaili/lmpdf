@@ -352,7 +352,7 @@ export default function FieldOverlay({
             editorRef={textEditorRef}
             onContainerRef={(el) => { textEditorRef.current = el; setRichTextEl(el); }}
           />
-          <SelectionToolbar
+          {selected && <SelectionToolbar
             containerRef={richTextEl}
             onFormat={(cmd, val) => {
               const editor = textEditorRef.current;
@@ -369,7 +369,7 @@ export default function FieldOverlay({
               document.execCommand(cmd, false, val);
               onValueChange(editor.innerHTML);
             }}
-          />
+          />}
         </div>
       );
     }

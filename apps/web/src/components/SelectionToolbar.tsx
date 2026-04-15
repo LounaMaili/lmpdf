@@ -24,7 +24,9 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return;
-    setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
+    const top = rect.top - 46;
+    if (top <= 0 || rect.width === 0) return;
+    setPosition({ top, left: rect.left + rect.width / 2 });
   }, [containerRef]);
 
   // Keep selection text in sync
