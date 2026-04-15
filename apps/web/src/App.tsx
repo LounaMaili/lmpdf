@@ -19,6 +19,8 @@ import { getStoredUser } from './auth';
 import { useAutosave } from './hooks/useAutosave';
 import { useTranslation } from './i18n';
 
+const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
+
 const DEFAULT_WIDTH = 794;
 const DEFAULT_HEIGHT = 1123;
 const ZOOM_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.75, 2.0];
@@ -731,20 +733,36 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   const takeFieldChunk = (text: string, field: FieldModel) => {
     const cap = estimateFieldCapacity(field);
-    if (text.length <= cap) {
+    const plainLen = stripHtml(text).length;
+    if (plainLen <= cap) {
       return { chunk: text, consumed: text.length, cap };
     }
 
-    // Prefer cutting at a word boundary to avoid brutal word splits between fields.
+    // Prefer cutting at a word boundary — work on plain text positions
+    const plain = stripHtml(text);
     let cut = cap;
-    const candidate = text.slice(0, cap);
+    const candidate = plain.slice(0, cap);
     const ws = Math.max(candidate.lastIndexOf(' '), candidate.lastIndexOf('\t'), candidate.lastIndexOf('\n'));
     if (ws >= Math.floor(cap * 0.9)) {
-      cut = ws + 1; // include the separator in current field to preserve word spacing
+      cut = ws + 1;
     }
 
-    const chunk = text.slice(0, cut);
-    const consumed = cut;
+    // Map plain-text cut position back to HTML string position
+    let htmlCut = 0;
+    let plainCount = 0;
+    let inTag = false;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '<') { inTag = true; htmlCut = i; continue; }
+      if (text[i] === '>') { inTag = false; htmlCut = i + 1; continue; }
+      if (!inTag) {
+        plainCount++;
+        if (plainCount > cut) { htmlCut = i; break; }
+        htmlCut = i + 1;
+      }
+    }
+
+    const chunk = text.slice(0, htmlCut);
+    const consumed = htmlCut;
 
     return { chunk, consumed, cap };
   };
@@ -838,7 +856,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
       const isFullLike = (field: FieldModel, value: string) => {
         const cap = estimateFieldCapacity(field);
-        return value.length >= Math.max(1, cap - 1);
+        return stripHtml(value).length >= Math.max(1, cap - 1);
       };
 
       // ── CONTINUOUS MODE: physical extension (anchor + bounds) ─────────
@@ -882,7 +900,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         // ── Non-extension-zone edit: update locally without touching the extension ──
         if (!isInExtensionZone) {
           // Just update this field's value locally; don't destroy fused state
-          const fits = (hasOverflowHint && !overflowHint) || (!hasOverflowHint && newValue.length <= localCap);
+          const fits = (hasOverflowHint && !overflowHint) || (!hasOverflowHint && stripHtml(newValue).length <= localCap);
           if (fits) {
             setFields((prev) => prev.map((f) => (f.id === id ? { ...f, value: newValue } : f)));
             setDirty(true);
@@ -893,7 +911,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         }
 
         // Local edit that fits and no existing extension → no physical extension needed
-        if (!existingState && ((hasOverflowHint && !overflowHint) || (!hasOverflowHint && newValue.length <= localCap))) {
+        if (!existingState && ((hasOverflowHint && !overflowHint) || (!hasOverflowHint && stripHtml(newValue).length <= localCap))) {
           setFields((prev) => prev.map((f) => (f.id === id ? { ...f, value: newValue } : f)));
           setDirty(true);
           return;
@@ -1031,7 +1049,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       })();
 
       // Local edit when there is no visible overflow (distributed only).
-      if (!needsDistributedReflow && ((hasOverflowHint && !overflowHint) || (!hasOverflowHint && newValue.length <= localCap))) {
+      if (!needsDistributedReflow && ((hasOverflowHint && !overflowHint) || (!hasOverflowHint && stripHtml(newValue).length <= localCap))) {
         setFields((prev) => prev.map((f) => (f.id === id ? { ...f, value: newValue } : f)));
         setDirty(true);
         return;
@@ -1342,7 +1360,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     const localCap = estimateFieldCapacity(src);
     const hasOverflowHint = typeof meta?.overflowed === 'boolean';
     const overflowHint = Boolean(meta?.overflowed);
-    if ((hasOverflowHint && !overflowHint) || (!hasOverflowHint && newValue.length <= localCap)) {
+    if ((hasOverflowHint && !overflowHint) || (!hasOverflowHint && stripHtml(newValue).length <= localCap)) {
       setFields((prev) => prev.map((f) => (f.id === id ? { ...f, value: newValue } : f)));
       setDirty(true);
       return;
@@ -1366,7 +1384,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     // browser still emits newValue = oldCurrent + typedChar(s), which should append
     // to the end of the global stream (not prepend in next field).
     if (
-      (oldCurrent.length >= currentCap || overflowHint) &&
+      (stripHtml(oldCurrent).length >= currentCap || overflowHint) &&
       newValue.length > oldCurrent.length &&
       newValue.startsWith(oldCurrent)
     ) {
@@ -1430,7 +1448,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     const currentValue = valueById.get(id) || '';
     const currentCap2 = estimateFieldCapacity(src);
     const nextValue = changedIdx < activeChain.length - 1 ? (valueById.get(activeChain[changedIdx + 1].id) || '') : '';
-    const didOverflowCurrent = overflowHint || newValue.length > currentCap2;
+    const didOverflowCurrent = overflowHint || stripHtml(newValue).length > currentCap2;
     if (didOverflowCurrent && nextValue.length > 0 && changedIdx < activeChain.length - 1) {
       const nextField = activeChain[changedIdx + 1];
       setSelectedFieldId(nextField.id);
