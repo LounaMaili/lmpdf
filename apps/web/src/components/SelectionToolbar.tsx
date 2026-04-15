@@ -16,7 +16,6 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
   const [showColorPicker, setShowColorPicker] = useState(false);
 
   const updatePosition = useCallback(() => {
-    if (!containerRef) return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
     const range = sel.getRangeAt(0);
@@ -24,22 +23,20 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
     if (rect.width === 0 && rect.height === 0) return;
     setVisible(true);
     setPosition({ top: rect.top - 46, left: rect.left + rect.width / 2 });
-  }, [containerRef]);
+  }, []);
 
   useEffect(() => {
-    const onUp = () => {
-      setTimeout(updatePosition, 10);
-    };
-    const onSelectionChange = () => {
+    const onUp = () => { setTimeout(updatePosition, 50); };
+    const onSel = () => {
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) return;
+      if (!sel || sel.isCollapsed) { setVisible(false); return; }
       updatePosition();
     };
     document.addEventListener('mouseup', onUp);
-    document.addEventListener('selectionchange', onSelectionChange);
+    document.addEventListener('selectionchange', onSel);
     return () => {
       document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('selectionchange', onSelectionChange);
+      document.removeEventListener('selectionchange', onSel);
     };
   }, [updatePosition]);
 
