@@ -17,7 +17,7 @@
 - **Exporter** un PDF rempli avec les valeurs saisies
 - **Partager** des documents avec contrôle d'accès par utilisateur ou groupe
 
-L'objectif : fournir un outil local, léger et autonome pour générer des documentsPDF sans depender d'un service cloud.
+L'objectif : fournir un outil local, léger et autonome pour générer des documentsPDF sans dependre d'un service cloud.
 
 ---
 
