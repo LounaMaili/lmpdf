@@ -355,7 +355,8 @@ export default function FieldOverlay({
           <SelectionToolbar
             containerRef={richTextEl}
             onFormat={(cmd, val) => {
-              if (textEditorRef.current?.contains(document.activeElement)) {
+              const sel = window.getSelection();
+              if (textEditorRef.current && sel && sel.rangeCount > 0 && textEditorRef.current.contains(sel.anchorNode)) {
                 document.execCommand(cmd, false, val);
                 onValueChange(textEditorRef.current.innerHTML);
               }
