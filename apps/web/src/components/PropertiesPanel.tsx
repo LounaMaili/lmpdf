@@ -79,9 +79,13 @@ export default function PropertiesPanel({
   const canEditStructure = (!docRole || docRole === 'owner' || docRole === 'editor') && !fillMode;
   const updateStyle = (key: string, value: string | number | boolean | undefined) => {
     if (!field) return;
-    onUpdate(field.id, {
-      style: { ...field.style, [key]: value },
-    });
+    if (hasMultiSelection) {
+      onBulkPatchFieldStyle(Array.from(multiSelectedIds), { [key]: value } as any);
+    } else {
+      onUpdate(field.id, {
+        style: { ...field.style, [key]: value },
+      });
+    }
   };
 
   // Document defaults
@@ -291,6 +295,11 @@ export default function PropertiesPanel({
           <p className="hint">{t('panel.selectFieldHint')}</p>
         ) : (
           <>
+          {hasMultiSelection && (
+            <div style={{ background: '#e8f4fd', border: '1px solid #3498db', borderRadius: 4, padding: '4px 8px', marginBottom: 8, fontSize: 12, color: '#2c3e50' }}>
+              ✏️ {t('panel.multiSelected', { count: multiSelectedIds.size })} — les modifications s'appliquent à tous les champs sélectionnés
+            </div>
+          )}
           <label>
             {t('fields.label')}
             <input
@@ -639,12 +648,6 @@ export default function PropertiesPanel({
               <button type="button" className={`style-toggle-btn ${field.style.textAlign === 'center' ? 'active' : ''}`} title={t('fields.alignCenter')} onClick={() => updateStyle('textAlign', 'center')}>◆</button>
               <button type="button" className={`style-toggle-btn ${field.style.textAlign === 'right' ? 'active' : ''}`} title={t('fields.alignRight')} onClick={() => updateStyle('textAlign', 'right')}>▶</button>
               <button type="button" className={`style-toggle-btn ${field.style.textAlign === 'justify' ? 'active' : ''}`} title={t('fields.alignJustify')} onClick={() => updateStyle('textAlign', 'justify')}>☰</button>
-              <select value={field.style.textAlign} onChange={(e) => updateStyle('textAlign', e.target.value)} style={{ marginLeft: 4 }}>
-                <option value="left">{t('fields.alignLeft')}</option>
-                <option value="center">{t('fields.alignCenter')}</option>
-                <option value="right">{t('fields.alignRight')}</option>
-                <option value="justify">{t('fields.alignJustify')}</option>
-              </select>
             </div>
           </label>
 
@@ -777,8 +780,8 @@ export default function PropertiesPanel({
           </button>
           {hasMultiSelection && (
             <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-              <button type="button" onClick={() => onBulkUpdateFields(Array.from(multiSelectedIds), { locked: true })}>🔒 Lock all</button>
-              <button type="button" onClick={() => onBulkUpdateFields(Array.from(multiSelectedIds), { locked: false })}>🔓 Unlock all</button>
+              <button type="button" onClick={() => onBulkUpdateFields(Array.from(multiSelectedIds), { locked: true })}>🔒 Verrouiller la sélection</button>
+              <button type="button" onClick={() => onBulkUpdateFields(Array.from(multiSelectedIds), { locked: false })}>🔓 Déverrouiller la sélection</button>
             </div>
           )}
         </details>

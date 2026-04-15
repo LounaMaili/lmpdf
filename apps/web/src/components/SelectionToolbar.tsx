@@ -38,20 +38,24 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
 
   useEffect(() => {
     const onUp = () => {
-      // Small delay so selection is finalized
       setTimeout(updatePosition, 10);
     };
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('selectionchange', () => {
+    const onSelectionChange = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) {
         setVisible(false);
         setShowHighlightPicker(false);
         setShowColorPicker(false);
+      } else {
+        // Update position for keyboard-driven selection changes
+        updatePosition();
       }
-    });
+    };
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('selectionchange', onSelectionChange);
     return () => {
       document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('selectionchange', onSelectionChange);
     };
   }, [updatePosition]);
 

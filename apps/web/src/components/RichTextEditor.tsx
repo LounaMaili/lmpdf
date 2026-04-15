@@ -54,10 +54,17 @@ export default function RichTextEditor({ value, onChange, style, placeholder, on
     onKeyDown?.(e);
   }, [onKeyDown, onChange]);
 
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
+
+  const setEditorRef = useCallback((node: HTMLDivElement | null) => {
+    editorRef.current = node;
+    setContainerEl(node);
+  }, []);
+
   return (
     <>
       <div
-        ref={editorRef}
+        ref={setEditorRef}
         className="rich-text-editor"
         contentEditable
         suppressContentEditableWarning
@@ -79,7 +86,7 @@ export default function RichTextEditor({ value, onChange, style, placeholder, on
           cursor: 'text',
         }}
       />
-      <SelectionToolbar containerRef={editorRef.current} onFormat={handleFormat} />
+      <SelectionToolbar containerRef={containerEl} onFormat={handleFormat} />
     </>
   );
 }
