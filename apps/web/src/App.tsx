@@ -228,7 +228,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [pageW, setPageW] = useState(DEFAULT_WIDTH);
   /** Natural page height (before rotation). */
   const [pageH, setPageH] = useState(DEFAULT_HEIGHT);
-  // Source dimensions are kept only for diagnostics.
+  // Source document dimensions (before any scaling) — kept for diagnostics only.
   const [srcW, setSrcW] = useState(0);
   const [srcH, setSrcH] = useState(0);
 
@@ -246,11 +246,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [preset, setPreset] = useState<DocumentPreset>({ ...defaultDocumentPreset });
   /** If true, the user is in "fill mode" (edit values only, not structure). */
   const [fillMode, setFillMode] = useState(true);
-  /** Toggle to show overflow order numbers on fields (debug aid). */
+  /** Toggle to render overflow-order index numbers on each field (visual debug aid). */
   const [showDebugOrder, setShowDebugOrder] = useState(false);
   /** Tracks visual/overflow state per group key (continuous & fused modes). */
   const [fusedUiState, setFusedUiState] = useState<Record<string, OverflowUiStateEntry>>({});
-  /** Whether to fit the page to the viewport or just the width. */
+  /** Viewport fit strategy: 'page' fits the entire page, 'width' fits only the width. */
   const [fitMode, setFitMode] = useState<'page' | 'width'>('page');
 
   // ───── Draft restore state ─────
@@ -882,8 +882,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const estimateFieldCapacity = (field: FieldModel): number => {
     if (field.type !== 'text') return Number.MAX_SAFE_INTEGER;
     const fontSize = field.style.fontSize || 14;
-    const innerW = Math.max(8, field.w - 6);
-    const innerH = Math.max(8, field.h - 4);
+    const innerW = Math.max(8, field.w - 6);  // Subtract horizontal padding (3px each side)
+    const innerH = Math.max(8, field.h - 4);  // Subtract vertical padding (2px each side)
     const charsPerLine = Math.max(1, Math.floor(innerW / (fontSize * 0.54)));
     const lines = Math.max(1, Math.floor(innerH / (fontSize * 1.2)));
     return charsPerLine * lines;
@@ -911,6 +911,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
 
     // Map plain-text cut position back to HTML string position
+    // by walking both strings in parallel, skipping HTML tags
     let htmlCut = 0;
     let plainCount = 0;
     let inTag = false;
@@ -961,10 +962,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       });
     }
 
+    // Compute visual rects and derive an average height for row-grouping tolerance
     const items = group.map((f) => ({ f, r: toVisualRect(f) }));
     const avgH = items.length ? items.reduce((sum, it) => sum + it.r.h, 0) / items.length : 20;
+    // Tolerance for grouping fields into the same visual row (half avg height, min 6px)
     const tol = Math.max(6, avgH * 0.5);
 
+    // Group fields into rows by Y proximity, then flatten sorted top→bottom, left→right
     const rows: Array<typeof items> = [];
     for (const item of [...items].sort((a, b) => a.r.y - b.r.y)) {
       const row = rows.find((r) => Math.abs(r[0].r.y - item.r.y) <= tol);
@@ -1010,6 +1014,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       return;
     }
 
+    // Gather all text fields on the same page that share the same overflow group
     const group = sortOverflowGroup(
       fields.filter((f) => (f.pageNumber ?? 1) === (source.pageNumber ?? 1) && f.type === 'text' && (f.style.overflowGroupId || '').trim() === groupId)
     );
@@ -1025,6 +1030,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     const maxFields = groupLead.style.overflowMaxFields && groupLead.style.overflowMaxFields > 0
       ? groupLead.style.overflowMaxFields
       : undefined;
+    // Cap the active chain to the configured max fields (or use the full group)
     const activeChain = maxFields ? group.slice(0, maxFields) : group;
     const changedIdx = activeChain.findIndex((f) => f.id === id);
 
@@ -1034,6 +1040,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
 
     // ── MODE SELECTION ───────────────────────────────────────────────────
+    // Determine which overflow interaction mode to use. Precedence:
+    //   1) per-field override (source.style)
+    //   2) group-level default (groupLead.style)
+    //   3) hardcoded fallback 'distributed'
+    // Fused mode is downgraded to distributed when the feature flag is off.
     const interactionModeRaw = source.style.overflowInteractionMode || groupLead.style.overflowInteractionMode || 'distributed';
     const interactionMode = (!ENABLE_FUSED_MODE && interactionModeRaw === 'fused') ? 'distributed' : interactionModeRaw;
 
@@ -1042,12 +1053,17 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       const overflowHint = Boolean(meta?.overflowed);
       const localCap = estimateFieldCapacity(source);
 
+      /** Heuristic: is a field visually "full" (within 1 char of capacity)? */
       const isFullLike = (field: FieldModel, value: string) => {
         const cap = estimateFieldCapacity(field);
         return stripHtml(value).length >= Math.max(1, cap - 1);
       };
 
       // ── CONTINUOUS MODE: physical extension (anchor + bounds) ─────────
+      // In continuous mode, overflowing text "extends" a field into subsequent
+      // empty fields in the group. The first field that started the overflow
+      // becomes the "anchor". The UI visually stretches the anchor across all
+      // used fields (via fusedUiState) while distributing the text internally.
       if (interactionMode === 'continuous') {
         const page = source.pageNumber ?? 1;
         const existingEntry = getContinuousStateForFieldId(page, groupId, id);
@@ -1055,11 +1071,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         const existingState = existingEntry?.[1];
         const localOnEnd = source.style.overflowOnEnd || groupLead.style.overflowOnEnd || 'truncate';
 
-        // Check if this edit is on a field OUTSIDE the current extension zone
+        // Check if this edit is on a field OUTSIDE the current extension zone.
+        // Edits outside the zone either fit locally or start a new extension.
         const isInExtensionZone = !existingState || existingState.usedFieldIds.includes(id) || id === existingState.anchorFieldId;
 
-        // Determine anchor:
-        // - if editing inside existing extension: keep sticky anchor (can move upward)
+        // Determine the anchor field for this continuous chain:
+        // - if editing inside existing extension: keep the existing sticky anchor
+        //   (anchor can move upward if an earlier field overflows)
         // - if editing outside extension and overflowing: start a new local extension from this field
         const previousAnchorId = existingState?.anchorFieldId ?? id;
         const previousAnchorIdx = activeChain.findIndex((f) => f.id === previousAnchorId);
@@ -1072,6 +1090,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
         // Build a LOCAL continuous chain from anchor (or new start) without
         // rewriting unrelated fields that belong to separate local blocks.
+        // A field is included if it was already part of the extension, is empty,
+        // or follows a visually-full field.
         const chainIndices: number[] = [effectiveAnchorIdx];
         for (let i = effectiveAnchorIdx + 1; i < activeChain.length; i++) {
           const prev = activeChain[i - 1];
@@ -1080,12 +1100,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           const currVal = curr.value || '';
           const wasUsed = Boolean(existingState?.usedFieldIds.includes(curr.id));
           const allow = wasUsed || currVal.length === 0 || isFullLike(prev, prevVal);
-          if (!allow) break;
+          if (!allow) break; // stop at first field that breaks the chain
           chainIndices.push(i);
         }
         const chainFields = chainIndices.map((idx) => activeChain[idx]);
 
         // ── Non-extension-zone edit: update locally without touching the extension ──
+        // If the user edits a field outside the current extension zone and it fits,
+        // just update that field. Otherwise fall through to start a new extension.
         if (!isInExtensionZone) {
           // Just update this field's value locally; don't destroy fused state
           const fits = (hasOverflowHint && !overflowHint) || (!hasOverflowHint && stripHtml(newValue).length <= localCap);
@@ -1105,23 +1127,27 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           return;
         }
 
-        // Build the global text stream from the local chain onward
+        // Build the global text stream from the local chain onward.
+        // Prefer the stored globalText when the anchor hasn't changed, otherwise
+        // recompute from field values.
         const oldGlobalFromFields = chainFields.map((f) => f.value || '').join('');
         const oldGlobal = (existingState && existingState.anchorFieldId === effectiveAnchorId)
-          ? (existingState.globalText || oldGlobalFromFields)
+          ? (existingState.globalText || oldGlobalFromFields) // reuse persisted stream
           : oldGlobalFromFields;
+        // oldLocal is the portion of the global stream belonging to the edited field.
         const oldLocal = (id === effectiveAnchorId && existingState && existingState.anchorFieldId === effectiveAnchorId)
-          ? oldGlobal
+          ? oldGlobal // anchor edits replace the entire global stream
           : (source.value || '');
 
-        // Prefix length: chars in chain fields between anchor and edited field
+        // Compute prefix offset: cumulative chars in chain fields before the edited field.
         let prefixLen = 0;
         for (const idx of chainIndices) {
           if (idx >= changedIdx) break;
           prefixLen += (activeChain[idx].value || '').length;
         }
 
-        // Apply diff oldLocal → newValue into the global stream
+        // Apply a character-level diff (longest common prefix/suffix) from
+        // oldLocal → newValue, then splice the result into the global stream.
         let left = 0;
         while (left < oldLocal.length && left < newValue.length && oldLocal[left] === newValue[left]) left++;
         let oldRight = oldLocal.length - 1;
@@ -1136,9 +1162,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         const globalRemoveEnd = prefixLen + removeEnd;
         const flowText = oldGlobal.slice(0, globalLeft) + inserted + oldGlobal.slice(globalRemoveEnd);
 
-        // Distribute across local continuous chain fields
+        // Distribute the merged flowText across local continuous chain fields,
+        // respecting each field's estimated character capacity.
         const valueById = new Map<string, string>();
-        // Keep fields before anchor untouched
+        // Keep fields before anchor untouched — they belong to a separate block.
         for (let i = 0; i < effectiveAnchorIdx; i++) {
           valueById.set(activeChain[i].id, activeChain[i].value || '');
         }
@@ -1153,7 +1180,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           caps.push(cap);
         }
 
-        // Normalize: pull text left to keep fields compact
+        // Normalize: pull text left to fill each field to capacity before
+        // spilling into the next one. This avoids visual gaps when the user
+        // deletes text near a field boundary.
         const normalized = chainFields.map((f) => valueById.get(f.id) || '');
         for (let i = 0; i < normalized.length - 1; i++) {
           while (normalized[i].length < caps[i] && normalized[i + 1].length > 0) {
@@ -1170,6 +1199,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         }
 
         // ── Compute usedFieldIds for visual extension bounds ──
+        // Walk the chain and collect field IDs that contain text.
+        // The anchor (i===0) is always included. The list drives the
+        // visual "stretch" effect in the rendering layer.
         const usedFieldIds: string[] = [];
         const globalText = normalized.join('');
         for (let i = 0; i < chainFields.length; i++) {
@@ -1177,11 +1209,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           if (i === 0 || val.length > 0) {
             usedFieldIds.push(chainFields[i].id);
           } else {
-            break;
+            break; // stop at first empty trailing field
           }
         }
 
-        // Update or clear fusedUiState for physical extension
+        // Update or clear fusedUiState for physical extension visualization.
+        // If the text fits in one field, clear any existing extension state.
         if (globalText.length === 0 || usedFieldIds.length <= 1) {
           // No visible extension: clear current chain state.
           if (existingKey) {
@@ -1192,7 +1225,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             });
           }
         } else {
-          // Multiple fields used → show physical extension for this local chain.
+          // Multiple fields used → store extension state so the renderer can
+          // visually stretch the anchor across all used fields.
           setFusedUiState((prev) => {
             const next = { ...prev };
             if (existingKey && existingKey !== targetContinuousKey) {
@@ -1224,6 +1258,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
       // In distributed mode, detect if this field is part of an active overflow
       // chain that requires reflow even when the current edit doesn't overflow.
+      // This handles edge cases like deleting from a field that is already full
+      // while the next field has content that should be pulled back.
       const needsDistributedReflow = interactionMode === 'distributed' && (() => {
         if (changedIdx > 0) {
           const prev = activeChain[changedIdx - 1];
@@ -1236,7 +1272,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         return false;
       })();
 
-      // Local edit when there is no visible overflow (distributed only).
+      // Fast path: local edit when there is no visible overflow (distributed only).
+      // Skip the expensive chain recomputation if the value fits.
       if (!needsDistributedReflow && ((hasOverflowHint && !overflowHint) || (!hasOverflowHint && stripHtml(newValue).length <= localCap))) {
         setFields((prev) => prev.map((f) => (f.id === id ? { ...f, value: newValue } : f)));
         setDirty(true);
@@ -1245,7 +1282,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
       const localOnEnd = groupLead.style.overflowOnEnd || 'truncate';
 
-      // Build writable local chain for distributed mode.
+      // Build the writable local chain for distributed overflow. Unlike continuous
+      // mode, the chain always starts from the edited field and extends forward.
       let chainStart = changedIdx;
       const chainIndices: number[] = [chainStart];
       for (let i = chainStart + 1; i < activeChain.length; i++) {
@@ -1303,6 +1341,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       setDirty(true);
 
       // Auto-advance focus on real overflow in distributed mode.
+      // If the current field overflowed and text landed in the next field,
+      // move focus there so the user can keep typing naturally.
       const currentPosInChain = chainIndices.findIndex((idx) => idx === changedIdx);
       if (currentPosInChain >= 0 && currentPosInChain < chainIndices.length - 1) {
         const currentNewValue = valueById.get(id) || '';
@@ -1324,8 +1364,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       return;
     }
 
-    // Legacy global continuous branch disabled (kept only as fallback reference).
-    // Current continuous behavior is handled by the localized flow above.
+    // ── LEGACY GLOBAL CONTINUOUS BRANCH (disabled) ────────────────────
+    // This branch concatenates ALL group fields into one global string and
+    // redistributes. It is disabled in favor of the localized continuous flow
+    // above, but kept as a reference for debugging / future use.
     if (false && interactionMode === 'continuous') {
       // Concatenate ALL group field values as one global string
       const oldGlobal = activeChain.map((f) => f.value || '').join('');
@@ -1402,6 +1444,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     // ── END CONTINUOUS MODE ──────────────────────────────────────────────
 
     // ── FUSED MODE (sticky anchor, non-destructive non-anchor edits) ────
+    // Fused mode treats all fields from the anchor onward as a single editable
+    // canvas. The first field the user edits becomes the sticky "anchor" and
+    // remains the anchor until the content is cleared. Non-anchor edits are
+    // non-destructive: they modify only the local field's portion of the text.
     if (interactionMode === 'fused') {
       if (DEBUG_FUSED) console.log('[FUSED] edit triggered', { id, groupId, changedIdx, newValue: newValue.slice(0, 40) });
 
@@ -1409,12 +1455,18 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       const state = fusedUiState[fusedKey];
       const onEnd = groupLead.style.overflowOnEnd || 'truncate';
 
-      // Sticky anchor: first editor becomes anchor and stays until reset.
+      // Sticky anchor: the first field the user edits becomes the anchor and
+      // retains that role until the fused state is cleared (content removed).
       const anchorId = state?.anchorFieldId ?? id;
       const anchorIdx = activeChain.findIndex((f) => f.id === anchorId);
       const isAnchorEdit = id === anchorId;
 
-      // ── Helper: distribute globalText from anchor onward & update state ──
+      /**
+       * Distribute the fused global text across all fields from the anchor onward.
+       * Uses strict capacity enforcement (takeFieldChunkStrict) to prevent any
+       * overflow beyond what a field can hold. Returns false if blocked by
+       * onEnd='block' policy, true otherwise.
+       */
       const distributeFusedGlobal = (newGlobal: string) => {
         const suffixFields = activeChain.slice(anchorIdx);
         const fValueById = new Map<string, string>();
@@ -1472,7 +1524,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
       if (!isAnchorEdit) {
         // Non-anchor edit on a field within the fused zone: reconstruct globalText
-        // from all suffix fields (with the edited field's new value) and redistribute.
+        // from all suffix fields (with the edited field's new value substituted in)
+        // and redistribute. This is the "non-destructive" path — the user edits
+        // their portion of the fused text without affecting other parts.
         const isInFusedZone = state?.usedFieldIds?.includes(id);
         if (isInFusedZone && state) {
           if (DEBUG_FUSED) console.log('[FUSED] non-anchor edit in fused zone', { id, changedIdx, anchorIdx });
@@ -1493,10 +1547,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           return;
         }
 
-        // Non-fused-zone non-anchor edit: local-only overflow
+        // Non-fused-zone non-anchor edit: the user edited a field that isn't part
+        // of the current fused extension. Handle overflow locally by fitting what
+        // we can and spilling into subsequent empty fields.
         const editedField = activeChain[changedIdx];
         const { chunk: fittedValue, consumed } = takeFieldChunkStrict(newValue, editedField);
-        const overflow = newValue.slice(consumed);
+        const overflow = newValue.slice(consumed); // text that didn't fit
 
         const fValueById = new Map<string, string>();
         fValueById.set(editedField.id, fittedValue);
@@ -1530,12 +1586,19 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         return;
       }
 
-      // Anchor edit: fused global stream from anchor onward.
+      // Anchor edit: the entire new value becomes the fused global stream.
+      // All fields from anchor onward are redistributed from scratch.
       if (DEBUG_FUSED) console.log('[FUSED] anchor edit', { anchorId, newValueLen: newValue.length });
       distributeFusedGlobal(newValue);
       return;
     }
     // ── END FUSED MODE ───────────────────────────────────────────────────
+
+    // ── DEFAULT / FALLBACK OVERFLOW PATH ────────────────────────────────
+    // This path runs when none of the interaction-mode branches above matched
+    // or returned. It implements a generic suffix-based overflow strategy:
+    // fields before the edited one stay intact; text from the edited field
+    // onward is merged into a single stream and redistributed.
 
     // Re-narrow source after block scope (TS loses narrowing across closures).
     const src = source!;
@@ -1554,12 +1617,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       return;
     }
 
-    // Fields BEFORE edited one: keep intact (never reorder backward)
+    // Fields BEFORE edited one: keep intact — overflow never reorders backward.
     for (let i = 0; i < changedIdx; i++) {
       valueById.set(activeChain[i].id, activeChain[i].value || '');
     }
 
-    // Fields from edited index onward.
+    // Build the suffix stream: concatenate the current field's old value with
+    // all subsequent field values. This is the text we need to redistribute.
     const suffixFields = activeChain.slice(changedIdx);
     const oldCurrent = suffixFields[0].value || '';
     const oldSuffixTail = suffixFields.slice(1).map((f) => (f.value || '')).join('');
@@ -1568,9 +1632,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
     let flowText = oldStream;
 
-    // Common case when field 1 is visually full and user keeps typing:
-    // browser still emits newValue = oldCurrent + typedChar(s), which should append
-    // to the end of the global stream (not prepend in next field).
+    // Fast path for the common append-typing case: when the field is visually
+    // full and the user keeps typing, the browser emits newValue = oldCurrent +
+    // typedChar(s). We append the new suffix to the end of the global stream
+    // rather than splicing it at the field boundary.
     if (
       (stripHtml(oldCurrent).length >= currentCap || overflowHint) &&
       newValue.length > oldCurrent.length &&
@@ -1606,8 +1671,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       cursor += consumed;
     }
 
-    // Normalization pass: keep text visually continuous when deleting/backspacing
-    // at the end of a filled field (pull first chars from next fields to the left).
+    // Normalization pass: after distribution, pull text leftward to keep fields
+    // compact. Without this, deleting at a field boundary could leave the current
+    // field partially empty while the next field still has content.
     const normalized = suffixFields.map((f) => valueById.get(f.id) || '');
     for (let i = 0; i < normalized.length - 1; i++) {
       while (normalized[i].length < caps[i] && normalized[i + 1].length > 0) {
@@ -1630,9 +1696,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       return;
     }
 
+    // Apply the distributed values to all fields in the chain
     setFields((prev) => prev.map((f) => (valueById.has(f.id) ? { ...f, value: valueById.get(f.id) as string } : f)));
 
     // ── DISTRIBUTED: auto-advance focus only on real overflow (not when just full) ──
+    // After redistribution, check whether the edit caused text to spill into the
+    // next field. If so, move keyboard focus there for a seamless typing experience.
     const currentValue = valueById.get(id) || '';
     const currentCap2 = estimateFieldCapacity(src);
     const nextValue = changedIdx < activeChain.length - 1 ? (valueById.get(activeChain[changedIdx + 1].id) || '') : '';
@@ -1643,6 +1712,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       pendingFocusRef.current = nextField.id;
     }
     setDirty(true);
+    // If content was truncated (couldn't fit even across all fields), notify the user
     if (truncated) {
       setStatus(t('status.overflowFull'));
     }
@@ -1721,7 +1791,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setDirty(true);
   };
 
-  /** Swap a field's position with its neighbor (up or down) in the flat fields array. */
+  /**
+   * Swap a field's position with its neighbor (up or down) in the flat fields array.
+   * Used for manual reordering in the properties panel field list.
+   */
   const reorderField = (id: string, direction: 'up' | 'down') => {
     setFields((prev) => {
       const idx = prev.findIndex((f) => f.id === id);
@@ -1761,6 +1834,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   };
 
   /** Handle file input change: upload the selected PDF/image to the server and load it. */
+  /**
+   * Handle file input change: upload the selected PDF/image to the server and load it.
+   * Checks upload permissions and prompts if there are unsaved changes.
+   */
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!rolePermissions.uploadDocument) {
       setStatus(t('status.insufficientRightsUpload'));
@@ -1968,12 +2045,16 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  // ── Server-side export state ──
   /** Whether server-side export is available for the current template (checked on mount/change). */
   const [serverExportAvailable, setServerExportAvailable] = useState(false);
   /** Whether a server export request is currently in flight. */
   const [serverExportBusy, setServerExportBusy] = useState(false);
 
-  /** Check if server-side export is available for the current template/document context. */
+  /**
+   * Check if server-side export is available for the current template/document context.
+   * Resolves the export destination configuration from the server.
+   */
   useEffect(() => {
     if (!canExport || !sourceUrl) { setServerExportAvailable(false); return; }
     resolveExportDestination({ templateName: name, templateId: loadedTemplateId || undefined })
@@ -2016,7 +2097,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
-  /** Trigger the browser's print dialog for the current document. */
+  /**
+   * Trigger the browser's print dialog for the current document.
+   * Checks print permissions before invoking.
+   */
   const handlePrint = () => {
     if (!canPrintDoc) {
       setStatus(t('status.insufficientRightsPrint'));
@@ -2025,13 +2109,18 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     window.print();
   };
 
-  /** Rotate the page by the given number of degrees (90 or -90). */
+  /**
+   * Rotate the page by the given number of degrees (90 or -90).
+   * Wraps around to stay within 0–359°.
+   */
   const rotateBy = (deg: 90 | -90) => {
     setRotation((prev) => (((prev + deg) % 360 + 360) % 360) as Rotation);
   };
 
   /** Whether the current source document is a PDF (as opposed to an image). */
   const isPdf = sourceMime === 'application/pdf';
+
+  // ── Page transform: combines zoom and rotation into a single CSS transform ──
 
   /**
    * Compose the CSS transform string for a page element, combining zoom and rotation.
@@ -2045,6 +2134,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return parts.join(' ');
   })();
 
+
+  // ── Draft restore / ignore handlers ──
 
   /** Restore editor state from a pending draft record. */
   const handleRestoreDraft = useCallback(() => {
@@ -2096,15 +2187,22 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     e.preventDefault();
   }, [fields]);
 
+  // ═══════════════════════════════════════════════════════════════════
+  // JSX RENDER — Main layout: toolbar | sidebar | editor | properties
+  // ═══════════════════════════════════════════════════════════════════
   return (
+    // Root element: applies drag-over highlight when a file is being dragged onto the app
     <main className={`app${isDraggingOver ? ' app-drag-over' : ''}`}>
+      {/* Drag overlay shown when a file is dragged over the app window */}
       {isDraggingOver && <div className="drag-overlay"><span>📥 Déposez le fichier ici</span></div>}
+      {/* ── Top toolbar: brand, file menu, document name, view controls, user area ── */}
       <header className="app-toolbar app-toolbar-single-row">
         {/* ── Left: Brand + File menu ── */}
         <div className="toolbar-group toolbar-group-brand">
           <div className="toolbar-brand">LMPdf</div>
 
           {/* File dropdown menu */}
+          {/* File dropdown menu (save, export, print, share) */}
           <div className="toolbar-file-menu-wrap">
             <button
               className="toolbar-file-menu-btn"
@@ -2115,10 +2213,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             </button>
             {fileMenuOpen && (
               <div className="toolbar-file-dropdown">
+                {/* Save template structure (blank fields) to server */}
                 <button onClick={() => { onSave(); setFileMenuOpen(false); }} disabled={!canSaveTemplate}>{t('toolbar.saveTemplate')}</button>
+                {/* Save current filled values as a draft */}
                 <button onClick={() => { onSaveDraft(); setFileMenuOpen(false); }} disabled={!draftKey}>{t('toolbar.saveDraft')}</button>
                 <hr />
+                {/* Export filled PDF to browser download */}
                 <button onClick={() => { handleExportPdf(); setFileMenuOpen(false); }} disabled={!sourceUrl || !canExport}>{t('toolbar.export')}</button>
+                {/* Server-side export: generates PDF in browser and uploads to server filesystem */}
                 {serverExportAvailable && (
                   <button onClick={() => { handleServerExport(); setFileMenuOpen(false); }} disabled={!sourceUrl || !canExport || serverExportBusy}>{serverExportBusy ? t('toolbar.serverExportBusy') : t('toolbar.serverExport')}</button>
                 )}
@@ -2130,13 +2232,16 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         </div>
 
         {/* ── Center-left: Document name + quick save + compact meta ── */}
-        <div className="toolbar-group toolbar-group-doc">
+          {/* Document name input + quick save + status badges */}
+          <div className="toolbar-group toolbar-group-doc">
+          {/* Template name editable input */}
           <input
             className="toolbar-name-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t('toolbar.templateNamePlaceholder')}
           />
+          {/* Quick-save icon button */}
           <button
             className="toolbar-save-icon"
             onClick={onSave}
@@ -2146,16 +2251,21 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           >
             💾
           </button>
+          {/* Meta badges: dirty state, document role, fill mode, multi-select actions */}
           <div className="toolbar-meta-stack">
+            {/* Dirty indicator: shows if template has unsaved changes */}
             <span className={`toolbar-badge ${dirty ? 'dirty' : ''}`}>{dirty ? t('common.modified') : t('common.upToDate')}</span>
+            {/* Current user's role on this document (owner/editor/viewer) */}
             {sourceFileId && (
               <span className={`doc-role-badge compact ${docRole ?? 'none'}`}>
                 {docRoleLabel(docRole)}
               </span>
             )}
+            {/* Fill mode toggle badge: edit (✏️) or structure (🔒) */}
             <span className={`fill-mode-badge compact ${fillMode ? 'active' : ''}`}>
               {fillMode ? '✏️' : '🔒'}
             </span>
+            {/* Multi-select bulk actions: lock, unlock, delete */}
             {multiSelectedIds.size > 0 && !fillMode && canEditStructure && (
               <>
                 <button
@@ -2183,8 +2293,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           </div>
         </div>
 
-        {/* ── Center: View controls ── */}
+        {/* ── Center: View controls (page, zoom, fit mode, rotation) ── */}
         <div className="toolbar-group toolbar-group-controls">
+          {/* Page selector dropdown */}
           <label className="toolbar-inline-field">
             <span>{t('toolbar.page')}</span>
             <select value={activePage} onChange={(e) => setActivePage(Number(e.target.value))}>
@@ -2194,17 +2305,20 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             </select>
           </label>
 
+          {/* Zoom controls: step through predefined zoom levels */}
           <div className="zoom-controls compact">
             <button disabled={zoomIndex <= 0} onClick={() => setZoomIndex((i) => i - 1)}>−</button>
             <span>{Math.round(zoom * 100)}%</span>
             <button disabled={zoomIndex >= ZOOM_STEPS.length - 1} onClick={() => setZoomIndex((i) => i + 1)}>+</button>
           </div>
 
+          {/* Fit mode: fit entire page or fit width only */}
           <div className="fit-mode-controls compact">
             <button className={fitMode === 'page' ? 'active' : ''} onClick={() => setFitMode('page')}>{t('toolbar.page')}</button>
             <button className={fitMode === 'width' ? 'active' : ''} onClick={() => setFitMode('width')}>{t('toolbar.width')}</button>
           </div>
 
+          {/* Rotation controls: rotate 90° left/right */}
           <div className="rotation-controls compact">
             <button onClick={() => rotateBy(-90)} title={t('toolbar.rotateLeft')}>↺</button>
             <span>{rotation}°</span>
@@ -2212,14 +2326,17 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           </div>
         </div>
 
-        {/* ── Right: Status + User ── */}
+        {/* ── Right: Status message, autosave indicator, user menu ── */}
         <div className="toolbar-group toolbar-group-right">
+          {/* Current status text (e.g. "Saving...", "Exported successfully") */}
           <span className="toolbar-status-text">{status || t('status.ready')}</span>
+          {/* Autosave indicator with last-saved timestamp */}
           <AutosaveIndicator
             status={autosaveState.status}
             lastSavedAt={autosaveState.lastSavedAt}
             errorMessage={autosaveState.errorMessage}
           />
+          {/* User info area: name, MFA, admin, logout */}
           {currentUser && (
             <div className="toolbar-user-area">
               <span className="toolbar-user-name">👤 {currentUser.displayName}</span>
@@ -2235,6 +2352,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
            LEFT PANEL: Édition / outils de travail
          ═══════════════════════════════════════════════════════════ */}
       <aside className="panel">
+        {/* Keyboard shortcut hints displayed at the top of the sidebar */}
         <div className="panel-shortcuts">
           <span>{t('panel.shortcutCtrlClick')}</span>
           <span>{t('panel.shortcutAltDrag')}</span>
@@ -2243,20 +2361,24 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         <details open className="panel-section">
           <summary>{t('panel.document')}</summary>
 
+          {/* File upload control: accepts PDF or image files */}
           <label className="upload-label">
             {t('panel.importPdfImage')}
             <input type="file" accept="application/pdf,image/*" onChange={onUpload} disabled={!rolePermissions.uploadDocument} />
           </label>
 
+          {/* Document metadata grid: active page, source type */}
           <div className="panel-meta-grid">
             <div><strong>{t('panel.activePage')}</strong><span>{activePage} / {pageCount}</span></div>
             <div><strong>{t('panel.source')}</strong><span>{sourceMime ? (isPdf ? t('panel.sourcePdf') : t('panel.sourceImage')) : t('panel.sourceNone')}</span></div>
           </div>
         </details>
 
+        {/* ── Edition section: add fields, pages, fill mode toggle ── */}
         <details open className="panel-section">
           <summary>{t('panel.edition')}</summary>
 
+          {/* Action buttons grid: add field, add page, duplicate page, delete page */}
           <div className="panel-btn-grid">
             <button onClick={addField} disabled={!canEditStructure}>{t('toolbar.addField')}</button>
             <button onClick={addPage} disabled={!canEditStructure}>{t('toolbar.addPage')}</button>
@@ -2264,6 +2386,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             <button onClick={deleteActivePage} disabled={pageCount <= 1 || !canEditStructure}>{t('toolbar.deletePage')}</button>
           </div>
 
+          {/* Toggle between structure editing mode and fill mode */}
           <button
             className={`btn-fill-mode ${fillMode ? 'active' : ''}`}
             onClick={() => setFillMode((v) => !v)}
@@ -2272,6 +2395,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             {fillMode ? t('panel.fillModeOn') : t('panel.fillModeOff')}
           </button>
 
+          {/* Debug toggle: show overflow order numbers on fields */}
           <button
             className={`btn-fill-mode ${showDebugOrder ? 'active' : ''}`}
             onClick={() => setShowDebugOrder((v) => !v)}
@@ -2281,6 +2405,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             {showDebugOrder ? t('panel.debugOrderOn') : t('panel.debugOrderOff')}
           </button>
 
+          {/* Delete all fields button with confirmation dialog */}
           {fields.length > 0 && (
             <button
               className="btn-delete-all"
@@ -2300,9 +2425,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           )}
         </details>
 
+        {/* ── Detection section: auto-detect fields from document ── */}
         {sourceFileId && (
           <details open className="panel-section">
             <summary>{t('panel.detection')}</summary>
+            {/* Sensitivity selector: controls detection thresholds */}
             <label>
               {t('panel.sensitivity')}
               <select
@@ -2314,6 +2441,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 <option value="high">{t('panel.sensitivityHigh')}</option>
               </select>
             </label>
+            {/* Sensitivity description text */}
             <p className="detect-preset-desc">{
               detectSensitivity === 'low'
                 ? t('panel.sensitivityLowDesc')
@@ -2321,6 +2449,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                   ? t('panel.sensitivityHighDesc')
                   : t('panel.sensitivityNormalDesc')
             }</p>
+            {/* Toggle: treat dotted lines as solid for detection */}
             <label className="checkbox-toggle">
               <input
                 type="checkbox"
@@ -2330,6 +2459,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               {t('panel.dottedAsLine')}
             </label>
             <p className="hint" style={{ fontSize: 11, marginTop: 2, marginBottom: 6 }}>{t('panel.dottedAsLineHint')}</p>
+            {/* Detect fields button — triggers server-side field detection */}
             <button
               className="btn-detect"
               disabled={!canEditStructure || isDetecting}
@@ -2343,9 +2473,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 try {
                   setStatus(t('status.detecting'));
                   // Detection presets: sensitivity affects minimum cell size, line detection thresholds, and gap closing.
-                  // - low: best for clean scans with large, clear cells (requires longer lines, bigger cells)
+                  // - low: best for clean scans with large, clear cells
                   // - normal: balanced for most documents
-                  // - high: best for degraded scans or small fields (detects shorter lines, smaller cells)
+                  // - high: best for degraded scans or small fields
                   const detectPreset = {
                     low: { sensitivity: 'low', maxDetectWidth: 1200 },
                     normal: { sensitivity: 'normal', maxDetectWidth: 1800 },
@@ -2367,6 +2497,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     setStatus(t('status.noFieldDetected'));
                     return;
                   }
+                  // Map detected fields to FieldModel, applying current font preset defaults
                   const newFields: FieldModel[] = result.suggestedFields.map((sf) => ({
                     id: sf.id || crypto.randomUUID(),
                     label: sf.label || t('status.defaultFieldLabel'),
@@ -2402,8 +2533,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           </details>
         )}
 
+        {/* ── Default style section: font family, size, weight, color ── */}
         <details className="panel-section">
-          <summary>{t('panel.defaultStyleTitle')}</summary>
           <label>
             {t('panel.font')}
             <select value={preset.fontFamily} onChange={(e) => setPreset((p) => ({ ...p, fontFamily: e.target.value }))}>
@@ -2437,8 +2568,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           }}>{t('panel.applyToAllFields')}</button>
         </details>
 
+        {/* ── Diagnostic section: displays coordinate/dimension debug info ── */}
         <details className="panel-section">
-          <summary>{t('panel.diagnosticTitle')}</summary>
           <div className="diagnostic-grid">
             <span>{t('panel.diagSource')}</span><span>{srcW} × {srcH} px</span>
             <span>{t('panel.diagDisplay')}</span><span>{pageW} × {pageH} px</span>
@@ -2451,7 +2582,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         </details>
       </aside>
 
+      {/* ═══════════════════════════════════════════════════════════════════
+           EDITOR SECTION — Main canvas area with multi-page rendering
+           Each page renders the source document (PDF/image) and overlays fields.
+         ═══════════════════════════════════════════════════════════════════ */}
       <section ref={editorRef} className="editor" tabIndex={-1} onClick={() => { if (!marqueeJustEndedRef.current) handleSelectField(null); }}>
+        {/* Breadcrumb navigation when a folder is selected */}
         {selectedFolderId && (
           <div className="breadcrumb">
             <span className="breadcrumb-item" onClick={() => setSelectedFolderId(null)}>{t('panel.allFolders')}</span>
@@ -2468,9 +2604,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             ))}
           </div>
         )}
+        {/* Multi-page stack: renders all pages vertically */}
         <div className="multi-pages-stack" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Render each page with its zoom wrapper and field overlays */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
             <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
+              {/* Page container: applies transform for zoom + rotation */}
               <div
                 className="page"
                 style={{
@@ -2490,7 +2629,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                   }
                 }}
               >
+                {/* Page label shown above each page */}
                 <div style={{ position: 'absolute', top: -22, right: 0, fontSize: 12, color: '#666' }}>{t('panel.pageLabel', { n: pageNum })}</div>
+                {/* Source document renderer: PDF uses PdfViewer, image uses <img> */}
                 {sourceUrl ? (
                   isPdf ? (
                     <PdfViewer url={sourceUrl} onDimensionsDetected={onPdfDimensions} showPagination={false} />
@@ -2501,6 +2642,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                   <div className="scan-bg"><p>{t('panel.importScanHint')}</p></div>
                 )}
 
+                {/* Field overlays: render interactive FieldOverlay for each field on this page */}
                 {fields.filter((f) => (f.pageNumber ?? 1) === pageNum).map((f) => (
                   <FieldOverlay
                     key={f.id}
@@ -2510,17 +2652,22 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     rotation={rotation}
                     docRole={docRole}
                     fillMode={fillMode}
+                    // Selection handler: activates page and selects/deselects field
                     onSelect={(ctrlKey) => {
                       setActivePage(pageNum);
                       handleSelectField(f.id, ctrlKey);
                     }}
+                    // Position and size update callbacks
                     onMove={(x, y) => updateField(f.id, { x, y })}
                     onResize={(w, h) => updateField(f.id, { w, h })}
+                    // Value change with overflow distribution logic
                     onValueChange={(value, caret, meta) => updateFieldValueWithOverflow(f.id, value, caret, meta)}
+                    // Keyboard handler for backspace-to-previous-field in overflow chains
                     onFieldKeyDown={handleFieldKeyDown}
                     onStructureLockedAttempt={() => setStatus(t('status.fieldLocked'))}
                     pageWidth={pageW}
                     pageHeight={pageH}
+                    // Debug overlay: shows overflow order number when debug mode is active
                     debugOrder={showDebugOrder ? (() => {
                       const gid = (f.style.overflowGroupId || '').trim();
                       if (!gid) return undefined;
@@ -2528,6 +2675,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                       const idx = grp.findIndex((g) => g.id === f.id);
                       return idx >= 0 ? idx + 1 : undefined;
                     })() : undefined}
+                    // valueOverride: for fused/continuous overflow modes, the anchor field
+                    // displays the combined global text instead of its individual field value
                     valueOverride={(() => {
                       const gid = (f.style.overflowGroupId || '').trim();
                       if (!gid) return undefined;
@@ -2543,6 +2692,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                       if (state.anchorFieldId !== f.id) return undefined;
                       return state.globalText;
                     })()}
+                    // fusedMeta: controls visual behavior for fused/continuous mode fields
+                    // - anchor fields get expanded bounds covering all used fields
+                    // - non-anchor used fields are hidden (anchor covers their area)
                     fusedMeta={(() => {
                       const gid = (f.style.overflowGroupId || '').trim();
                       if (!gid) return undefined;
@@ -2573,6 +2725,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                       // Non-anchor used field: hide it visually (anchor covers it)
                       return { hidden: true, anchor: false };
                     })()}
+                    // onReAnchorFused: callback to change which field is the anchor in a fused/continuous group
                     onReAnchorFused={(() => {
                       const gid = (f.style.overflowGroupId || '').trim();
                       if (!gid) return undefined;
@@ -2620,6 +2773,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 ))}
 
                 {/* Marquee selection rectangle */}
+                {/* Marquee selection rectangle: shown during rubber-band selection drag */}
                 {marqueeRect && marqueePageNum === pageNum && marqueeRect.w + marqueeRect.h > 2 && (
                   <div
                     className="marquee-rect"
@@ -2637,6 +2791,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         </div>
       </section>
 
+      {/* ═══════════════════════════════════════════════════════════════════
+           RIGHT PANEL: PropertiesPanel — field properties, overflow config,
+           and template library browser
+         ═══════════════════════════════════════════════════════════════════ */}
       <PropertiesPanel
         field={selectedField}
         fields={fields}
@@ -2654,6 +2812,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         onAutoOrderOverflowGroup={autoOrderOverflowGroup}
         docRole={docRole}
         fillMode={fillMode}
+        // Callback to reset fused UI state for a given key (used when changing overflow settings)
         onResetFused={(fusedKey: string) => {
           setFusedUiState((prev) => {
             const next = { ...prev };
@@ -2661,7 +2820,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             return next;
           });
         }}
-        /* ── Library props (moved to right panel) ── */
+        /* ── Template library props (folder browsing, CRUD operations) ── */
         templates={templates}
         selectedFolderId={selectedFolderId}
         onSelectFolder={setSelectedFolderId}
@@ -2674,12 +2833,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         canManageTemplate={canManageTemplate}
       />
 
+      {/* Share modal: lazy-loaded, allows sharing the document with other users */}
       {showShareModal && sourceFileId && (
         <Suspense fallback={null}>
           <ShareModal docId={sourceFileId} onClose={() => setShowShareModal(false)} />
         </Suspense>
       )}
 
+      {/* Draft restore modal: prompts user to restore or discard a pending auto-saved draft */}
       {pendingDraft && (
         <DraftRestoreModal
           draft={pendingDraft}
