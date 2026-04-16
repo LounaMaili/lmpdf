@@ -1,4 +1,27 @@
+/**
+ * App.tsx — Main application component for LMPdf.
+ *
+ * This file contains the core editor logic: PDF/image document loading,
+ * field management (create, move, resize, delete), text overflow across
+ * multiple fields (distributed, continuous, and fused modes), autosave,
+ * drag-and-drop file upload, keyboard navigation, and PDF export.
+ *
+ * The component is organized as follows:
+ *   1. Module-level constants and helpers
+ *   2. Main App component with state declarations
+ *   3. Permission and role computations
+ *   4. Zoom / rotation / marquee helpers
+ *   5. Keyboard shortcut handling
+ *   6. Overflow logic (estimateFieldCapacity, takeFieldChunk, sortOverflowGroup, updateFieldValueWithOverflow)
+ *   7. Template and document CRUD operations
+ *   8. Export and print handlers
+ *   9. JSX render (toolbar, left panel, editor canvas, properties panel)
+ */
+
+/** Enable verbose console logging for the fused overflow mode (development only). */
 const DEBUG_FUSED = false;
+
+/** Global toggle for the experimental fused overflow interaction mode. */
 const ENABLE_FUSED_MODE = false;
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -19,14 +42,22 @@ import { getStoredUser } from './auth';
 import { useAutosave } from './hooks/useAutosave';
 import { useTranslation } from './i18n';
 
+/** Strip all HTML tags from a string, returning plain text. */
 const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
 
+/** Default page dimensions (A4 at 96 dpi, in pixels). */
 const DEFAULT_WIDTH = 794;
 const DEFAULT_HEIGHT = 1123;
+
+/** Discrete zoom levels available to the user via +/- buttons. */
 const ZOOM_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.75, 2.0];
+/** Lazy-loaded sharing modal for document collaboration. */
 const ShareModal = lazy(() => import('./components/ShareModal'));
 
-/** Strip field values to produce a clean template (structure only). */
+/**
+ * Strip field values to produce a clean template (structure only).
+ * Resets counters to "0" and clears all other values.
+ */
 function stripFieldValues(fields: FieldModel[]): FieldModel[] {
   return fields.map((f) => ({
     ...f,
@@ -34,13 +65,26 @@ function stripFieldValues(fields: FieldModel[]): FieldModel[] {
   }));
 }
 
+/**
+ * Tracks the visual/overflow state for a group of fields sharing the same overflow group.
+ * Used by both continuous and fused overflow modes.
+ */
 type OverflowUiStateEntry = {
+  /** The field that anchors the overflow zone (typically the first field edited). */
   anchorFieldId: string;
+  /** All field IDs currently participating in the overflow zone. */
   usedFieldIds: string[];
+  /** The full concatenated text across all participating fields. */
   globalText: string;
+  /** Monotonically increasing version counter for change detection. */
   version: number;
 };
 
+/**
+ * Parse a continuous-mode state key into its components.
+ * Keys follow the format "<page>:<groupId>:<anchorFieldId>".
+ * Returns null if the key format is invalid.
+ */
 const parseContinuousKey = (key: string): { page: number; groupId: string; anchorId: string } | null => {
   const first = key.indexOf(':');
   const last = key.lastIndexOf(':');
@@ -55,6 +99,10 @@ const parseContinuousKey = (key: string): { page: number; groupId: string; ancho
 
 // docRoleLabel moved inside component to access t() — see useDocRoleLabel below
 
+/**
+ * Derive a permission set from a user role when the server doesn't provide explicit permissions.
+ * Admin/editor get full access; everyone else gets read-only.
+ */
 function fallbackPermissionsForRole(role?: string): RolePermissions {
   if (role === 'admin' || role === 'editor') {
     return {
@@ -78,15 +126,30 @@ function fallbackPermissionsForRole(role?: string): RolePermissions {
   };
 }
 
+/**
+ * Props for the top-level App component.
+ * All props are optional — the component can also derive the current user from localStorage.
+ */
 type AppProps = {
+  /** Currently authenticated user, or null if logged out. */
   currentUser?: import('./auth').AuthUser | null;
+  /** Callback to log the user out. */
   onLogout?: () => void;
+  /** Callback to open the admin settings panel. */
   onShowAdminSettings?: () => void;
+  /** Callback to open the MFA settings panel. */
   onShowMfaSettings?: () => void;
 };
 
+/**
+ * Main application component — the PDF/image field editor.
+ *
+ * Manages the entire lifecycle: document loading, field creation/edition,
+ * overflow text distribution, autosave, export, and user permissions.
+ */
 export default function App({ currentUser: currentUserProp, onLogout, onShowAdminSettings, onShowMfaSettings }: AppProps = {}) {
   const { t } = useTranslation();
+  /** Prefer the prop-supplied user; fall back to whatever is stored in localStorage. */
   const currentUser = currentUserProp ?? getStoredUser();
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const docRoleLabel = (role: 'owner' | 'editor' | 'filler' | null) => {
@@ -96,6 +159,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return t('roles.noAccess');
   };
 
+  /** Fill in optional FieldModel properties with sensible defaults. */
   const normalizeField = (f: Partial<FieldModel> & Pick<FieldModel, 'id' | 'label' | 'x' | 'y' | 'w' | 'h' | 'type'>): FieldModel => ({
     ...f,
     value: f.value ?? '',
@@ -105,55 +169,88 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     pageNumber: f.pageNumber ?? 1,
   });
 
+  /** Return the appropriate "blank" value for a field based on its type. */
   const getBlankFieldValue = (field: Pick<FieldModel, 'type'>): string => {
     if (field.type === 'checkbox') return 'false';
     if (field.type === 'counter-tally' || field.type === 'counter-numeric') return '0';
     return '';
   };
 
+  /** Reset all field values to their type-appropriate blank (used when loading a template in blank mode). */
   const stripTemplateFieldValues = (items: FieldModel[]): FieldModel[] =>
     items.map((field) => ({ ...field, value: getBlankFieldValue(field) }));
 
+  // ───── Core state ─────
+
+  /** Server-granted permission flags for the current user. */
   const [rolePermissions, setRolePermissions] = useState<RolePermissions>(fallbackPermissionsForRole(currentUser?.role));
+  /** Editable template/document name. */
   const [name, setName] = useState('template-a4');
+  /** All fields across all pages. */
   const [fields, setFields] = useState<FieldModel[]>([]);
+  /** ID of the currently selected field (single selection leader). */
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  /** Set of field IDs included in the current multi-selection (marquee or Ctrl+click). */
   const [multiSelectedIds, setMultiSelectedIds] = useState<Set<string>>(new Set());
+  /** Server-side file ID of the uploaded PDF/image source. */
   const [sourceFileId, setSourceFileId] = useState<string | undefined>();
+  /** Blob/object URL for rendering the source document. */
   const [sourceUrl, setSourceUrl] = useState<string | undefined>();
+  /** MIME type of the source document (determines PDF vs image rendering). */
   const [sourceMime, setSourceMime] = useState<string | undefined>();
+  /** All templates visible to the current user. */
   const [templates, setTemplates] = useState<TemplateModel[]>([]);
+  /** Status bar message (ephemeral feedback). */
   const [status, setStatus] = useState('');
-  const [dirty, setDirty] = useState(false); // Warn before destructive resets when there are unsaved edits.
+  /** Whether unsaved edits exist (warns before destructive resets). */
+  const [dirty, setDirty] = useState(false);
+  /** Whether the share-collaboration modal is open. */
   const [showShareModal, setShowShareModal] = useState(false);
+  /** The current user's role on the active document (owner/editor/filler). */
   const [docRole, setDocRole] = useState<'owner' | 'editor' | 'filler' | null>(null);
+  // ───── Derived permission booleans (combining global perms with doc-level role) ─────
   const canEditStructure = rolePermissions.editStructure && docRole !== 'filler';
   const canSaveTemplate = rolePermissions.createTemplate && (docRole === 'owner' || docRole === 'editor' || docRole === null);
   const canManageTemplate = rolePermissions.manageTemplate && (docRole === 'owner' || docRole === 'editor' || docRole === null);
   const canExport = rolePermissions.exportPdf && docRole !== 'filler';
   const canPrintDoc = rolePermissions.printDocument && docRole !== 'filler';
+  /** Currently selected folder in the template library. */
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  /** All folders fetched from the server. */
   const [allFolders, setAllFolders] = useState<FolderModel[]>([]);
+  /** Total number of pages in the current document. */
   const [pageCount, setPageCount] = useState(1);
+  /** The page currently displayed and active for editing. */
   const [activePage, setActivePage] = useState(1);
 
   // Keep field geometry in natural page units; zoom/rotation are view-only transforms.
+  /** Natural page width (before rotation). */
   const [pageW, setPageW] = useState(DEFAULT_WIDTH);
+  /** Natural page height (before rotation). */
   const [pageH, setPageH] = useState(DEFAULT_HEIGHT);
   // Source dimensions are kept only for diagnostics.
   const [srcW, setSrcW] = useState(0);
   const [srcH, setSrcH] = useState(0);
 
+  /** Current page rotation in degrees (0, 90, 180, or 270). */
   const [rotation, setRotation] = useState<Rotation>(0);
 
+  /** Index into ZOOM_STEPS for the current zoom level. */
   const [zoomIndex, setZoomIndex] = useState(4);
+  /** Whether a file is being dragged over the window (for the drop overlay). */
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  /** Computed zoom factor from the current zoom index. */
   const zoom = ZOOM_STEPS[zoomIndex];
 
+  /** Default style preset applied to newly created fields. */
   const [preset, setPreset] = useState<DocumentPreset>({ ...defaultDocumentPreset });
+  /** If true, the user is in "fill mode" (edit values only, not structure). */
   const [fillMode, setFillMode] = useState(true);
+  /** Toggle to show overflow order numbers on fields (debug aid). */
   const [showDebugOrder, setShowDebugOrder] = useState(false);
+  /** Tracks visual/overflow state per group key (continuous & fused modes). */
   const [fusedUiState, setFusedUiState] = useState<Record<string, OverflowUiStateEntry>>({});
+  /** Whether to fit the page to the viewport or just the width. */
   const [fitMode, setFitMode] = useState<'page' | 'width'>('page');
 
   // ───── Draft restore state ─────
@@ -183,6 +280,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     { enabled: !!currentUser && !!draftKey },
   );
 
+  /**
+   * Reverse index: for each field ID, find the continuous-mode state entry that includes it.
+   * Used to quickly look up whether a field participates in an active continuous overflow zone.
+   */
   const continuousStateByFieldId = useMemo(() => {
     const byField = new Map<string, [string, OverflowUiStateEntry]>();
     for (const [key, state] of Object.entries(fusedUiState)) {
@@ -196,6 +297,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return byField;
   }, [fusedUiState]);
 
+  /** Get the continuous-mode state entry for a specific field, validating page and group match. */
   const getContinuousStateForField = (field: FieldModel) => {
     const gid = (field.style.overflowGroupId || '').trim();
     if (!gid) return undefined as undefined | [string, OverflowUiStateEntry];
@@ -209,6 +311,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return entry;
   };
 
+  /** Get the continuous-mode state entry by explicit page, groupId, and fieldId. */
   const getContinuousStateForFieldId = (page: number, gid: string, fieldId: string) => {
     const entry = continuousStateByFieldId.get(fieldId);
     if (!entry) return undefined;
@@ -220,6 +323,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return entry;
   };
 
+  // ───── Cleanup stale fused/continuous UI state ─────
   // Safety: keep legacy fused UI state from affecting normal overflow modes.
   // Continuous mode uses keys like "<page>:<groupId>:<anchorFieldId>".
   useEffect(() => {
@@ -259,7 +363,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   }, [fusedUiState, fields]);
 
-  // ── Drag & drop file upload ──
+  // ───── Drag & drop file upload (global listeners on document root) ─────
   useEffect(() => {
     const el = document.documentElement;
     const onDragEnter = (e: DragEvent) => { e.preventDefault(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingOver(true); };
@@ -291,26 +395,43 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     };
   }, []);
 
+  /** Sensitivity preset for server-side field detection (low/normal/high). */
   const [detectSensitivity, setDetectSensitivity] = useState<'low' | 'normal' | 'high'>('normal');
+  /** Whether to treat dotted lines as solid during field detection. */
   const [detectDottedAsLine, setDetectDottedAsLine] = useState(false);
+  /** Whether a field detection request is currently in flight. */
   const [isDetecting, setIsDetecting] = useState(false);
+  /** Ref to the editor scroll container (used for zoom fitting). */
   const editorRef = useRef<HTMLDivElement>(null);
+  /** ID of a field that should receive DOM focus after the next render (Tab navigation). */
   const pendingFocusRef = useRef<string | null>(null);
 
-  // ───── Marquee (rubber-band) selection ─────
+  // ───── Marquee (rubber-band) selection state ─────
+  /** Current marquee rectangle in field-space coordinates, or null if not dragging. */
   const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  /** Page number the marquee is active on. */
   const [marqueePageNum, setMarqueePageNum] = useState(0);
+  /** Guard to prevent the click handler from deselecting right after a marquee drag ends. */
   const marqueeJustEndedRef = useRef(false);
+  /** Live ref to the fields array so event listeners can read the latest value without re-registering. */
   const fieldsRef = useRef(fields);
   fieldsRef.current = fields;
 
+  /** The currently selected field model, or null. */
   const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
 
   // Wrapper dimensions follow rotation to keep the editor scroll area aligned.
+  /** Display dimensions accounting for rotation (width/height may be swapped). */
   const [dispW, dispH] = displayDims(pageW, pageH, rotation);
 
+  /** Device pixel ratio for high-DPI canvas rendering. */
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
+  /**
+   * Transform a field's natural coordinates to visual (screen) coordinates,
+   * accounting for the current rotation. Used for arrow-key navigation and
+   * overflow ordering.
+   */
   const toVisualRect = (f: FieldModel) => {
     if (rotation === 90) {
       return { x: pageH - (f.y + f.h), y: f.x, w: f.h, h: f.w };
@@ -324,17 +445,22 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return { x: f.x, y: f.y, w: f.w, h: f.h };
   };
 
+  // ───── Initial data loading (runs once on mount) ─────
   useEffect(() => {
     listTemplates().then(setTemplates).catch(() => undefined);
     getMyPermissions().then(setRolePermissions).catch(() => undefined);
   }, []);
 
-  // Fetch user's effective role on the current document
+  /** Fetch the user's effective role on the current document whenever the source file changes. */
   useEffect(() => {
     if (!sourceFileId) { setDocRole(null); return; }
     getMyDocRole(sourceFileId).then((r) => setDocRole(r.docRole as any)).catch(() => setDocRole(null));
   }, [sourceFileId]);
 
+  /**
+   * Adjust the zoom level so the page fits within the editor viewport.
+   * Snaps to the nearest discrete ZOOM_STEP.
+   */
   const applyFitZoom = useCallback((w: number, h: number) => {
     const el = editorRef.current;
     if (!el || w <= 0 || h <= 0) return;
@@ -356,6 +482,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setZoomIndex(best);
   }, [fitMode]);
 
+  // ───── Global keyboard shortcuts ─────
   // Keep keyboard shortcuts global while scoping Tab cycling to the editor area.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -449,7 +576,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedFieldId, multiSelectedIds, fields, fillMode, activePage, rotation, pageW, pageH]);
 
-  // After Tab selection, move DOM focus to the field control for immediate typing.
+  /** After Tab/arrow selection, move DOM focus to the field's input control for immediate typing. */
   useEffect(() => {
     const targetId = pendingFocusRef.current;
     if (!targetId) return;
@@ -462,6 +589,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     });
   }, [selectedFieldId]);
 
+  /** Callback from PdfViewer when the PDF page dimensions are determined. */
   const onPdfDimensions = useCallback((w: number, h: number, origW: number, origH: number) => {
     setPageW(w);
     setPageH(h);
@@ -474,6 +602,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     applyFitZoom(pageW, pageH);
   }, [fitMode, pageW, pageH, applyFitZoom]);
 
+  /** Callback when the source image loads and its natural dimensions become available. */
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     setSrcW(img.naturalWidth);
@@ -483,7 +612,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     applyFitZoom(img.naturalWidth, img.naturalHeight);
   }, [applyFitZoom]);
 
-  // Ctrl/Cmd keeps additive selection behavior consistent between canvas and side panel.
+  /**
+   * Select a field by ID, supporting additive (Ctrl/Cmd) multi-selection.
+   * Ctrl/Cmd keeps additive selection behavior consistent between canvas and side panel.
+   */
   const handleSelectField = (id: string | null, ctrlKey = false) => {
     if (id === null) {
       setSelectedFieldId(null);
@@ -506,13 +638,15 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
-  // ───── Marquee helpers ─────
+  // ───── Marquee (rubber-band) selection helpers ─────
+
+  /** Check whether two axis-aligned rectangles intersect. */
   const rectsIntersect = (
     a: { x: number; y: number; w: number; h: number },
     b: { x: number; y: number; w: number; h: number },
   ) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-  /** Convert a screen point (clientX/Y) to field-space coords on the given page element. */
+  /** Convert a screen point (clientX/Y) to field-space coords on the given page element, undoing rotation. */
   const screenToFieldCoords = (clientX: number, clientY: number, pageEl: HTMLElement): { fx: number; fy: number } => {
     const rect = pageEl.getBoundingClientRect();
     // Visible coords relative to the page element (before accounting for zoom/rotation transform)
@@ -525,6 +659,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return { fx: vx, fy: vy };
   };
 
+  /**
+   * Begin a marquee (rubber-band) selection drag on the given page.
+   * Alt+drag forces marquee even when starting over a field.
+   * Ctrl/Cmd starts with the existing selection (additive).
+   */
   const startMarquee = (e: React.MouseEvent, pageNum: number) => {
     // Only start on left button. Default mode = empty canvas only.
     // Alt+drag forces marquee even when starting over a field.
@@ -589,6 +728,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     window.addEventListener('mouseup', onMouseUp);
   };
 
+  /** Add a new text field at a default position on the active page. */
   const addField = () => {
     if (!canEditStructure) {
       setStatus(t('status.insufficientRightsField'));
@@ -619,6 +759,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setDirty(true);
   };
 
+  /**
+   * Append a new blank page. Fields marked with `carryToNextPage` are cloned
+   * onto the new page (with values cleared or preserved per `carryValueMode`).
+   */
   const addPage = () => {
     if (!canEditStructure) {
       setStatus(t('status.insufficientRightsPage'));
@@ -643,6 +787,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       : t('status.newPageCreated', { page: newPage }));
   };
 
+  /** Duplicate the active page (all its fields) as a new page at the end. */
   const duplicateActivePage = () => {
     if (!canEditStructure) {
       setStatus(t('status.insufficientRightsDuplicatePage'));
@@ -660,6 +805,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setStatus(t('status.pageDuplicated', { from: activePage, to: newPage }));
   };
 
+  /** Delete the active page and renumber remaining pages. Cannot delete the last page. */
   const deleteActivePage = () => {
     if (!canEditStructure) {
       setStatus(t('status.insufficientRightsDeletePage'));
@@ -685,6 +831,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setStatus(t('status.pageDeleted', { page: activePage }));
   };
 
+  /** Duplicate a single field, offsetting it slightly below the original. */
   const duplicateField = (id: string) => {
     const source = fields.find((f) => f.id === id);
     if (!source) return;
@@ -701,17 +848,23 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setDirty(true);
   };
 
+  /**
+   * Update one or more properties on a single field by ID.
+   * Merges the partial object into the existing field.
+   */
   const updateField = (id: string, partial: Partial<FieldModel>) => {
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, ...partial } : f)));
     setDirty(true);
   };
 
+  /** Update the same partial properties on multiple fields at once. */
   const bulkUpdateFields = (ids: string[], partial: Partial<FieldModel>) => {
     const setIds = new Set(ids);
     setFields((prev) => prev.map((f) => (setIds.has(f.id) ? { ...f, ...partial } : f)));
     setDirty(true);
   };
 
+  /** Patch the style object on multiple text fields at once. */
   const bulkPatchFieldStyle = (ids: string[], stylePatch: Partial<FieldModel['style']>) => {
     const setIds = new Set(ids);
     setFields((prev) => prev.map((f) => {
@@ -721,6 +874,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setDirty(true);
   };
 
+  /**
+   * Estimate how many characters a text field can visually hold based on its
+   * dimensions and font size. Uses a heuristic: ~0.54 × fontSize chars per line,
+   * ~fontSize × 1.2 px line height.
+   */
   const estimateFieldCapacity = (field: FieldModel): number => {
     if (field.type !== 'text') return Number.MAX_SAFE_INTEGER;
     const fontSize = field.style.fontSize || 14;
@@ -731,6 +889,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return charsPerLine * lines;
   };
 
+  /**
+   * Extract the largest chunk of text that fits within a field's estimated capacity.
+   * Prefers cutting at word boundaries (if within 90% of capacity) to avoid mid-word splits.
+   * Works correctly with HTML content by mapping plain-text cut positions back to HTML offsets.
+   */
   const takeFieldChunk = (text: string, field: FieldModel) => {
     const cap = estimateFieldCapacity(field);
     const plainLen = stripHtml(text).length;
@@ -767,7 +930,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return { chunk, consumed, cap };
   };
 
-  /** Strict capacity slice for fused mode: no word-boundary trimming, chunk === consumed always. */
+  /**
+   * Strict capacity slice for fused mode: no word-boundary trimming.
+   * `chunk.length === consumed` always (plain character count).
+   */
   const takeFieldChunkStrict = (text: string, field: FieldModel) => {
     const cap = estimateFieldCapacity(field);
     const chunk = text.slice(0, cap);
@@ -775,8 +941,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   };
 
   /**
-   * Deterministic runtime order based on VISUAL coordinates (after rotation).
-   * Left→right, then next line left→right.
+   * Deterministic runtime order for overflow fields based on VISUAL coordinates
+   * (after rotation). Fields are grouped into rows by Y proximity, then sorted
+   * left→right within each row. If every field has an explicit `overflowOrder`,
+   * that takes precedence.
    */
   const sortOverflowGroup = (group: FieldModel[]): FieldModel[] => {
     if (group.length <= 1) return [...group];
@@ -809,6 +977,26 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       .flatMap((r) => r.sort((a, b) => a.r.x - b.r.x).map((x) => x.f));
   };
 
+  /**
+   * The core text-value update function with overflow distribution support.
+   *
+   * When a text field belongs to an overflow group, editing its value triggers
+   * a redistribution of text across the group's fields according to the active
+   * interaction mode:
+   *
+   *   - **distributed**: text flows forward field-by-field; edits reflow the local chain.
+   *   - **continuous**: a local physical extension from an anchor field; the global
+   *     text stream is diffed and redistributed across the extension zone.
+   *   - **fused**: sticky-anchor mode where the first field edited becomes the anchor;
+   *     non-anchor edits are non-destructive and reconstructed globally.
+   *
+   * For standalone fields (no overflow group), this simply calls `updateField`.
+   *
+   * @param id          - The ID of the field being edited.
+   * @param newValue    - The new value of that field.
+   * @param caretPosition - (Optional) caret position for fast-path optimizations.
+   * @param meta        - (Optional) hints from the DOM about whether the field overflowed.
+   */
   const updateFieldValueWithOverflow = (id: string, newValue: string, caretPosition?: number, meta?: { overflowed?: boolean }) => {
     const source = fields.find((f) => f.id === id);
     if (!source || source.type !== 'text') {
@@ -1460,6 +1648,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /**
+   * Automatically assign explicit overflow order values to all fields in a group,
+   * using the deterministic sortOverflowGroup algorithm.
+   */
   const autoOrderOverflowGroup = (groupId: string, _mode: 'rows' | 'right' | 'down' = 'rows') => {
     const gid = groupId.trim();
     if (!gid) return;
@@ -1479,6 +1671,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setStatus(t('status.overflowAutoOrder'));
   };
 
+  /**
+   * Assign the given overflow group ID (and auto-computed order) to multiple
+   * selected text fields at once.
+   */
   const bulkAssignOverflowGroup = (ids: string[], groupId: string, _mode: 'rows' | 'right' | 'down' = 'rows') => {
     const gid = groupId.trim();
     if (!gid) return;
@@ -1510,12 +1706,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setStatus(t('status.overflowGroupApplied', { count: ordered.length }));
   };
 
+  /** Change the type of multiple fields, resetting values to type-appropriate defaults. */
   const bulkUpdateType = (ids: string[], type: FieldType) => {
     const newValue = type === 'counter-tally' || type === 'counter-numeric' ? '0' : '';
     setFields((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, type, value: newValue } : f)));
     setDirty(true);
   };
 
+  /** Delete a single field by ID, cleaning up selection state. */
   const deleteField = (id: string) => {
     setFields((prev) => prev.filter((f) => f.id !== id));
     if (selectedFieldId === id) setSelectedFieldId(null);
@@ -1523,6 +1721,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setDirty(true);
   };
 
+  /** Swap a field's position with its neighbor (up or down) in the flat fields array. */
   const reorderField = (id: string, direction: 'up' | 'down') => {
     setFields((prev) => {
       const idx = prev.findIndex((f) => f.id === id);
@@ -1537,7 +1736,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   };
 
 
-  // Centralize reset logic so every new document/template load shares the same guardrails.
+  /**
+   * Reset all editor state for a new document. Prompts the user if there are
+   * unsaved changes. Returns false if the user cancels.
+   */
   const resetFieldsForNewDoc = (): boolean => {
     if (fields.length > 0 && dirty) {
       const ok = window.confirm(
@@ -1558,6 +1760,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     return true;
   };
 
+  /** Handle file input change: upload the selected PDF/image to the server and load it. */
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!rolePermissions.uploadDocument) {
       setStatus(t('status.insufficientRightsUpload'));
@@ -1587,6 +1790,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /**
+   * Load a template into the editor.
+   *
+   * @param mode - 'template' loads with blank values (creating a new document);
+   *               'document' loads with the saved values (continuing editing).
+   */
   const loadTemplate = async (tpl: TemplateModel, mode: 'template' | 'document' = 'template') => {
     const isBlank = mode === 'template';
     const normalized = tpl.fields.map((f) => normalizeField(f as FieldModel));
@@ -1642,6 +1851,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /** Delete a template from the server and update local state. */
   const handleDeleteTemplate = async (id: string) => {
     try {
       await deleteTemplate(id);
@@ -1652,6 +1862,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /** Prompt for a new name and rename a template on the server. */
   const handleRenameTemplate = async (id: string) => {
     const newName = prompt(t('confirm.renameTemplate'));
     if (!newName) return;
@@ -1664,6 +1875,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /** Prompt the user to pick a folder and move the template there. */
   const handleMoveTemplate = async (templateId: string) => {
     if (!canManageTemplate) { setStatus(t('status.insufficientRightsGeneric')); return; }
     // Build a simple prompt with available folders
@@ -1687,6 +1899,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /**
+   * Save the current template structure (with blank field values) to the server.
+   * Also upserts a draft with the current filled values.
+   */
   const onSave = async () => {
     if (!canSaveTemplate) {
       setStatus(t('status.insufficientRightsSave'));
@@ -1733,6 +1949,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /** Export the filled PDF to the user's browser (download). */
   const handleExportPdf = async () => {
     if (!sourceUrl) {
       setStatus(t('status.noDocumentLoaded'));
@@ -1751,10 +1968,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /** Whether server-side export is available for the current template (checked on mount/change). */
   const [serverExportAvailable, setServerExportAvailable] = useState(false);
+  /** Whether a server export request is currently in flight. */
   const [serverExportBusy, setServerExportBusy] = useState(false);
 
-  // Check if server-side export is available for current context
+  /** Check if server-side export is available for the current template/document context. */
   useEffect(() => {
     if (!canExport || !sourceUrl) { setServerExportAvailable(false); return; }
     resolveExportDestination({ templateName: name, templateId: loadedTemplateId || undefined })
@@ -1762,6 +1981,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       .catch(() => setServerExportAvailable(false));
   }, [canExport, sourceUrl, name, loadedTemplateId]);
 
+  /**
+   * Generate the filled PDF in the browser and upload it to the server
+   * for filesystem write (server-side export).
+   */
   const handleServerExport = async () => {
     if (!sourceUrl) { setStatus(t('status.noDocumentLoaded')); return; }
     if (!canExport) { setStatus(t('status.insufficientRightsExport')); return; }
@@ -1793,6 +2016,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     }
   };
 
+  /** Trigger the browser's print dialog for the current document. */
   const handlePrint = () => {
     if (!canPrintDoc) {
       setStatus(t('status.insufficientRightsPrint'));
@@ -1801,13 +2025,18 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     window.print();
   };
 
+  /** Rotate the page by the given number of degrees (90 or -90). */
   const rotateBy = (deg: 90 | -90) => {
     setRotation((prev) => (((prev + deg) % 360 + 360) % 360) as Rotation);
   };
 
+  /** Whether the current source document is a PDF (as opposed to an image). */
   const isPdf = sourceMime === 'application/pdf';
 
-  // Compose transform once so all overlays/background stay in the same coordinate space.
+  /**
+   * Compose the CSS transform string for a page element, combining zoom and rotation.
+   * Computed once so all overlays/background stay in the same coordinate space.
+   */
   const pageTransform = (() => {
     const parts: string[] = [`scale(${zoom})`];
     if (rotation === 90) parts.push(`translate(${pageH}px, 0) rotate(90deg)`);
@@ -1817,6 +2046,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   })();
 
 
+  /** Restore editor state from a pending draft record. */
   const handleRestoreDraft = useCallback(() => {
     if (!pendingDraft) return;
     const payload = pendingDraft.payload as any;
@@ -1832,6 +2062,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setStatus(t('status.draftRestored'));
   }, [pendingDraft]);
 
+  /** Dismiss the pending draft and optionally clear it from the server. */
   const handleIgnoreDraft = useCallback(() => {
     if (!pendingDraft) return;
     // Optionally clear the draft so it won't prompt again
@@ -1840,6 +2071,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setPendingDraft(null);
   }, [pendingDraft, draftKey]);
 
+  /**
+   * Handle Backspace in an empty overflow field: jump focus back to the previous
+   * field in the overflow chain (distributed or continuous mode only).
+   */
   const handleFieldKeyDown = useCallback((fieldId: string, e: React.KeyboardEvent) => {
     if (e.key !== 'Backspace') return;
     const f = fields.find((ff) => ff.id === fieldId);
