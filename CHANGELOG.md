@@ -4,6 +4,19 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 
 ---
 
+## [2026-04-16] Corrections toolbar + drag & drop fonctionnel
+
+### Fixed
+- **Toolbar multiple** : `SelectionToolbar` n'était montée que pour le champ sélectionné (`selected === true`)
+- **Toolbar position invalide** : guard `rect.top === 0 && rect.left === 0` + position offscreen `(-9999, -9999)` quand masquée
+- **Toolbar hors éditeur** : ajout guard explicite `if (!containerRef) return`
+- **Overflow prématuré** : `stripHtml()` dans `estimateFieldCapacity` et `takeFieldChunk` — le HTML (mark, b, etc.) n'est plus comptabilisé dans la capacité du champ
+
+### Confirmed
+- **Drag & drop fichier** : fonctionnel depuis le bureau/explorateur — overlay "📥 Déposez le fichier ici", upload au drop
+
+---
+
 ## [2026-04-15] Éditeur rich text + toolbar de formatage
 
 ### Added
@@ -38,8 +51,6 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 ### Known Issues
 - Le **gras** peut être peu visible selon la police et la taille de caractère utilisées
 - Le `user-select: text` en fillMode pourrait interférer avec le drag des champs dans certains cas marginaux
-- **Drag & drop fichier** depuis le bureau/explorateur non fonctionnel (overlay visuel présent mais upload incomplet)
-
 ---
 
 ## [2026-03-29] Authentification MFA
