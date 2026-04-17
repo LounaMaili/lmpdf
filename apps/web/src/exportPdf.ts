@@ -362,6 +362,12 @@ async function renderFieldsOnPages(
       const padTop = Math.max(MIN_PAD_PT, boxH * PAD_RATIO_Y);
       const baselineDown = Math.max(MIN_PAD_PT, boxH * BASELINE_RATIO);
 
+      // DEBUG: draw red rectangle at exact field position
+      page.drawRectangle({
+        x: pdfX, y: pdfY, width: boxW, height: boxH,
+        borderColor: rgb(1, 0, 0), borderWidth: 1, opacity: 0, borderOpacity: 0.7,
+      });
+
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
 
