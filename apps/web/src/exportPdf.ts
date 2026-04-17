@@ -69,6 +69,12 @@ function normalizeRotation(angle: number): Rotation {
   return 0;
 }
 
+// Proportional padding constants (module-level, shared by portrait & landscape)
+const PAD_RATIO_X = 0.06; // 6% of field width
+const PAD_RATIO_Y = 0.06; // 6% of field height
+const BASELINE_RATIO = 0.04; // 4% of field height
+const MIN_PAD_PT = 1.5; // minimum padding in PDF points
+
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
 ): Map<number, Array<{ key: string; state: OverflowUiStateEntry }>> {
@@ -284,12 +290,6 @@ async function renderFieldsOnPages(
     const pageContinuous = continuousByPage.get(pageIndex) || [];
     const renderedContinuousAnchors = new Set<string>();
 
-    // Proportional padding: small fraction of field dimensions
-    const PAD_RATIO_X = 0.06; // 6% of field width
-    const PAD_RATIO_Y = 0.06; // 6% of field height
-    const BASELINE_RATIO = 0.04; // 4% of field height
-    const MIN_PAD_PT = 1.5; // minimum padding in PDF points
-
     // ── Per-field rendering ──────────────────────────────────────────────
 
     for (const originalField of pageFields) {
@@ -376,8 +376,7 @@ async function renderFieldsOnPages(
       if (isLandscape) {
         drawFieldLandscape(
           page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          pdfW, padX, padTop, baselineDown, fontSize,
-          selectedFont, cr, cg, cb, targetRotation,
+          pdfW, fontSize, selectedFont, cr, cg, cb, targetRotation,
         );
       } else {
         drawFieldPortrait(
@@ -481,9 +480,6 @@ function drawFieldLandscape(
   boxW: number,
   boxH: number,
   pdfW: number,
-  padX: number,
-  padTop: number,
-  baselineDown: number,
   fontSize: number,
   selectedFont: import('pdf-lib').PDFFont,
   cr: number,
@@ -498,26 +494,36 @@ function drawFieldLandscape(
         ? degrees(270)
         : degrees(targetRotation);
 
+  // In landscape display, visual dimensions are swapped:
+  //   display width = content height (boxH)
+  //   display height = content width (boxW)
+  // All padding must be proportional to DISPLAY dimensions.
+  const dispW = boxH;
+  const dispH = boxW;
+  const padLeft = Math.max(MIN_PAD_PT, dispW * PAD_RATIO_X);
+  const padFromTop = Math.max(MIN_PAD_PT, dispH * PAD_RATIO_Y);
+  const baseDown = Math.max(MIN_PAD_PT, dispH * BASELINE_RATIO);
+
+  // Cap fontSize by display height
+  fontSize = Math.min(fontSize, dispH - 2);
+
   if (f.type === 'checkbox') {
     if (fieldValue !== 'true') return;
-    // Display field: dw=boxH, dh=boxW
     if (targetRotation === 90) {
+      // Display field coords: dx = pdfY, dy = pdfW − pdfX − boxW
       const dx = pdfY;
       const dy = pdfW - pdfX - boxW;
-      const dw = boxH;
-      const dh = boxW;
-      const dp1 = { x: dx + dw * 0.18, y: dy + dh * 0.45 };
-      const dp2 = { x: dx + dw * 0.40, y: dy + dh * 0.20 };
-      const dp3 = { x: dx + dw * 0.82, y: dy + dh * 0.78 };
+      const dp1 = { x: dx + dispW * 0.18, y: dy + dispH * 0.45 };
+      const dp2 = { x: dx + dispW * 0.40, y: dy + dispH * 0.20 };
+      const dp3 = { x: dx + dispW * 0.82, y: dy + dispH * 0.78 };
       // Display → content: cx = pdfW − dy, cy = dx
       const p1 = { x: pdfW - dp1.y, y: dp1.x };
       const p2 = { x: pdfW - dp2.y, y: dp2.x };
       const p3 = { x: pdfW - dp3.y, y: dp3.x };
-      const lw = Math.max(1.4, Math.min(dw, dh) * 0.09);
+      const lw = Math.max(1.4, Math.min(dispW, dispH) * 0.09);
       page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
       page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
     } else {
-      // Fallback: draw in portrait space (270° TODO: fine-tune)
       const p1 = { x: pdfX + boxW * 0.18, y: pdfY + boxH * 0.45 };
       const p2 = { x: pdfX + boxW * 0.40, y: pdfY + boxH * 0.20 };
       const p3 = { x: pdfX + boxW * 0.82, y: pdfY + boxH * 0.78 };
@@ -528,22 +534,19 @@ function drawFieldLandscape(
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
     const val = fieldValue || '0';
     if (targetRotation === 90) {
+      // Content anchor: cx near top of content field, cy near left
+      const cx = pdfX + dispH - dispH * 0.12;
+      const cy = pdfY + padLeft;
       page.drawText(val, {
-        x: pdfX + boxW - boxH * 0.12,
-        y: pdfY + padX,
-        size: fontSize,
-        font: selectedFont,
-        color: rgb(cr, cg, cb),
-        rotate: textRot,
+        x: cx, y: cy, size: fontSize, font: selectedFont,
+        color: rgb(cr, cg, cb), rotate: textRot,
       });
     } else {
+      const cx = pdfX + dispH * 0.12;
+      const cy = pdfY + boxH - padLeft;
       page.drawText(val, {
-        x: pdfX + boxH * 0.12,
-        y: pdfY + boxH - padX,
-        size: fontSize,
-        font: selectedFont,
-        color: rgb(cr, cg, cb),
-        rotate: textRot,
+        x: cx, y: cy, size: fontSize, font: selectedFont,
+        color: rgb(cr, cg, cb), rotate: textRot,
       });
     }
   } else {
@@ -551,21 +554,21 @@ function drawFieldLandscape(
       drawMaskRect(page, pdfX, pdfY, boxW, boxH, f.style.backgroundColor);
     }
 
-    // In landscape display: visual width = boxH, visual height = boxW
-    const visualW = boxH;
-    const visualH = boxW;
     const raw = fieldValue ?? '';
-    const maxTextWidth = Math.max(8, visualW - padX * 2);
+    const maxTextWidth = Math.max(8, dispW - padLeft * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
     const lineHeight = Math.max(fontSize * 1.2, 10);
-    const maxLines = Math.max(1, Math.floor((visualH - padTop * 2) / lineHeight));
+    const maxLines = Math.max(1, Math.floor((dispH - padFromTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
     if (targetRotation === 90) {
+      // Content anchor for line i:
+      //   cx = pdfX + padFromTop + lineHeight·(i+1) + baseDown  (goes right = display down)
+      //   cy = pdfY + padLeft                                   (goes up = display right)
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + padTop + lineHeight * (idx + 1) + baselineDown,
-          y: pdfY + padX,
+          x: pdfX + padFromTop + lineHeight * (idx + 1) + baseDown,
+          y: pdfY + padLeft,
           size: fontSize,
           font: selectedFont,
           color: rgb(cr, cg, cb),
@@ -576,8 +579,8 @@ function drawFieldLandscape(
     } else {
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + boxW - padTop - lineHeight * (idx + 1) - baselineDown,
-          y: pdfY + boxH - padX,
+          x: pdfX + boxW - padFromTop - lineHeight * (idx + 1) - baseDown,
+          y: pdfY + boxH - padLeft,
           size: fontSize,
           font: selectedFont,
           color: rgb(cr, cg, cb),
