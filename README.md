@@ -155,5 +155,3 @@ Utiliser `.env.example` comme modèle — toutes les variables obligatoires y so
 ## Licence
 
 MIT — Libre d'utilisation et de modification.
-
-MIT — Libre d'utilisation et de modification.
