@@ -54,15 +54,15 @@
     "duplicatePage": "Dupliquer",
     "deletePage": "Suppr. page",
     "save": "💾 Sauver",
-    "export": "📥 Export",
-    "print": "🖨 Imprimer",
-    "serverExport": "📤 Export serveur",
-    "serverExportBusy": "⏳ Export en cours...",
-    "share": "🔗 Partager",
+    "export": "Exporter PDF",
+    "print": "Imprimer",
+    "serverExport": "Export serveur",
+    "serverExportBusy": "Export en cours...",
+    "share": "Partager",
     "fileMenu": "📂 Fichier",
-    "saveTemplate": "💾 Sauver template (structure)",
-    "saveDraft": "📝 Sauver brouillon (rempli)",
-    "saveTemplateTitle": "Sauvegarder le template (structure uniquement, sans valeurs remplies)"
+    "saveTemplate": "Enregistrer",
+    "saveDraft": "Brouillon",
+    "saveTemplateTitle": "Enregistrer le template"
   },
   "roles": {
     "owner": "Propriétaire",

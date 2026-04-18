@@ -36,7 +36,7 @@ import {
   MenuIcon, ChevronDownIcon, SaveIcon, DownloadIcon, PrintIcon, ShareIcon,
   LockIcon, UnlockIcon, TrashIcon, EditIcon, EyeIcon,
   RotateLeftIcon, RotateRightIcon, ZoomInIcon, ZoomOutIcon,
-  UserIcon, ShieldIcon, UploadIcon,
+  UserIcon, ShieldIcon, UploadIcon, CloudUploadIcon, CloudDownloadIcon,
 } from './components/Icons';
 import type { FolderModel } from './api';
 import { defaultDocumentPreset, defaultFieldStyle } from './types';
@@ -2218,20 +2218,24 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               {t('toolbar.fileMenu')} <ChevronDownIcon size={12} />
             </button>
             {fileMenuOpen && (
-              <div className="toolbar-file-dropdown">
-                {/* Save template structure (blank fields) to server */}
-                <button onClick={() => { onSave(); setFileMenuOpen(false); }} disabled={!canSaveTemplate}>{t('toolbar.saveTemplate')}</button>
-                {/* Save current filled values as a draft */}
-                <button onClick={() => { onSaveDraft(); setFileMenuOpen(false); }} disabled={!draftKey}>{t('toolbar.saveDraft')}</button>
-                <hr />
-                {/* Export filled PDF to browser download */}
-                <button onClick={() => { handleExportPdf(); setFileMenuOpen(false); }} disabled={!sourceUrl || !canExport}>{t('toolbar.export')}</button>
-                {/* Server-side export: generates PDF in browser and uploads to server filesystem */}
+              <div className="toolbar-file-dropdown compact">
+                <button onClick={() => { onSave(); setFileMenuOpen(false); }} disabled={!canSaveTemplate} title={t('toolbar.saveTemplate')}>
+                  <SaveIcon size={14} /> {t('toolbar.saveTemplate')}
+                </button>
+                <button onClick={() => { handleExportPdf(); setFileMenuOpen(false); }} disabled={!sourceUrl || !canExport} title={t('toolbar.export')}>
+                  <DownloadIcon size={14} /> {t('toolbar.export')}
+                </button>
                 {serverExportAvailable && (
-                  <button onClick={() => { handleServerExport(); setFileMenuOpen(false); }} disabled={!sourceUrl || !canExport || serverExportBusy}>{serverExportBusy ? t('toolbar.serverExportBusy') : t('toolbar.serverExport')}</button>
+                  <button onClick={() => { handleServerExport(); setFileMenuOpen(false); }} disabled={!sourceUrl || !canExport || serverExportBusy} title={serverExportBusy ? t('toolbar.serverExportBusy') : t('toolbar.serverExport')}>
+                    <CloudDownloadIcon size={14} /> {serverExportBusy ? t('toolbar.serverExportBusy') : t('toolbar.serverExport')}
+                  </button>
                 )}
-                <button onClick={() => { handlePrint(); setFileMenuOpen(false); }} disabled={!sourceUrl || !canPrintDoc}>{t('toolbar.print')}</button>
-                <button onClick={() => { setShowShareModal(true); setFileMenuOpen(false); }} disabled={!sourceFileId}>{t('toolbar.share')}</button>
+                <button onClick={() => { handlePrint(); setFileMenuOpen(false); }} disabled={!sourceUrl || !canPrintDoc} title={t('toolbar.print')}>
+                  <PrintIcon size={14} /> {t('toolbar.print')}
+                </button>
+                <button onClick={() => { setShowShareModal(true); setFileMenuOpen(false); }} disabled={!sourceFileId} title={t('toolbar.share')}>
+                  <ShareIcon size={14} /> {t('toolbar.share')}
+                </button>
               </div>
             )}
           </div>
@@ -2247,15 +2251,15 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             onChange={(e) => setName(e.target.value)}
             placeholder={t('toolbar.templateNamePlaceholder')}
           />
-          {/* Quick-save icon button */}
+          {/* Save draft icon button */}
           <button
-            className="toolbar-save-icon"
-            onClick={onSave}
-            disabled={!canSaveTemplate}
-            title={t('toolbar.saveTemplateTitle')}
-            aria-label={t('toolbar.saveTemplateTitle')}
+            className="toolbar-action-btn"
+            onClick={() => { onSaveDraft(); }}
+            disabled={!draftKey}
+            title={t('toolbar.saveDraft')}
+            aria-label={t('toolbar.saveDraft')}
           >
-            <SaveIcon size={18} />
+            <CloudUploadIcon size={16} />
           </button>
           {/* Meta badges: dirty state, document role, fill mode, multi-select actions */}
           <div className="toolbar-meta-stack">

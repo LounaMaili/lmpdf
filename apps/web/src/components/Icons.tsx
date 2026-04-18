@@ -213,6 +213,26 @@ export const UploadIcon = ({ size = 18, ...p }: IconProps) => (
   </svg>
 );
 
+/** Cloud upload — save draft to server */
+export const CloudUploadIcon = ({ size = 18, ...p }: IconProps) => (
+  <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Save draft'}>
+    {iconTitleBase(p.title ?? 'Save draft')}
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+    <polyline points="16 6 12 2 8 6" />
+    <line x1="12" y1="2" x2="12" y2="8" />
+  </svg>
+);
+
+/** Cloud download — server export */
+export const CloudDownloadIcon = ({ size = 18, ...p }: IconProps) => (
+  <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Server export'}>
+    {iconTitleBase(p.title ?? 'Server export')}
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+    <polyline points="8 10 12 14 16 10" />
+    <line x1="12" y1="14" x2="12" y2="22" />
+  </svg>
+);
+
 /** Checkmark — success / done */
 export const CheckIcon = ({ size = 18, ...p }: IconProps) => (
   <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Done'}>

@@ -54,15 +54,15 @@
     "duplicatePage": "Duplicate",
     "deletePage": "Del. page",
     "save": "💾 Save",
-    "export": "📥 Export",
-    "print": "🖨 Print",
-    "serverExport": "📤 Server export",
-    "serverExportBusy": "⏳ Exporting...",
-    "share": "🔗 Share",
+    "export": "Export PDF",
+    "print": "Print",
+    "serverExport": "Server export",
+    "serverExportBusy": "Exporting...",
+    "share": "Share",
     "fileMenu": "📂 File",
-    "saveTemplate": "💾 Save template (structure)",
-    "saveDraft": "📝 Save draft (filled)",
-    "saveTemplateTitle": "Save template (structure only, without filled values)"
+    "saveTemplate": "Save template",
+    "saveDraft": "Save draft",
+    "saveTemplateTitle": "Save template"
   },
   "roles": {
     "owner": "Owner",

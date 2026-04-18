@@ -132,18 +132,18 @@ body {
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   z-index: 100;
-  min-width: 220px;
+  min-width: 180px;
   padding: 6px;
   display: flex;
-  flex-direction: row; align-items: center; justify-content: flex-start;
+  flex-direction: column;
   gap: 2px;
 }
 
 .toolbar-file-dropdown button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -151,6 +151,7 @@ body {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .toolbar-file-dropdown button:hover:not(:disabled) {
