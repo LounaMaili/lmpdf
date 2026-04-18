@@ -28,6 +28,12 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 - Compteurs décalés par colonne (padding calculé sur dimensions contenu au lieu de dimensions display)
 - Signe de l'offset d'ascente inversé pour le centrage vertical
 
+### Print navigateur
+- **Caché le bandeau** : `.app-toolbar`, `.toolbar-file-menu-wrap` masqués en mode print
+- **Marges nulles** : `@page { margin: 0 }` + reset body margin/padding
+- **Mise en page** : `.app` en block, `.editor` prend toute la hauteur, `.page-zoom-wrapper` en dimensions naturelles (sans forçage 100% qui collapsait le canvas)
+- **Éléments masqués** : breadcrumb, diagnostic, status bar, zoom/rotation controls, pagination
+
 ---
 
 ## [2026-04-16] Corrections toolbar + drag & drop fonctionnel
