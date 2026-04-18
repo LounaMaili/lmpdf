@@ -4,6 +4,32 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 
 ---
 
+## [2026-04-18] Export PDF réécrit — coordonnées normalisées
+
+### Changed
+- **Réécriture complète de `exportPdf.ts`** sur une nouvelle branche `fix/export-pdf-rewrite` (partie de zéro depuis `main`)
+- **Pipeline de coordonnées normalisées** : les positions de champs passent par un espace 0→1 avant d'être converties en points PDF, éliminant les erreurs d'arrondi cumulées
+- **Rotation paysage** : `/Rotate 90` sur la page + contre-rotation du texte par `degrees(90)` CCW pour un affichage lisible
+- **Ancrage du texte rotaté corrigé** : géométrie dérivée mathématiquement — le texte rotaté à `(cx, cy)` occupe en display `x:[cy, cy+textWidth]`, `y:[W−cx, W−cx+fontSize]`
+- **Compteurs centrés** dans les cellules d'affichage au lieu d'être alignés en haut à gauche
+- **Padding fixe (2pt)** au lieu de padding proportionnel — résolution-indépendant
+- **Conversion font size** `CSS px × 72/96 → PDF pt`
+- **Cases à cocher** : transformées par la matrice display↔content pour /Rotate 90
+- **Nettoyage du code mort** : suppression de `mapDisplayBoxToPdfBox()`, `mapFieldToPdfBox()`, code dupliqué entre les deux fonctions d'export
+
+### Architecture
+- `renderFieldsOnPages()` partagé entre `exportFilledPdf` et `generateFilledPdfBlob`
+- Fonctions séparées `drawFieldPortrait` / `drawFieldLandscape`
+- Utilitaires `wrapText`, `drawMaskRect`, `drawPageNumber` extraits
+- Constantes de padding au niveau du module
+
+### Fixed
+- Texte décalé vers le bas/en bas à gauche en mode paysage
+- Compteurs décalés par colonne (padding calculé sur dimensions contenu au lieu de dimensions display)
+- Signe de l'offset d'ascente inversé pour le centrage vertical
+
+---
+
 ## [2026-04-16] Corrections toolbar + drag & drop fonctionnel
 
 ### Fixed
