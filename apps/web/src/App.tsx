@@ -32,6 +32,12 @@ import PropertiesPanel from './components/PropertiesPanel';
 import { buildBreadcrumb } from './components/FolderTree';
 import AutosaveIndicator from './components/AutosaveIndicator';
 import DraftRestoreModal from './components/DraftRestoreModal';
+import {
+  MenuIcon, ChevronDownIcon, SaveIcon, DownloadIcon, PrintIcon, ShareIcon,
+  LockIcon, UnlockIcon, TrashIcon, EditIcon, EyeIcon,
+  RotateLeftIcon, RotateRightIcon, ZoomInIcon, ZoomOutIcon,
+  UserIcon, ShieldIcon, UploadIcon,
+} from './components/Icons';
 import type { FolderModel } from './api';
 import { defaultDocumentPreset, defaultFieldStyle } from './types';
 import { exportFilledPdf, generateFilledPdfBlob } from './exportPdf';
@@ -2194,7 +2200,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     // Root element: applies drag-over highlight when a file is being dragged onto the app
     <main className={`app${isDraggingOver ? ' app-drag-over' : ''}`}>
       {/* Drag overlay shown when a file is dragged over the app window */}
-      {isDraggingOver && <div className="drag-overlay"><span>📥 Déposez le fichier ici</span></div>}
+      {isDraggingOver && <div className="drag-overlay"><UploadIcon size={18} /> <span>Déposez le fichier ici</span></div>}
       {/* ── Top toolbar: brand, file menu, document name, view controls, user area ── */}
       <header className="app-toolbar app-toolbar-single-row">
         {/* ── Left: Brand + File menu ── */}
@@ -2209,7 +2215,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               onClick={() => setFileMenuOpen((v) => !v)}
               onBlur={() => setTimeout(() => setFileMenuOpen(false), 150)}
             >
-              {t('toolbar.fileMenu')} ▾
+              {t('toolbar.fileMenu')} <ChevronDownIcon size={12} />
             </button>
             {fileMenuOpen && (
               <div className="toolbar-file-dropdown">
@@ -2249,7 +2255,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             title={t('toolbar.saveTemplateTitle')}
             aria-label={t('toolbar.saveTemplateTitle')}
           >
-            💾
+            <SaveIcon size={18} />
           </button>
           {/* Meta badges: dirty state, document role, fill mode, multi-select actions */}
           <div className="toolbar-meta-stack">
@@ -2261,10 +2267,15 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 {docRoleLabel(docRole)}
               </span>
             )}
-            {/* Fill mode toggle badge: edit (✏️) or structure (🔒) */}
-            <span className={`fill-mode-badge compact ${fillMode ? 'active' : ''}`}>
-              {fillMode ? '✏️' : '🔒'}
-            </span>
+            {/* Fill mode toggle: edit (pencil) or fill (eye) */}
+            <button
+              className={`toolbar-action-btn fill-mode-toggle ${fillMode ? 'active' : ''}`}
+              title={fillMode ? 'Switch to edit mode' : 'Switch to fill mode'}
+              onClick={() => setFillMode((v) => !v)}
+              aria-label={fillMode ? 'Edit mode' : 'Fill mode'}
+            >
+              {fillMode ? <EditIcon size={16} title="Edit mode" /> : <EyeIcon size={16} title="Fill mode" />}
+            </button>
             {/* Multi-select bulk actions: lock, unlock, delete */}
             {multiSelectedIds.size > 0 && !fillMode && canEditStructure && (
               <>
@@ -2272,22 +2283,17 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                   className="toolbar-action-btn"
                   title="Lock all selected (Ctrl+L)"
                   onClick={() => bulkUpdateFields(Array.from(multiSelectedIds), { locked: true })}
-                >🔒</button>
+                ><LockIcon size={14} /></button>
                 <button
                   className="toolbar-action-btn"
                   title="Unlock all selected (Ctrl+Shift+L)"
                   onClick={() => bulkUpdateFields(Array.from(multiSelectedIds), { locked: false })}
-                >🔓</button>
+                ><UnlockIcon size={14} /></button>
                 <button
                   className="toolbar-action-btn"
                   title="Delete all selected"
-                  onClick={() => {
-                    setFields((prev) => prev.filter((f) => !multiSelectedIds.has(f.id)));
-                    setSelectedFieldId(null);
-                    setMultiSelectedIds(new Set());
-                    setDirty(true);
-                  }}
-                >🗑️</button>
+                  onClick={() => { setFields((prev) => prev.filter((f) => !multiSelectedIds.has(f.id))); setSelectedFieldId(null); setMultiSelectedIds(new Set()); setDirty(true); }}
+                ><TrashIcon size={14} /></button>
               </>
             )}
           </div>
@@ -2307,9 +2313,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
           {/* Zoom controls: step through predefined zoom levels */}
           <div className="zoom-controls compact">
-            <button disabled={zoomIndex <= 0} onClick={() => setZoomIndex((i) => i - 1)}>−</button>
+            <button disabled={zoomIndex <= 0} onClick={() => setZoomIndex((i) => i - 1)}><ZoomOutIcon size={14} /></button>
             <span>{Math.round(zoom * 100)}%</span>
-            <button disabled={zoomIndex >= ZOOM_STEPS.length - 1} onClick={() => setZoomIndex((i) => i + 1)}>+</button>
+            <button disabled={zoomIndex >= ZOOM_STEPS.length - 1} onClick={() => setZoomIndex((i) => i + 1)}><ZoomInIcon size={14} /></button>
           </div>
 
           {/* Fit mode: fit entire page or fit width only */}
@@ -2320,9 +2326,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
           {/* Rotation controls: rotate 90° left/right */}
           <div className="rotation-controls compact">
-            <button onClick={() => rotateBy(-90)} title={t('toolbar.rotateLeft')}>↺</button>
+            <button onClick={() => rotateBy(-90)} title={t('toolbar.rotateLeft')}> <RotateLeftIcon size={16} /></button>
             <span>{rotation}°</span>
-            <button onClick={() => rotateBy(90)} title={t('toolbar.rotateRight')}>↻</button>
+            <button onClick={() => rotateBy(90)} title={t('toolbar.rotateRight')}> <RotateRightIcon size={16} /></button>
           </div>
         </div>
 
@@ -2339,8 +2345,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           {/* User info area: name, MFA, admin, logout */}
           {currentUser && (
             <div className="toolbar-user-area">
-              <span className="toolbar-user-name">👤 {currentUser.displayName}</span>
-              {onShowMfaSettings && <button className="toolbar-user-btn" onClick={onShowMfaSettings} title={t('mfa.title')}>🔐</button>}
+              <span className="toolbar-user-name"><UserIcon size={16} /> {currentUser.displayName}</span>
+              {onShowMfaSettings && <button className="toolbar-user-btn" onClick={onShowMfaSettings} title={t('mfa.title')}><ShieldIcon size={16} /></button>}
               {onShowAdminSettings && <button className="toolbar-user-btn" onClick={onShowAdminSettings}>{t('auth.admin')}</button>}
               {onLogout && <button className="toolbar-user-btn" onClick={onLogout}>{t('auth.logout')}</button>}
             </div>
