@@ -2089,7 +2089,18 @@ body {
 
 /* ===== PRINT ===== */
 @media print {
+  @page {
+    margin: 0;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
   /* Hide UI chrome */
+  .app-toolbar,
+  .toolbar-file-menu-wrap,
   .panel,
   .properties-panel {
     display: none !important;
