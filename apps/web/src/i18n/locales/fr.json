@@ -196,7 +196,9 @@
     "importScanHint": "Importez un PDF ou une image pour commencer",
     "allFolders": "🏠 Tous",
     "pageLabel": "Page {n}",
-    "nFields": "{count} champs"
+    "nFields": "{count} champs",
+    "fields": "Champs",
+    "templates": "Modèles"
   },
   "fields": {
     "label": "Label",

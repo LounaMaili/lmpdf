@@ -37,6 +37,7 @@ import {
   LockIcon, UnlockIcon, TrashIcon, EditIcon, EyeIcon,
   RotateLeftIcon, RotateRightIcon, ZoomInIcon, ZoomOutIcon,
   UserIcon, ShieldIcon, UploadIcon, CloudUploadIcon, CloudDownloadIcon,
+  PlusIcon, LayoutIcon, WandIcon, PanelLeftIcon, PanelRightIcon,
 } from './components/Icons';
 import type { FolderModel } from './api';
 import { defaultDocumentPreset, defaultFieldStyle } from './types';
@@ -2057,6 +2058,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Whether a server export request is currently in flight. */
   const [serverExportBusy, setServerExportBusy] = useState(false);
 
+  const [panelExpanded, setPanelExpanded] = useState(false);
+
   /**
    * Check if server-side export is available for the current template/document context.
    * Resolves the export destination configuration from the server.
@@ -2353,242 +2356,162 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       {/* ═══════════════════════════════════════════════════════════
            LEFT PANEL: Édition / outils de travail
          ═══════════════════════════════════════════════════════════ */}
-      <aside className="panel">
-        {/* Keyboard shortcut hints displayed at the top of the sidebar */}
-        <div className="panel-shortcuts">
-          <span>{t('panel.shortcutCtrlClick')}</span>
-          <span>{t('panel.shortcutAltDrag')}</span>
-        </div>
+            {/* ── Compact icon bar (always visible) ── */}
+      <aside className={`panel-icon-bar ${panelExpanded ? 'expanded' : ''}`}>
+        {/* Upload */}
+        <button className="panel-icon-btn" title={t('panel.importPdfImage')} disabled={!rolePermissions.uploadDocument} onClick={() => setPanelExpanded(true)}>
+          <UploadIcon size={18} />
+        </button>
 
-        <details open className="panel-section">
-          <summary>{t('panel.document')}</summary>
+        {/* Add field */}
+        <button className="panel-icon-btn" title={t('toolbar.addField')} disabled={!canEditStructure} onClick={() => { addField(); setPanelExpanded(true); }}>
+          <PlusIcon size={18} />
+        </button>
 
-          {/* File upload control: accepts PDF or image files */}
-          <label className="upload-label">
-            {t('panel.importPdfImage')}
-            <input type="file" accept="application/pdf,image/*" onChange={onUpload} disabled={!rolePermissions.uploadDocument} />
-          </label>
+        {/* Add page */}
+        <button className="panel-icon-btn" title={t('toolbar.addPage')} disabled={!canEditStructure} onClick={() => { addPage(); setPanelExpanded(true); }}>
+          <LayoutIcon size={18} />
+        </button>
 
-          {/* Document metadata grid: active page, source type */}
-          <div className="panel-meta-grid">
-            <div><strong>{t('panel.activePage')}</strong><span>{activePage} / {pageCount}</span></div>
-            <div><strong>{t('panel.source')}</strong><span>{sourceMime ? (isPdf ? t('panel.sourcePdf') : t('panel.sourceImage')) : t('panel.sourceNone')}</span></div>
-          </div>
-        </details>
+        {/* Fill mode */}
+        <button className={`panel-icon-btn ${fillMode ? 'active' : ''}`} title={fillMode ? 'Switch to edit mode' : 'Switch to fill mode'} onClick={() => setFillMode((v) => !v)}>
+          {fillMode ? <EditIcon size={18} /> : <EyeIcon size={18} />}
+        </button>
 
-        {/* ── Edition section: add fields, pages, fill mode toggle ── */}
-        <details open className="panel-section">
-          <summary>{t('panel.edition')}</summary>
-
-          {/* Action buttons grid: add field, add page, duplicate page, delete page */}
-          <div className="panel-btn-grid">
-            <button onClick={addField} disabled={!canEditStructure}>{t('toolbar.addField')}</button>
-            <button onClick={addPage} disabled={!canEditStructure}>{t('toolbar.addPage')}</button>
-            <button onClick={duplicateActivePage} disabled={!sourceUrl || !canEditStructure}>{t('toolbar.duplicatePage')}</button>
-            <button onClick={deleteActivePage} disabled={pageCount <= 1 || !canEditStructure}>{t('toolbar.deletePage')}</button>
-          </div>
-
-          {/* Toggle between structure editing mode and fill mode */}
-          <button
-            className={`btn-fill-mode ${fillMode ? 'active' : ''}`}
-            onClick={() => setFillMode((v) => !v)}
-            title={t('panel.fillModeTitle')}
-          >
-            {fillMode ? t('panel.fillModeOn') : t('panel.fillModeOff')}
-          </button>
-
-          {/* Debug toggle: show overflow order numbers on fields */}
-          <button
-            className={`btn-fill-mode ${showDebugOrder ? 'active' : ''}`}
-            onClick={() => setShowDebugOrder((v) => !v)}
-            title={t('panel.debugOrderOn')}
-            style={{ fontSize: '0.85em' }}
-          >
-            {showDebugOrder ? t('panel.debugOrderOn') : t('panel.debugOrderOff')}
-          </button>
-
-          {/* Delete all fields button with confirmation dialog */}
-          {fields.length > 0 && (
-            <button
-              className="btn-delete-all"
-              disabled={fillMode}
-              onClick={() => {
-                if (window.confirm(t('panel.deleteAllFieldsConfirm', { count: fields.length }))) {
-                  setFields([]);
-                  setSelectedFieldId(null);
-                  setMultiSelectedIds(new Set());
-                  setDirty(true);
-                  setStatus(t('status.fieldsDeleted', { count: fields.length }));
-                }
-              }}
-            >
-              {t('panel.deleteAllFields')}
-            </button>
-          )}
-        </details>
-
-        {/* ── Detection section: auto-detect fields from document ── */}
+        {/* Detect fields */}
         {sourceFileId && (
-          <details open className="panel-section">
-            <summary>{t('panel.detection')}</summary>
-            {/* Sensitivity selector: controls detection thresholds */}
-            <label>
-              {t('panel.sensitivity')}
-              <select
-                value={detectSensitivity}
-                onChange={(e) => setDetectSensitivity(e.target.value as 'low' | 'normal' | 'high')}
-              >
-                <option value="low">{t('panel.sensitivityLow')}</option>
-                <option value="normal">{t('panel.sensitivityNormal')}</option>
-                <option value="high">{t('panel.sensitivityHigh')}</option>
-              </select>
-            </label>
-            {/* Sensitivity description text */}
-            <p className="detect-preset-desc">{
-              detectSensitivity === 'low'
-                ? t('panel.sensitivityLowDesc')
-                : detectSensitivity === 'high'
-                  ? t('panel.sensitivityHighDesc')
-                  : t('panel.sensitivityNormalDesc')
-            }</p>
-            {/* Toggle: treat dotted lines as solid for detection */}
-            <label className="checkbox-toggle">
-              <input
-                type="checkbox"
-                checked={detectDottedAsLine}
-                onChange={(e) => setDetectDottedAsLine(e.target.checked)}
-              />
-              {t('panel.dottedAsLine')}
-            </label>
-            <p className="hint" style={{ fontSize: 11, marginTop: 2, marginBottom: 6 }}>{t('panel.dottedAsLineHint')}</p>
-            {/* Detect fields button — triggers server-side field detection */}
-            <button
-              className="btn-detect"
-              disabled={!canEditStructure || isDetecting}
-              onClick={async () => {
-                if (!canEditStructure) {
-                  setStatus(t('status.insufficientRightsStructure'));
-                  return;
-                }
-                if (!sourceFileId || isDetecting) return;
-                setIsDetecting(true);
-                try {
-                  setStatus(t('status.detecting'));
-                  // Detection presets: sensitivity affects minimum cell size, line detection thresholds, and gap closing.
-                  // - low: best for clean scans with large, clear cells
-                  // - normal: balanced for most documents
-                  // - high: best for degraded scans or small fields
-                  const detectPreset = {
-                    low: { sensitivity: 'low', maxDetectWidth: 1200 },
-                    normal: { sensitivity: 'normal', maxDetectWidth: 1800 },
-                    high: { sensitivity: 'high', maxDetectWidth: 2400 },
-                  } as const;
-
-                  const result = await detectFields(sourceFileId, {
-                    targetWidth: pageW,
-                    targetHeight: pageH,
-                    rotation,
-                    ...detectPreset[detectSensitivity],
-                    dottedAsLine: detectDottedAsLine,
-                  });
-                  if (result.error) {
-                    setStatus(t('status.detectionError', { error: result.error }));
-                    return;
-                  }
-                  if (!result.suggestedFields.length) {
-                    setStatus(t('status.noFieldDetected'));
-                    return;
-                  }
-                  // Map detected fields to FieldModel, applying current font preset defaults
-                  const newFields: FieldModel[] = result.suggestedFields.map((sf) => ({
-                    id: sf.id || crypto.randomUUID(),
-                    label: sf.label || t('status.defaultFieldLabel'),
-                    value: '',
-                    x: sf.x,
-                    y: sf.y,
-                    w: Math.max(16, sf.w),
-                    h: Math.max(10, sf.h),
-                    type: (sf.type === 'checkbox' ? 'checkbox' : 'text') as FieldType,
-                    style: {
-                      fontFamily: preset.fontFamily,
-                      fontSize: preset.fontSize,
-                      fontWeight: preset.fontWeight,
-                      textAlign: 'left' as const,
-                      color: preset.color,
-                    },
-                    locked: false,
-                    overlayVisible: true,
-                    pageNumber: activePage,
-                  }));
-                  setFields((prev) => [...prev, ...newFields]);
-                  setDirty(true);
-                  setStatus(t('status.fieldsDetected', { count: newFields.length }));
-                } catch (err) {
-                  setStatus(err instanceof Error ? err.message : t('status.errorFallback'));
-                } finally {
-                  setIsDetecting(false);
-                }
-              }}
-            >
-              {isDetecting ? t('panel.detectingFields') : t('panel.detectFields')}
-            </button>
-          </details>
+          <button className="panel-icon-btn" title={t('panel.detect')} disabled={isDetecting} onClick={() => { setPanelExpanded(true); }}>
+            <WandIcon size={18} />
+          </button>
         )}
 
-        {/* ── Default style section: font family, size, weight, color ── */}
-        <details className="panel-section">
-          <label>
-            {t('panel.font')}
-            <select value={preset.fontFamily} onChange={(e) => setPreset((p) => ({ ...p, fontFamily: e.target.value }))}>
-              {['Arial, sans-serif', 'Helvetica, sans-serif', 'Times New Roman, serif', 'Courier New, monospace', 'Georgia, serif', 'Verdana, sans-serif'].map((f) => (
-                <option key={f} value={f}>{f.split(',')[0]}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t('panel.fontSize')}
-            <select value={preset.fontSize} onChange={(e) => setPreset((p) => ({ ...p, fontSize: Number(e.target.value) }))}>
-              {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32].map((s) => (
-                <option key={s} value={s}>{s}px</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t('panel.fontWeight')}
-            <select value={preset.fontWeight} onChange={(e) => setPreset((p) => ({ ...p, fontWeight: e.target.value as 'normal' | 'bold' }))}>
-              <option value="normal">{t('panel.fontWeightNormal')}</option>
-              <option value="bold">{t('panel.fontWeightBold')}</option>
-            </select>
-          </label>
-          <label>
-            {t('panel.color')}
-            <input type="color" value={preset.color} onChange={(e) => setPreset((p) => ({ ...p, color: e.target.value }))} />
-          </label>
-          <button onClick={() => {
-            setFields((prev) => prev.map((f) => ({ ...f, style: { ...f.style, fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, color: preset.color } })));
-            setStatus(t('status.presetApplied'));
-          }}>{t('panel.applyToAllFields')}</button>
-        </details>
-
-        {/* ── Diagnostic section: displays coordinate/dimension debug info ── */}
-        <details className="panel-section">
-          <div className="diagnostic-grid">
-            <span>{t('panel.diagSource')}</span><span>{srcW} × {srcH} px</span>
-            <span>{t('panel.diagDisplay')}</span><span>{pageW} × {pageH} px</span>
-            <span>{t('panel.diagRotation')}</span><span>{rotation}°</span>
-            <span>{t('panel.diagDisplayRot')}</span><span>{dispW} × {dispH} px</span>
-            <span>{t('panel.diagZoom')}</span><span>{Math.round(zoom * 100)}%</span>
-            <span>{t('panel.diagDpr')}</span><span>{dpr.toFixed(1)}</span>
-            <span>{t('panel.diagCanvas')}</span><span>{Math.round(pageW * dpr)} × {Math.round(pageH * dpr)} px</span>
-          </div>
-        </details>
+        {/* Expand / collapse */}
+        <button className="panel-icon-btn" title={panelExpanded ? 'Collapse panel' : 'Expand panel'} onClick={() => setPanelExpanded((v) => !v)}>
+          {panelExpanded ? <PanelRightIcon size={18} /> : <PanelLeftIcon size={18} />}
+        </button>
       </aside>
+
+      {/* ── Expanded panel (overlay when expanded) ── */}
+      {panelExpanded && (
+        <>
+          <div className="panel-backdrop" onClick={() => setPanelExpanded(false)} />
+          <aside className="panel panel-expanded">
+            <div className="panel-header">
+              <span>{t('panel.tools')}</span>
+              <button className="panel-icon-btn" onClick={() => setPanelExpanded(false)}>
+                <PanelRightIcon size={16} />
+              </button>
+            </div>
+
+            <div className="panel-shortcuts">
+              <span>{t('panel.shortcutCtrlClick')}</span>
+              <span>{t('panel.shortcutAltDrag')}</span>
+            </div>
+
+            <details open className="panel-section">
+              <summary>{t('panel.document')}</summary>
+              <label className="upload-label">
+                {t('panel.importPdfImage')}
+                <input type="file" accept="application/pdf,image/*" onChange={onUpload} disabled={!rolePermissions.uploadDocument} />
+              </label>
+              <div className="panel-meta-grid">
+                <div><strong>{t('panel.activePage')}</strong><span>{activePage} / {pageCount}</span></div>
+                <div><strong>{t('panel.source')}</strong><span>{sourceMime ? (isPdf ? t('panel.sourcePdf') : t('panel.sourceImage')) : t('panel.sourceNone')}</span></div>
+              </div>
+            </details>
+
+            <details open className="panel-section">
+              <summary>{t('panel.edition')}</summary>
+              <div className="panel-btn-grid">
+                <button onClick={() => { addField(); setPanelExpanded(false); }} disabled={!canEditStructure}>{t('toolbar.addField')}</button>
+                <button onClick={() => { addPage(); setPanelExpanded(false); }} disabled={!canEditStructure}>{t('toolbar.addPage')}</button>
+                <button onClick={duplicateActivePage} disabled={!sourceUrl || !canEditStructure}>{t('toolbar.duplicatePage')}</button>
+                <button onClick={deleteActivePage} disabled={pageCount <= 1 || !canEditStructure}>{t('toolbar.deletePage')}</button>
+              </div>
+              <button className={`btn-fill-mode ${fillMode ? 'active' : ''}`} onClick={() => setFillMode((v) => !v)}>
+                {fillMode ? t('panel.fillModeOn') : t('panel.fillModeOff')}
+              </button>
+              <button className={`btn-fill-mode ${showDebugOrder ? 'active' : ''}`} onClick={() => setShowDebugOrder((v) => !v)} style={{ fontSize: '0.85em' }}>
+                {showDebugOrder ? t('panel.debugOrderOn') : t('panel.debugOrderOff')}
+              </button>
+              {fields.length > 0 && (
+                <button className="btn-delete-all" disabled={fillMode} onClick={() => {
+                  if (window.confirm(t('panel.deleteAllFieldsConfirm', { count: fields.length }))) {
+                    setFields([]); setSelectedFieldId(null); setMultiSelectedIds(new Set()); setDirty(true);
+                    setStatus(t('status.fieldsDeleted', { count: fields.length }));
+                  }
+                }}>
+                  {t('panel.deleteAllFields')}
+                </button>
+              )}
+            </details>
+
+            {sourceFileId && (
+              <details open className="panel-section">
+                <summary>{t('panel.detection')}</summary>
+                <label>
+                  {t('panel.sensitivity')}&nbsp;
+                  <select value={detectSensitivity}
+                    onChange={(e) => setDetectSensitivity(e.target.value as 'low' | 'normal' | 'high')}>
+                    <option value="low">{t('panel.sensitivityLow')}</option>
+                    <option value="normal">{t('panel.sensitivityNormal')}</option>
+                    <option value="high">{t('panel.sensitivityHigh')}</option>
+                  </select>
+                </label>
+                <label style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={detectDottedAsLine}
+                    onChange={(e) => setDetectDottedAsLine(e.target.checked)} />
+                  {t('panel.dottedAsLine')}
+                </label>
+                <button className="btn-detect" disabled={!canEditStructure || isDetecting}
+                  onClick={async () => {
+                    if (!canEditStructure) { setStatus(t('status.insufficientRightsStructure')); return; }
+                    if (!sourceFileId || isDetecting) return;
+                    setIsDetecting(true);
+                    try {
+                      setStatus(t('status.detecting'));
+                      const detectPreset = {
+                        low: { sensitivity: 'low', maxDetectWidth: 1200 },
+                        normal: { sensitivity: 'normal', maxDetectWidth: 1800 },
+                        high: { sensitivity: 'high', maxDetectWidth: 2400 },
+                      } as const;
+                      const result = await detectFields(sourceFileId, {
+                        targetWidth: pageW, targetHeight: pageH, rotation,
+                        ...detectPreset[detectSensitivity], dottedAsLine: detectDottedAsLine,
+                      });
+                      if (result.error) { setStatus(t('status.detectionError', { error: result.error })); return; }
+                      if (!result.suggestedFields.length) { setStatus(t('status.noFieldDetected')); return; }
+                      const newFields: FieldModel[] = result.suggestedFields.map((sf) => ({
+                        id: sf.id || crypto.randomUUID(),
+                        label: sf.label || t('status.defaultFieldLabel'),
+                        value: '', x: sf.x, y: sf.y,
+                        w: Math.max(16, sf.w), h: Math.max(10, sf.h),
+                        type: (sf.type === 'checkbox' ? 'checkbox' : 'text') as FieldType,
+                        style: { fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, textAlign: 'left' as const, color: preset.color },
+                        locked: false, overlayVisible: true, pageNumber: activePage,
+                      }));
+                      setFields((prev) => [...prev, ...newFields]); setDirty(true);
+                      setStatus(t('status.fieldsDetected', { count: newFields.length }));
+                    } catch (err) {
+                      setStatus(err instanceof Error ? err.message : t('status.errorFallback'));
+                    } finally {
+                      setIsDetecting(false);
+                    }
+                  }}>
+                  {isDetecting ? t('panel.detectingFields') : t('panel.detectFields')}
+                </button>
+              </details>
+            )}
+
+          </aside>
+        </>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
            EDITOR SECTION — Main canvas area with multi-page rendering
            Each page renders the source document (PDF/image) and overlays fields.
          ═══════════════════════════════════════════════════════════════════ */}
-      <section ref={editorRef} className="editor" tabIndex={-1} onClick={() => { if (!marqueeJustEndedRef.current) handleSelectField(null); }}>
+      <section ref={editorRef} className="editor" style={{ marginLeft: 48 }} tabIndex={-1} onClick={() => { if (!marqueeJustEndedRef.current) handleSelectField(null); }}>
         {/* Breadcrumb navigation when a folder is selected */}
         {selectedFolderId && (
           <div className="breadcrumb">

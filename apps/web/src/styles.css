@@ -3419,3 +3419,117 @@ body {
   color: #999;
   pointer-events: none;
 }
+
+/* ── Compact icon bar ── */
+.panel-icon-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  width: 48px;
+  flex-shrink: 0;
+  z-index: 10;
+  transition: width 0.2s;
+}
+
+.panel-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.panel-icon-btn:hover:not(:disabled) {
+  background: #e8edf5;
+  color: #1e293b;
+}
+
+.panel-icon-btn.active {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+
+.panel-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── Expanded panel overlay ── */
+.panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 19;
+  backdrop-filter: blur(1px);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 4px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.panel-expanded {
+  position: fixed;
+  top: 0;
+  left: 48px;
+  bottom: 0;
+  width: 280px;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  overflow-y: auto;
+  z-index: 20;
+  box-shadow: 4px 0 16px rgba(0,0,0,0.08);
+  padding-bottom: 24px;
+}
+
+
+/* ── Responsive adjustments for compact icon bar ── */
+@media (max-width: 768px) {
+  .panel-icon-bar {
+    width: 40px;
+    padding: 6px 4px;
+  }
+  .panel-icon-btn {
+    width: 30px;
+    height: 30px;
+  }
+  .panel-expanded {
+    left: 40px;
+    width: 260px;
+  }
+  .editor {
+    margin-left: 40px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .panel-icon-bar {
+    width: 36px;
+    padding: 4px 3px;
+  }
+  .panel-expanded {
+    left: 0;
+    width: 100vw;
+    top: 0;
+    bottom: 0;
+  }
+}

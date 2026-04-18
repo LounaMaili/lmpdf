@@ -233,6 +233,59 @@ export const CloudDownloadIcon = ({ size = 18, ...p }: IconProps) => (
   </svg>
 );
 
+/** Plus — add field */
+export const PlusIcon = ({ size = 18, ...p }: IconProps) => (
+  <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Add'}>
+    {iconTitleBase(p.title ?? 'Add')}
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+/** Layout — page/document */
+export const LayoutIcon = ({ size = 18, ...p }: IconProps) => (
+  <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Page'}>
+    {iconTitleBase(p.title ?? 'Page')}
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+    <line x1="3" y1="9" x2="21" y2="9" />
+    <line x1="9" y1="21" x2="9" y2="9" />
+  </svg>
+);
+
+/** Wand — AI/auto-detect fields */
+export const WandIcon = ({ size = 18, ...p }: IconProps) => (
+  <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Detect fields'}>
+    {iconTitleBase(p.title ?? 'Detect fields')}
+    <path d="M15 4V2" />
+    <path d="M15 16v-2" />
+    <path d="M8 9h2" />
+    <path d="M20 9h2" />
+    <path d="M17.8 11.8 19 13" />
+    <path d="M15 9h.01" />
+    <path d="M17.8 6.2 19 5" />
+    <path d="m3 21 9-9" />
+    <path d="M12.2 6.2 11 5" />
+  </svg>
+);
+
+/** Panel left — collapse/expand sidebar */
+export const PanelLeftIcon = ({ size = 18, ...p }: IconProps) => (
+  <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Expand panel'}>
+    {iconTitleBase(p.title ?? 'Expand panel')}
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <line x1="9" y1="3" x2="9" y2="21" />
+  </svg>
+);
+
+/** Panel right — collapse sidebar */
+export const PanelRightIcon = ({ size = 18, ...p }: IconProps) => (
+  <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Collapse panel'}>
+    {iconTitleBase(p.title ?? 'Collapse panel')}
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <line x1="15" y1="3" x2="15" y2="21" />
+  </svg>
+);
+
 /** Checkmark — success / done */
 export const CheckIcon = ({ size = 18, ...p }: IconProps) => (
   <svg {...iconBase} width={size} height={size} {...p} aria-label={p.title ?? 'Done'}>
