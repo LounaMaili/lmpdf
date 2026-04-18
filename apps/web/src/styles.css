@@ -2102,45 +2102,60 @@ body {
   .app-toolbar,
   .toolbar-file-menu-wrap,
   .panel,
-  .properties-panel {
+  .properties-panel,
+  .breadcrumb,
+  .diagnostic-section,
+  .status-bar,
+  .zoom-controls,
+  .rotation-controls,
+  .pdf-pagination {
     display: none !important;
   }
 
-  /* Full-width editor */
+  /* Make editor take full page */
   .app {
     display: block !important;
+    height: auto !important;
+    min-height: auto !important;
   }
 
   .editor {
     overflow: visible !important;
     margin: 0 !important;
     padding: 0 !important;
-  }
-
-  /* Reset zoom wrapper to fit page */
-  .page-zoom-wrapper {
-    width: 100% !important;
     height: auto !important;
   }
 
-  /* Scale page to fit print width, remove zoom transform */
+  /* Reset zoom wrapper */
+  .page-zoom-wrapper {
+    width: auto !important;
+    height: auto !important;
+    page-break-after: always;
+  }
+
+  /* Remove zoom/rotation transform, keep natural size */
   .page {
     transform: none !important;
     transform-origin: top left !important;
-    width: 100% !important;
-    height: auto !important;
     position: relative !important;
+    outline: none !important;
+    border: none !important;
   }
 
-  /* Make PDF canvas scale to container */
-  .pdf-viewer,
+  /* PDF canvas: keep natural dimensions */
+  .pdf-viewer {
+    width: auto !important;
+    height: auto !important;
+  }
+
   .pdf-page-hires,
   .pdf-page-hires canvas {
     width: 100% !important;
     height: auto !important;
+    display: block !important;
   }
 
-  /* Images too */
+  /* Images */
   .scan-image {
     width: 100% !important;
     height: auto !important;
