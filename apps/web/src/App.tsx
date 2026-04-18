@@ -2332,16 +2332,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           </div>
         </div>
 
-        {/* ── Right: Status message, autosave indicator, user menu ── */}
+        {/* ── Right: User menu ── */}
         <div className="toolbar-group toolbar-group-right">
-          {/* Current status text (e.g. "Saving...", "Exported successfully") */}
-          <span className="toolbar-status-text">{status || t('status.ready')}</span>
-          {/* Autosave indicator with last-saved timestamp */}
-          <AutosaveIndicator
-            status={autosaveState.status}
-            lastSavedAt={autosaveState.lastSavedAt}
-            errorMessage={autosaveState.errorMessage}
-          />
           {/* User info area: name, MFA, admin, logout */}
           {currentUser && (
             <div className="toolbar-user-area">
@@ -2794,6 +2786,16 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               </div>
             </div>
           ))}
+
+          {/* ── Status bar: autosave + status, below all pages ── */}
+          <div className="editor-status-bar">
+            <span className="toolbar-status-text">{status || t('status.ready')}</span>
+            <AutosaveIndicator
+              status={autosaveState.status}
+              lastSavedAt={autosaveState.lastSavedAt}
+              errorMessage={autosaveState.errorMessage}
+            />
+          </div>
         </div>
       </section>
 

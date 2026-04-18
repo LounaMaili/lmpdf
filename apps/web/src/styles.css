@@ -2238,6 +2238,28 @@ body {
   background: #fce4ec;
 }
 
+/* ───── Editor Status Bar (bottom of editor, replaces toolbar status) ───── */
+.editor-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  background: #f8f8f8;
+  border-top: 1px solid #e0e0e0;
+  font-size: 0.78em;
+  min-height: 28px;
+}
+
+.editor-status-bar .autosave-indicator {
+  margin-top: 0;
+  padding: 2px 6px;
+}
+
+/* Hide toolbar status text (moved to editor-status-bar) */
+.toolbar-status-text {
+  display: none;
+}
+
 /* ───── Draft Restore Modal ───── */
 .draft-restore-modal {
   background: #fff;
