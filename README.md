@@ -156,8 +156,4 @@ Utiliser `.env.example` comme modèle — toutes les variables obligatoires y so
 
 MIT — Libre d'utilisation et de modification.
 
----
-
-## Auteur
-
-Projet développé dans le cadre de l'infrastructure personnelle **maison-domotique**.
+MIT — Libre d'utilisation et de modification.
