@@ -556,10 +556,11 @@ function drawFieldLandscape(
     const textWidth = selectedFont.widthOfTextAtSize(val, fontSize);
 
     if (targetRotation === 90) {
-      // Center in display: cy = dx + dw/2 − textWidth/2
+      // Center horizontally in display: cy = pdfY + dispW/2 − textWidth/2
       const cy = pdfY + dispW / 2 - textWidth / 2;
-      // Center vertically: cx = pdfX + dh/2 + fontSize*0.3
-      const cx = pdfX + dispH / 2 - fontSize * 0.3;
+      // Center vertically: cx = pdfX + boxW/2 + (ascent−descent)/2
+      // For Helvetica, (ascent−descent)/2 ≈ fontSize * 0.25
+      const cx = pdfX + dispH / 2 + fontSize * 0.25;
       page.drawText(val, {
         x: cx, y: cy, size: fontSize, font: selectedFont,
         color: rgb(cr, cg, cb), rotate: textRot,
@@ -589,13 +590,13 @@ function drawFieldLandscape(
       /*
        * Top-left in display = left-bottom in content:
        *   cy = pdfY + PAD                        (display left edge)
-       *   cx = pdfX + PAD + fontSize * 0.85      (text top = display top)
+       *   cx = pdfX + PAD + fontSize * 1.0       (text top = display top)
        *
        * Each subsequent line: cx += lineHeight   (display goes downward)
        */
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + PAD + fontSize * 0.85 + lineHeight * idx,
+          x: pdfX + PAD + fontSize * 1.0 + lineHeight * idx,
           y: pdfY + PAD,
           size: fontSize,
           font: selectedFont,
@@ -608,7 +609,7 @@ function drawFieldLandscape(
       // rotation 270: mirror the offsets
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + boxW - PAD - fontSize * 0.85 - lineHeight * idx,
+          x: pdfX + boxW - PAD - fontSize * 1.0 - lineHeight * idx,
           y: pdfY + boxH - PAD,
           size: fontSize,
           font: selectedFont,
