@@ -384,10 +384,32 @@ body {
 }
 
 .panel-btn-grid button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   margin: 0 !important;
-  padding: 6px 4px !important;
-  font-size: 11px !important;
+  padding: 7px 10px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  color: #374151 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
   white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.panel-btn-grid button:hover:not(:disabled) {
+  background: #f0f4ff !important;
+  border-color: #93c5fd !important;
+  color: #1e40af !important;
+}
+
+.panel-btn-grid button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .panel input[type='text'],
@@ -669,25 +691,32 @@ body {
 
 /* Fill mode toggle button */
 .btn-fill-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   width: 100%;
-  padding: 8px 12px;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
-  background: #f8f8f8;
+  padding: 7px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s ease;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .btn-fill-mode:hover {
-  border-color: #0077ff;
-  background: #f0f6ff;
+  background: #f0f4ff;
+  border-color: #93c5fd;
+  color: #1e40af;
 }
 
 .btn-fill-mode.active {
-  border-color: #0077ff;
-  background: #e8f0fe;
-  color: #0055cc;
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
   font-weight: 600;
 }
 
@@ -1447,21 +1476,27 @@ body {
 }
 
 .btn-delete-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   width: 100%;
-  padding: 6px 10px;
+  padding: 7px 12px;
   margin: 4px 0;
   background: #fff;
-  color: #e53e3e;
-  border: 1px solid #e53e3e;
-  border-radius: 6px;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 7px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .btn-delete-all:hover {
-  background: #e53e3e;
-  color: #fff;
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
 }
 
 /* ===== AUTH / LOGIN ===== */
@@ -3637,21 +3672,27 @@ body {
 
 /* Default style apply button */
 .btn-default-style {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   margin: 4px 12px 10px;
-  padding: 6px 12px;
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  padding: 7px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
   font-size: 12px;
   font-weight: 500;
-  color: #334155;
+  color: #374151;
   cursor: pointer;
   width: calc(100% - 24px);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .btn-default-style:hover {
-  background: #e2e8f0;
-  border-color: #94a3b8;
+  background: #f0f4ff;
+  border-color: #93c5fd;
+  color: #1e40af;
 }
 
 /* Compact input in panel */
