@@ -2274,16 +2274,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 {docRoleLabel(docRole)}
               </span>
             )}
-            {/* Fill mode toggle: edit (pencil) or fill (eye) */}
-            <button
-              className={`toolbar-action-btn fill-mode-toggle ${fillMode ? 'active' : ''}`}
-              title={fillMode ? 'Switch to edit mode' : 'Switch to fill mode'}
-              onClick={() => setFillMode((v) => !v)}
-              aria-label={fillMode ? 'Edit mode' : 'Fill mode'}
-            >
-              {fillMode ? <EditIcon size={16} title="Edit mode" /> : <EyeIcon size={16} title="Fill mode" />}
-            </button>
-            {/* Multi-select bulk actions: lock, unlock, delete */}
+{/* Multi-select bulk actions: lock, unlock, delete */}
             {multiSelectedIds.size > 0 && !fillMode && canEditStructure && (
               <>
                 <button
@@ -2383,7 +2374,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         </button>
 
         {/* Fill mode toggle */}
-        <button className={`panel-icon-btn ${fillMode ? 'active' : ''}`} title={fillMode ? 'Switch to edit mode' : 'Switch to fill mode'} onClick={() => setFillMode((v) => !v)}>
+        <button className={`panel-icon-btn fill-edit-mode ${fillMode ? 'fill-active' : 'edit-active'}`} title={fillMode ? 'Switch to edit mode' : 'Switch to fill mode'} onClick={() => setFillMode((v) => !v)}>
           {fillMode ? <EditIcon size={18} /> : <EyeIcon size={18} />}
         </button>
 

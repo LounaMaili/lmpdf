@@ -3688,3 +3688,24 @@ body {
   cursor: pointer;
 }
 
+
+/* ── Fill/Edit mode button in icon bar — red = editing document ── */
+.panel-icon-btn.fill-edit-mode.edit-active {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+.panel-icon-btn.fill-edit-mode.edit-active:hover {
+  background: #fecaca;
+  color: #b91c1c;
+}
+.panel-icon-btn.fill-edit-mode.fill-active {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+.panel-icon-btn.fill-edit-mode.fill-active:hover {
+  background: #bfdbfe;
+  color: #1e40af;
+}
+
