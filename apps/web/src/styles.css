@@ -1529,6 +1529,12 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
     width: 100vw; border-left: none; border-top: 1px solid var(--color-border);
     border-radius: 0; box-shadow: none; z-index: 40;
   }
+  /* Properties panel: stack vertically on mobile */
+  .properties-panel {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+  }
 
   /* Editor: full width, bottom padding for dock */
   .editor { padding: 8px !important; padding-bottom: 64px !important; }
