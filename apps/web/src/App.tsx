@@ -2204,7 +2204,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   // ═══════════════════════════════════════════════════════════════════
   return (
     // Root element: applies drag-over highlight when a file is being dragged onto the app
-    <main className={`app${isDraggingOver ? ' app-drag-over' : ''}${!rightPanelExpanded ? ' app-right-collapsed' : ''}`}>
+    <main className={`app${isDraggingOver ? ' app-drag-over' : ''} app-right-collapsed`}>
       {/* Drag overlay shown when a file is dragged over the app window */}
       {isDraggingOver && <div className="drag-overlay"><UploadIcon size={18} /> <span>Déposez le fichier ici</span></div>}
       {/* ── Top toolbar: brand, file menu, document name, view controls, user area ── */}
