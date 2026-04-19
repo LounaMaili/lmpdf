@@ -3840,17 +3840,31 @@ body {
 
 /* ═══════════════════════════════════════════════════════════════
    RESPONSIVE — Toolbar + Icon Bar + Panel
-   Progressive compression: 1200 → 900 → 768 → 600 → 400
+   Progressive compression: 1100 → 900 → 768 → 600 → 400
+   Priority: Fichier menu stays longest, metadata badges first
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Desktop large: limit doc name spread ── */
 @media (min-width: 1200px) {
   .toolbar-group-doc {
-    max-width: 400px;
+    max-width: 360px;
   }
 }
 
-/* ── Tablet landscape — 900px+: compact toolbar ── */
+/* ── Small desktop — 1100px: hide meta badges (owner/modified), keep Fichier + controls ── */
+@media (max-width: 1100px) {
+  .toolbar-meta-stack {
+    display: none;
+  }
+  .toolbar-doc-name {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* ── Tablet landscape — 900px: hide zoom/rotate controls, compact doc name ── */
 @media (max-width: 900px) {
   .app-toolbar.app-toolbar-single-row {
     padding: 3px 6px;
@@ -3866,9 +3880,6 @@ body {
   /* Compact document name */
   .toolbar-doc-name {
     max-width: 100px !important;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   /* Reduce icon bar slightly */
   .panel-icon-bar {
@@ -3877,7 +3888,7 @@ body {
   }
 }
 
-/* ── Tablet portrait — 768px+: icon-only toolbar ── */
+/* ── Tablet portrait — 768px: hide brand text, keep file menu + icon ── */
 @media (max-width: 768px) {
   .app-toolbar.app-toolbar-single-row {
     padding: 2px 4px;
@@ -3886,9 +3897,7 @@ body {
   .toolbar-group-brand .toolbar-brand {
     display: none;
   }
-  .toolbar-file-menu-btn span {
-    display: none;
-  }
+  /* Keep file menu label until smaller */
   .toolbar-group-doc {
     min-width: 60px;
   }
