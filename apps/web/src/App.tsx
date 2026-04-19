@@ -2059,6 +2059,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [serverExportBusy, setServerExportBusy] = useState(false);
 
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const [rightPanelExpanded, setRightPanelExpanded] = useState(false);
 
   /**
    * Check if server-side export is available for the current template/document context.
@@ -2201,7 +2202,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   // ═══════════════════════════════════════════════════════════════════
   return (
     // Root element: applies drag-over highlight when a file is being dragged onto the app
-    <main className={`app${isDraggingOver ? ' app-drag-over' : ''}`}>
+    <main className={`app${isDraggingOver ? ' app-drag-over' : ''}${!rightPanelExpanded ? ' app-right-collapsed' : ''}`}>
       {/* Drag overlay shown when a file is dragged over the app window */}
       {isDraggingOver && <div className="drag-overlay"><UploadIcon size={18} /> <span>Déposez le fichier ici</span></div>}
       {/* ── Top toolbar: brand, file menu, document name, view controls, user area ── */}
@@ -2344,6 +2345,15 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         </div>
       </header>
 
+      {/* Right panel toggle — fixed to right edge of viewport */}
+      <button
+        className={`right-panel-toggle ${rightPanelExpanded ? 'active' : ''}`}
+        title={rightPanelExpanded ? 'Hide panel' : 'Show panel'}
+        onClick={() => setRightPanelExpanded((v) => !v)}
+      >
+        {rightPanelExpanded ? <PanelRightIcon size={18} /> : <PanelLeftIcon size={18} />}
+      </button>
+
       {/* ═══════════════════════════════════════════════════════════
            LEFT PANEL: Édition / outils de travail
          ═══════════════════════════════════════════════════════════ */}
@@ -2384,6 +2394,18 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             <WandIcon size={18} />
           </button>
         )}
+
+        {/* Divider before right panel toggle */}
+        <div className="panel-icon-divider" />
+
+        {/* Right panel toggle — shown in bottom dock on mobile */}
+        <button
+          className={`panel-icon-btn right-toggle ${rightPanelExpanded ? 'active' : ''}`}
+          title={rightPanelExpanded ? 'Hide panel' : 'Show panel'}
+          onClick={() => setRightPanelExpanded((v) => !v)}
+        >
+          {rightPanelExpanded ? <PanelRightIcon size={18} /> : <PanelLeftIcon size={18} />}
+        </button>
       </aside>
 
       {/* ── Expanded panel (slides in, non-blocking) ── */}
@@ -2760,6 +2782,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
            RIGHT PANEL: PropertiesPanel — field properties, overflow config,
            and template library browser
          ═══════════════════════════════════════════════════════════════════ */}
+      <aside className={`right-panel-wrapper ${rightPanelExpanded ? 'visible' : ''}`}>
       <PropertiesPanel
         field={selectedField}
         fields={fields}
@@ -2797,6 +2820,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         onDeleteTemplate={handleDeleteTemplate}
         canManageTemplate={canManageTemplate}
       />
+      </aside>
 
       {/* Share modal: lazy-loaded, allows sharing the document with other users */}
       {showShareModal && sourceFileId && (
