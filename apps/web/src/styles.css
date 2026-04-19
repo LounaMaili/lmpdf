@@ -556,7 +556,7 @@ body { margin: 0; background: #f3f5f8; }
    ───────────────────────────────────────────────────────────────────────────── */
 .editor {
   grid-area: editor;
-  display: flex; justify-content: center; align-items: flex-start;
+  display: flex; justify-content: center; align-items: center;
   padding: 12px; overflow: auto;
   width: 100%;
   box-sizing: border-box;
