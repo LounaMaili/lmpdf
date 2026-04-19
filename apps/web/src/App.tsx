@@ -475,7 +475,23 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     const availableW = Math.max(200, el.clientWidth - 32);
     const availableH = Math.max(200, el.clientHeight - 32);
     const fit = fitMode === 'width' ? (availableW / w) : Math.min(availableW / w, availableH / h);
-    const clamped = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], fit));
+
+    // In 'width' fit mode: if the document at 100% has > 50px margin on each side,
+    // allow the document to scale up beyond 100% to fill the available space.
+    // In 'page' fit mode: never exceed 100% (page must fit within viewport).
+    let effectiveFit = fit;
+    if (fitMode === 'width' && fit < 1.0) {
+      const excessW = availableW - w; // extra space if doc shown at 100%
+      if (excessW > 100) {
+        // How much would we need to zoom so the page fills the available width?
+        effectiveFit = availableW / w;
+      }
+    }
+    if (fitMode === 'page') {
+      effectiveFit = Math.min(effectiveFit, 1.0);
+    }
+
+    const clamped = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], effectiveFit));
 
     let best = 0;
     let bestDiff = Number.POSITIVE_INFINITY;
