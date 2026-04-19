@@ -2391,17 +2391,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         </button>
       </aside>
 
-      {/* ── Expanded panel (overlay when expanded) ── */}
-      {panelExpanded && (
-        <>
-          <div className="panel-backdrop" />
-          <aside className="panel panel-expanded">
-            <div className="panel-header">
-              <span>{t('panel.tools')}</span>
-              <button className="panel-icon-btn" onClick={() => setPanelExpanded(false)}>
-                <PanelRightIcon size={16} />
-              </button>
-            </div>
+      {/* ── Expanded panel (slides in, non-blocking) ── */}
+      <aside className={`panel panel-expanded ${panelExpanded ? 'visible' : ''}`}>
+        <div className="panel-header">
+          <span>{t('panel.tools')}</span>
+          <button className="panel-icon-btn" onClick={() => setPanelExpanded(false)}>
+            <PanelRightIcon size={16} />
+          </button>
+        </div>
 
             <div className="panel-shortcuts">
               <span>{t('panel.shortcutCtrlClick')}</span>
@@ -2504,14 +2501,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             )}
 
           </aside>
-        </>
-      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
            EDITOR SECTION — Main canvas area with multi-page rendering
            Each page renders the source document (PDF/image) and overlays fields.
          ═══════════════════════════════════════════════════════════════════ */}
-      <section ref={editorRef} className="editor" style={{ marginLeft: 48 }} tabIndex={-1} onClick={() => { if (!marqueeJustEndedRef.current) handleSelectField(null); }}>
+      <section ref={editorRef} className="editor" style={{}} tabIndex={-1} onClick={() => { if (!marqueeJustEndedRef.current) handleSelectField(null); }}>
         {/* Breadcrumb navigation when a folder is selected */}
         {selectedFolderId && (
           <div className="breadcrumb">

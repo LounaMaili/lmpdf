@@ -3533,3 +3533,30 @@ body {
     bottom: 0;
   }
 }
+
+/* ── Panel expanded: slide in/out, non-blocking ── */
+.panel-backdrop { display: none; }
+
+/* Panel slides in from the left */
+.panel-expanded {
+  position: fixed;
+  top: var(--toolbar-h, 48px);
+  left: 48px;
+  bottom: 0;
+  width: 280px;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  overflow-y: auto;
+  z-index: 5;
+  box-shadow: 4px 0 16px rgba(0,0,0,0.08);
+  padding-bottom: 80px;
+  transform: translateX(-120%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.panel-expanded.visible {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
