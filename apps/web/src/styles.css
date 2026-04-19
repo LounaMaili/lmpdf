@@ -356,33 +356,6 @@ body {
   font-size: 10px;
 }
 
-.panel-section {
-  margin-bottom: 0;
-  border: 1px solid #e8edf3;
-  border-radius: 10px;
-  background: #fcfdff;
-  overflow: hidden;
-}
-
-.panel-section > summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #1f2937;
-  background: #f7f9fc;
-  border-bottom: 1px solid transparent;
-}
-
-.panel-section[open] > summary {
-  border-bottom-color: #e8edf3;
-}
-
-.panel-section > :not(summary) {
-  padding-left: 10px;
-  padding-right: 10px;
-}
 
 .panel-meta-grid {
   display: grid;
