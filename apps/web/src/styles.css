@@ -3709,3 +3709,18 @@ body {
   color: #1e40af;
 }
 
+
+/* ── Expanded panel: ensure sections are visible ── */
+.panel-expanded .panel-section {
+  display: block !important;
+  visibility: visible !important;
+}
+
+.panel-expanded details {
+  display: block;
+}
+
+.panel-expanded details > * {
+  display: block;
+}
+
