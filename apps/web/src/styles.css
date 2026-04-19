@@ -4081,16 +4081,16 @@ body {
     display: none;
   }
   .right-panel-wrapper {
-    top: auto;
+    top: 48px;
     bottom: 56px;
     left: 0;
     right: 0;
     width: 100vw;
-    max-height: 65vh;
     border-left: none;
     border-top: 1px solid #e2e8f0;
-    border-radius: 16px 16px 0 0;
-    box-shadow: 0 -6px 24px rgba(0,0,0,0.15);
+    border-radius: 0;
+    box-shadow: none;
+    z-index: 40;
   }
   /* Right toggle in bottom dock: show, styled as panel-icon-btn */
   .panel-icon-bar .right-toggle {
