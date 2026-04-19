@@ -4081,12 +4081,12 @@ body {
   }
   .right-panel-wrapper {
     top: 0;
-    bottom: 56px;
+    bottom: 0;
     left: 0;
     right: 0;
     width: 100vw;
     border-left: none;
-    border-top: 1px solid #e2e8f0;
+    border-top: none;
     z-index: 40;
     box-shadow: none;
   }
