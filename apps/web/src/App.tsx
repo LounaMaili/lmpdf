@@ -2358,35 +2358,35 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
          ═══════════════════════════════════════════════════════════ */}
             {/* ── Compact icon bar (always visible) ── */}
       <aside className={`panel-icon-bar ${panelExpanded ? 'expanded' : ''}`}>
-        {/* Upload */}
-        <button className="panel-icon-btn" title={t('panel.importPdfImage')} disabled={!rolePermissions.uploadDocument} onClick={() => setPanelExpanded(true)}>
+        {/* Upload — triggers file picker */}
+        <button className="panel-icon-btn" title={t('panel.importPdfImage')} disabled={!rolePermissions.uploadDocument} onClick={() => { document.querySelector<HTMLInputElement>('.upload-label input')?.click(); }}>
           <UploadIcon size={18} />
         </button>
 
         {/* Add field */}
-        <button className="panel-icon-btn" title={t('toolbar.addField')} disabled={!canEditStructure} onClick={() => { addField(); setPanelExpanded(true); }}>
+        <button className="panel-icon-btn" title={t('toolbar.addField')} disabled={!canEditStructure} onClick={() => { addField(); }}>
           <PlusIcon size={18} />
         </button>
 
         {/* Add page */}
-        <button className="panel-icon-btn" title={t('toolbar.addPage')} disabled={!canEditStructure} onClick={() => { addPage(); setPanelExpanded(true); }}>
+        <button className="panel-icon-btn" title={t('toolbar.addPage')} disabled={!canEditStructure} onClick={() => { addPage(); }}>
           <LayoutIcon size={18} />
         </button>
 
-        {/* Fill mode */}
+        {/* Fill mode toggle */}
         <button className={`panel-icon-btn ${fillMode ? 'active' : ''}`} title={fillMode ? 'Switch to edit mode' : 'Switch to fill mode'} onClick={() => setFillMode((v) => !v)}>
           {fillMode ? <EditIcon size={18} /> : <EyeIcon size={18} />}
         </button>
 
         {/* Detect fields */}
         {sourceFileId && (
-          <button className="panel-icon-btn" title={t('panel.detect')} disabled={isDetecting} onClick={() => { setPanelExpanded(true); }}>
+          <button className="panel-icon-btn" title={t('panel.detect')} disabled={isDetecting} onClick={() => { if (!canEditStructure || !sourceFileId || isDetecting) return; setIsDetecting(true); setStatus(t('status.detecting')); const detectPreset = { low: { sensitivity: 'low', maxDetectWidth: 1200 }, normal: { sensitivity: 'normal', maxDetectWidth: 1800 }, high: { sensitivity: 'high', maxDetectWidth: 2400 } } as const; detectFields(sourceFileId, { targetWidth: pageW, targetHeight: pageH, rotation, ...detectPreset[detectSensitivity], dottedAsLine: detectDottedAsLine }).then(result => { if (result.error) { setStatus(t('status.detectionError', { error: result.error })); return; } if (!result.suggestedFields.length) { setStatus(t('status.noFieldDetected')); return; } const newFields = result.suggestedFields.map(sf => ({ id: sf.id || crypto.randomUUID(), label: sf.label || t('status.defaultFieldLabel'), value: '', x: sf.x, y: sf.y, w: Math.max(16, sf.w), h: Math.max(10, sf.h), type: (sf.type === 'checkbox' ? 'checkbox' : 'text') as FieldType, style: { fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, textAlign: 'left' as const, color: preset.color }, locked: false, overlayVisible: true, pageNumber: activePage })); setFields(prev => [...prev, ...newFields]); setDirty(true); setStatus(t('status.fieldsDetected', { count: newFields.length })); }).catch(err => { setStatus(err instanceof Error ? err.message : t('status.errorFallback')); }).finally(() => { setIsDetecting(false); }); }}>
             <WandIcon size={18} />
           </button>
         )}
 
-        {/* Expand / collapse */}
-        <button className="panel-icon-btn" title={panelExpanded ? 'Collapse panel' : 'Expand panel'} onClick={() => setPanelExpanded((v) => !v)}>
+        {/* Toggle panel */}
+        <button className={`panel-icon-btn ${panelExpanded ? 'active' : ''}`} title={panelExpanded ? 'Hide tools' : 'Show tools'} onClick={() => setPanelExpanded((v) => !v)}>
           {panelExpanded ? <PanelRightIcon size={18} /> : <PanelLeftIcon size={18} />}
         </button>
       </aside>
@@ -2394,7 +2394,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       {/* ── Expanded panel (overlay when expanded) ── */}
       {panelExpanded && (
         <>
-          <div className="panel-backdrop" onClick={() => setPanelExpanded(false)} />
+          <div className="panel-backdrop" />
           <aside className="panel panel-expanded">
             <div className="panel-header">
               <span>{t('panel.tools')}</span>
