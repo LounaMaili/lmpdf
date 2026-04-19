@@ -557,7 +557,9 @@ body { margin: 0; background: #f3f5f8; }
 .editor {
   grid-area: editor;
   display: flex; justify-content: center; align-items: flex-start;
-  padding: 20px; overflow: auto;
+  padding: 12px; overflow: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .page-zoom-wrapper { flex-shrink: 0; overflow: hidden; }
