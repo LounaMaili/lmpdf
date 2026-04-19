@@ -562,20 +562,14 @@ body { margin: 0; background: #f3f5f8; }
   box-sizing: border-box;
 }
 
-.page-zoom-wrapper { flex-shrink: 0; overflow: visible !important; width: 100%; border: 10px solid blue; min-height: 600px; display: block !important; }
+.page-zoom-wrapper { flex-shrink: 0; overflow: hidden; }
 
 .page {
   position: relative;
-  background: #ff0000 !important;
+  background: var(--color-white);
   box-shadow: var(--shadow-page);
   overflow: hidden;
-  border: 10px solid yellow;
-  min-height: 600px;
-  padding: 40px;
-  z-index: 1;
-  box-sizing: border-box;
 }
-.page::before { content: 'PAGE ELEMENT'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 48px; font-weight: bold; color: white; z-index: 999; pointer-events: none; }
 
 .scan-image {
   position: absolute; inset: 0; width: 100%; height: 100%;
@@ -621,7 +615,7 @@ body { margin: 0; background: #f3f5f8; }
 .pdf-pagination button:disabled { color: #ccc; cursor: default; }
 
 /* Multi-page stack */
-.multi-pages-stack { position: relative; border: 3px solid green; min-height: 400px; }
+.multi-pages-stack { position: relative; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    13. EDITOR — Zoom / Rotation / Fit Mode Controls
@@ -1499,20 +1493,10 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
 
 /* Large phone (600px): icon bar → bottom dock */
 @media (max-width: 600px) {
-  /* Full-width editor: icon bar and right panel are now fixed/docked */
-  .app {
-    grid-template-columns: 0 minmax(0, 1fr) 0 !important;
-    grid-template-areas: 'toolbar toolbar' 'editor editor' !important;
-  }
-  /* Hide the grid areas that are now handled by fixed elements */
-  .panel-icon-bar,
-  .right-panel-wrapper {
-    /* fixed positioning handles these */
-  }
   .app-toolbar.app-toolbar-single-row { padding: 2px 4px; gap: 2px; }
   .toolbar-group-brand,
   .toolbar-status-text,
-  .toolbar-doc-name { display: none; }
+  .toolbar-group-doc .toolbar-doc-name { display: none; }
   .toolbar-group-right { gap: 4px; }
 
   /* Icon bar → bottom dock (always visible, blue top border) */
@@ -1552,7 +1536,7 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
 
 
   /* Editor: full width, bottom padding for dock */
-  .editor { padding: 8px !important; padding-bottom: 64px !important; overflow: hidden !important; }
+  .editor { padding: 8px !important; padding-bottom: 64px !important; }
 }
 
 @media (min-width: 601px) {
