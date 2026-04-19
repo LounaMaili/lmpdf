@@ -624,5 +624,9 @@
     "confirmExecute": "Confirmer",
     "noMfaConfigured": "Aucun MFA configuré pour cet utilisateur.",
     "openButton": "🛡️ Gestion MFA utilisateurs"
+  },
+  "theme": {
+    "dark": "Passer en thème sombre",
+    "light": "Passer en thème clair"
   }
 }

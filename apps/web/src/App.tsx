@@ -37,7 +37,7 @@ import {
   LockIcon, UnlockIcon, TrashIcon, EditIcon, EyeIcon,
   RotateLeftIcon, RotateRightIcon, ZoomInIcon, ZoomOutIcon,
   UserIcon, ShieldIcon, UploadIcon, CloudUploadIcon, CloudDownloadIcon,
-  PlusIcon, LayoutIcon, WandIcon, PanelLeftIcon, PanelRightIcon,
+  PlusIcon, LayoutIcon, WandIcon, PanelLeftIcon, PanelRightIcon, SunIcon, MoonIcon,
 } from './components/Icons';
 import type { FolderModel } from './api';
 import { defaultDocumentPreset, defaultFieldStyle } from './types';
@@ -2060,6 +2060,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [rightPanelExpanded, setRightPanelExpanded] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('lmpdf-dark') === 'true');
+  useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; localStorage.setItem('lmpdf-dark', String(darkMode)); }, [darkMode]);
 
   /**
    * Check if server-side export is available for the current template/document context.
@@ -2333,6 +2335,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
         {/* ── Right: User menu ── */}
         <div className="toolbar-group toolbar-group-right">
+          {/* Dark mode toggle */}
+          <button className="toolbar-user-btn theme-toggle" onClick={() => setDarkMode((v) => !v)} title={darkMode ? t('theme.light') : t('theme.dark')}>
+            {darkMode ? <SunIcon size={16} /> : <MoonIcon size={16} />}
+          </button>
           {/* User info area: name, MFA, admin, logout */}
           {currentUser && (
             <div className="toolbar-user-area">

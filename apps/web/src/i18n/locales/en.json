@@ -612,5 +612,9 @@
     "confirmExecute": "Confirm",
     "noMfaConfigured": "No MFA configured for this user.",
     "openButton": "🛡️ User MFA Management"
+  },
+  "theme": {
+    "dark": "Switch to dark theme",
+    "light": "Switch to light theme"
   }
 }
