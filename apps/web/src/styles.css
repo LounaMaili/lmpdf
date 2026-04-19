@@ -3754,26 +3754,33 @@ body {
 }
 
 
-/* ── Expanded panel: ensure sections are visible ── */
-.panel-expanded .panel-section {
-  display: block !important;
-  visibility: visible !important;
-}
-
-.panel-expanded details {
-  display: block;
-}
-
-.panel-expanded details > * {
-  display: block;
-}
-
-
-/* ── Panel expanded: column layout (overrides .panel row) ── */
+/* ── Panel expanded: column layout, sections as flex children ── */
 .panel-expanded {
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
   justify-content: flex-start !important;
+}
+
+/* Ensure panel-section participates in the flex column */
+.panel-expanded .panel-section {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-shrink: 0 !important;
+  visibility: visible !important;
+  min-width: 0 !important;
+}
+
+/* Make details a flex column */
+.panel-expanded details {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-shrink: 0 !important;
+}
+
+/* Children of details are block-level */
+.panel-expanded details > * {
+  display: block !important;
+  min-width: 0 !important;
 }
 
