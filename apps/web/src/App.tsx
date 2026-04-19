@@ -2358,7 +2358,15 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
          ═══════════════════════════════════════════════════════════ */}
             {/* ── Compact icon bar (always visible) ── */}
       <aside className={`panel-icon-bar ${panelExpanded ? 'expanded' : ''}`}>
-        {/* Upload — visible file input in icon bar */}
+        {/* Toggle panel — always first */}
+        <button className={`panel-icon-btn ${panelExpanded ? 'active' : ''}`} title={panelExpanded ? 'Hide tools' : 'Show tools'} onClick={() => setPanelExpanded((v) => !v)}>
+          {panelExpanded ? <PanelRightIcon size={18} /> : <PanelLeftIcon size={18} />}
+        </button>
+
+        {/* Divider */}
+        <div className="panel-icon-divider" />
+
+        {/* Upload */}
         <label className="panel-upload-btn" title={t('panel.importPdfImage')}>
           <UploadIcon size={18} />
           <input type="file" accept="application/pdf,image/*" onChange={onUpload} disabled={!rolePermissions.uploadDocument} style={{ display: 'none' }} />
@@ -2385,20 +2393,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             <WandIcon size={18} />
           </button>
         )}
-
-        {/* Toggle panel */}
-        <button className={`panel-icon-btn ${panelExpanded ? 'active' : ''}`} title={panelExpanded ? 'Hide tools' : 'Show tools'} onClick={() => setPanelExpanded((v) => !v)}>
-          {panelExpanded ? <PanelRightIcon size={18} /> : <PanelLeftIcon size={18} />}
-        </button>
       </aside>
 
       {/* ── Expanded panel (slides in, non-blocking) ── */}
       <aside className={`panel panel-expanded ${panelExpanded ? 'visible' : ''}`}>
         <div className="panel-header">
           <span>{t('panel.tools')}</span>
-          <button className="panel-icon-btn" onClick={() => setPanelExpanded(false)}>
-            <PanelRightIcon size={16} />
-          </button>
+          <span className="panel-hint">{'←'} close</span>
         </div>
 
             <div className="panel-shortcuts">
@@ -2500,6 +2501,48 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 </button>
               </details>
             )}
+
+            {/* ── Default style section: font family, size, weight, color ── */}
+            <details className="panel-section">
+              <summary>{t('panel.defaultStyle')}</summary>
+              <label>
+                {t('panel.font')}
+                <select value={preset.fontFamily}
+                  onChange={(e) => setPreset((p) => ({ ...p, fontFamily: e.target.value }))}>
+                  {['Arial, sans-serif', 'Helvetica, sans-serif', 'Times New Roman, serif', 'Courier New, monospace', 'Georgia, serif', 'Verdana, sans-serif'].map((f) => (
+                    <option key={f} value={f}>{f.split(',')[0]}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t('panel.fontSize')}
+                <select value={preset.fontSize}
+                  onChange={(e) => setPreset((p) => ({ ...p, fontSize: Number(e.target.value) }))}>
+                  {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32].map((s) => (
+                    <option key={s} value={s}>{s}px</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t('panel.fontWeight')}
+                <select value={preset.fontWeight}
+                  onChange={(e) => setPreset((p) => ({ ...p, fontWeight: e.target.value as 'normal' | 'bold' }))}>
+                  <option value="normal">{t('panel.fontWeightNormal')}</option>
+                  <option value="bold">{t('panel.fontWeightBold')}</option>
+                </select>
+              </label>
+              <label>
+                {t('panel.color')}
+                <input type="color" value={preset.color}
+                  onChange={(e) => setPreset((p) => ({ ...p, color: e.target.value }))} />
+              </label>
+              <button className="btn-default-style" onClick={() => {
+                setFields((prev) => prev.map((f) => ({
+                  ...f, style: { ...f.style, fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, color: preset.color }
+                })));
+                setStatus(t('status.presetApplied'));
+              }}>{t('panel.applyToAllFields')}</button>
+            </details>
 
           </aside>
 

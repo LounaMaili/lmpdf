@@ -3577,3 +3577,114 @@ body {
 .panel-upload-btn:hover:not(:disabled) { background: #e8edf5; color: #1e293b; }
 .panel-upload-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
+
+/* ── Icon bar divider ── */
+.panel-icon-divider {
+  width: 24px;
+  height: 1px;
+  background: #e2e8f0;
+  margin: 2px 0;
+}
+
+/* ── Panel hint text ── */
+.panel-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* ── Panel sections: match toolbar theme ── */
+.panel-section {
+  border-radius: 8px;
+  margin: 0 8px 4px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.panel-section summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.panel-section summary::-webkit-details-marker { display: none; }
+
+.panel-section details[open] > summary {
+  border-bottom: 1px solid #e2e8f0;
+  color: #1e293b;
+}
+
+/* Panel inputs */
+.panel-section label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  margin: 0 12px 6px;
+}
+
+.panel-section label select,
+.panel-section label input[type="range"] {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.panel-section select {
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #fff;
+  color: #111827;
+}
+
+.panel-section select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+/* Color input in panel */
+.panel-section input[type="color"] {
+  width: 100%;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+/* Default style apply button */
+.btn-default-style {
+  margin: 4px 12px 10px;
+  padding: 6px 12px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  width: calc(100% - 24px);
+}
+
+.btn-default-style:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+/* Compact input in panel */
+.panel-section input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+

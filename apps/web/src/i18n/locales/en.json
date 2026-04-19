@@ -198,7 +198,8 @@
     "pageLabel": "Page {n}",
     "nFields": "{count} fields",
     "fields": "Fields",
-    "templates": "Templates"
+    "templates": "Templates",
+    "defaultStyle": "Default Style"
   },
   "fields": {
     "label": "Label",
