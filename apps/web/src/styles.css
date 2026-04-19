@@ -1546,7 +1546,7 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
 
 
   /* Editor: full width, bottom padding for dock */
-  .editor { padding: 8px !important; padding-bottom: 64px !important; }
+  .editor { padding: 8px !important; padding-bottom: 64px !important; overflow: hidden !important; }
 }
 
 @media (min-width: 601px) {
