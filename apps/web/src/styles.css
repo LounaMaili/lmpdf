@@ -3837,3 +3837,117 @@ body {
   font-weight: 600;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE — Toolbar + Icon Bar + Panel
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Tablet — 900px : toolbar compact, hide less-used controls */
+@media (max-width: 900px) {
+  .toolbar-group-controls {
+    display: none; /* Hide zoom/rotate controls on tablet */
+  }
+  .toolbar-group-doc .toolbar-doc-name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .panel-icon-bar {
+    width: 44px;
+    padding: 6px 4px;
+  }
+}
+
+/* Small tablet — 768px : icon bar only, panel becomes overlay */
+@media (max-width: 768px) {
+  .toolbar-group-brand .toolbar-brand {
+    display: none; /* Hide "LMPdf" text, keep only icon */
+  }
+  .toolbar-file-menu-btn span {
+    display: none; /* Hide "Fichier" text */
+  }
+  .toolbar-group-right .toolbar-user-area {
+    gap: 4px;
+  }
+  .panel-icon-bar {
+    width: 40px;
+    padding: 4px 3px;
+  }
+  .panel-icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .panel-expanded {
+    left: 40px;
+    width: 260px;
+  }
+}
+
+/* Mobile — 600px : minimal toolbar, icon bar, panel full-width */
+@media (max-width: 600px) {
+  /* Toolbar: single row, simplified */
+  .app-toolbar.app-toolbar-single-row {
+    padding: 3px 6px;
+    gap: 4px;
+  }
+  .toolbar-group-brand .toolbar-brand,
+  .toolbar-group-brand .toolbar-file-menu-wrap {
+    display: none;
+  }
+  /* Hide status text */
+  .toolbar-status-text {
+    display: none;
+  }
+  /* Icon bar: minimal, bottom-fixed option */
+  .panel-icon-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100%;
+    height: 48px;
+    flex-direction: row;
+    justify-content: space-around;
+    padding: 4px;
+    border-right: none;
+    border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+    z-index: 50;
+  }
+  .panel-icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .panel-icon-divider {
+    width: 1px;
+    height: 24px;
+    margin: 0 2px;
+  }
+  /* Panel expanded: full-width overlay at bottom */
+  .panel-expanded {
+    top: auto;
+    bottom: 52px;
+    left: 0;
+    width: 100vw;
+    max-height: 70vh;
+    border-right: none;
+    border-top: 1px solid #e2e8f0;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+  }
+  /* Editor adjusts for bottom icon bar */
+  .editor {
+    margin-left: 0 !important;
+    margin-bottom: 56px !important;
+  }
+}
+
+/* Large desktop — prevent toolbar from getting too wide */
+@media (min-width: 1400px) {
+  .toolbar-group-doc {
+    max-width: 500px;
+  }
+}
+
