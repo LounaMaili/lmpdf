@@ -2418,14 +2418,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 <button onClick={duplicateActivePage} disabled={!sourceUrl || !canEditStructure}>{t('toolbar.duplicatePage')}</button>
                 <button onClick={deleteActivePage} disabled={pageCount <= 1 || !canEditStructure}>{t('toolbar.deletePage')}</button>
               </div>
-              <button style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:5,padding:'7px 10px',border:'1px solid #e2e8f0',borderRadius:7,background:fillMode?'#eff6ff':'#fff',color:fillMode?'#1d4ed8':'#374151',fontSize:12,fontWeight:fillMode?600:500,cursor:'pointer',width:'100%'}} onClick={() => setFillMode(v => !v)}>
+              <button className={`panel-action-btn ${fillMode ? 'active' : ''}`} onClick={() => setFillMode(v => !v)}>
                 {fillMode ? t('panel.fillModeOn') : t('panel.fillModeOff')}
               </button>
-              <button style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:5,padding:'7px 10px',border:'1px solid #e2e8f0',borderRadius:7,background:'#fff',color:'#374151',fontSize:11,fontWeight:500,cursor:'pointer',width:'100%'}} onClick={() => setShowDebugOrder(v => !v)}>
+              <button className={`panel-action-btn ${showDebugOrder ? 'active' : ''}`} onClick={() => setShowDebugOrder(v => !v)}>
                 {showDebugOrder ? t('panel.debugOrderOn') : t('panel.debugOrderOff')}
               </button>
               {fields.length > 0 && (
-                <button style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:5,padding:'7px 10px',border:'1px solid #fca5a5',borderRadius:7,background:'#fff',color:'#dc2626',fontSize:12,fontWeight:500,cursor:'pointer',width:'100%'}} disabled={fillMode} onClick={() => {
+                <button className="panel-action-btn danger" disabled={fillMode} onClick={() => {
                   if (window.confirm(t('panel.deleteAllFieldsConfirm', { count: fields.length }))) {
                     setFields([]); setSelectedFieldId(null); setMultiSelectedIds(new Set()); setDirty(true);
                     setStatus(t('status.fieldsDeleted', { count: fields.length }));
@@ -2453,7 +2453,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     onChange={(e) => setDetectDottedAsLine(e.target.checked)} />
                   {t('panel.dottedAsLine')}
                 </label>
-                <button style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:5,padding:'7px 10px',border:'1px solid #e2e8f0',borderRadius:7,background:'#fff',color:'#374151',fontSize:12,fontWeight:500,cursor:'pointer',width:'100%'}} disabled={!canEditStructure || isDetecting}
+                <button className="panel-action-btn" disabled={!canEditStructure || isDetecting}
                   onClick={async () => {
                     if (!canEditStructure) { setStatus(t('status.insufficientRightsStructure')); return; }
                     if (!sourceFileId || isDetecting) return;
@@ -2527,7 +2527,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 <input type="color" value={preset.color}
                   onChange={(e) => setPreset((p) => ({ ...p, color: e.target.value }))} />
               </label>
-              <button style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:5,padding:'7px 10px',border:'1px solid #e2e8f0',borderRadius:7,background:'#fff',color:'#374151',fontSize:12,fontWeight:500,cursor:'pointer',width:'100%'}} onClick={() => {
+              <button className="panel-action-btn" onClick={() => {
                 setFields((prev) => prev.map((f) => ({
                   ...f, style: { ...f.style, fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, color: preset.color }
                 })));

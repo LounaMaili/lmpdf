@@ -3784,3 +3784,47 @@ body {
   min-width: 0 !important;
 }
 
+
+/* ── Panel action buttons — toolbar-dropdown style ── */
+.panel-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  margin: 4px 12px;
+  width: calc(100% - 24px);
+  border: 1px solid #94a3b8;
+  border-radius: 7px;
+  background: #fff;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.panel-action-btn:hover {
+  background: #f0f4ff;
+  border-color: #3b82f6;
+  color: #1e40af;
+}
+
+.panel-action-btn.danger {
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+.panel-action-btn.danger:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+
+.panel-action-btn.active {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  color: #1e40af;
+  font-weight: 600;
+}
+
