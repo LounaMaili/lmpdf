@@ -3560,3 +3560,20 @@ body {
   pointer-events: auto;
 }
 
+
+/* ── Upload button in icon bar (label wraps input) ── */
+.panel-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #475569;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.panel-upload-btn:hover:not(:disabled) { background: #e8edf5; color: #1e293b; }
+.panel-upload-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+

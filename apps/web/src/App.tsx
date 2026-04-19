@@ -2358,10 +2358,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
          ═══════════════════════════════════════════════════════════ */}
             {/* ── Compact icon bar (always visible) ── */}
       <aside className={`panel-icon-bar ${panelExpanded ? 'expanded' : ''}`}>
-        {/* Upload — triggers file picker */}
-        <button className="panel-icon-btn" title={t('panel.importPdfImage')} disabled={!rolePermissions.uploadDocument} onClick={() => { document.querySelector<HTMLInputElement>('.upload-label input')?.click(); }}>
+        {/* Upload — visible file input in icon bar */}
+        <label className="panel-upload-btn" title={t('panel.importPdfImage')}>
           <UploadIcon size={18} />
-        </button>
+          <input type="file" accept="application/pdf,image/*" onChange={onUpload} disabled={!rolePermissions.uploadDocument} style={{ display: 'none' }} />
+        </label>
 
         {/* Add field */}
         <button className="panel-icon-btn" title={t('toolbar.addField')} disabled={!canEditStructure} onClick={() => { addField(); }}>
