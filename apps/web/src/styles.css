@@ -562,7 +562,7 @@ body { margin: 0; background: #f3f5f8; }
   box-sizing: border-box;
 }
 
-.page-zoom-wrapper { flex-shrink: 0; overflow: hidden; width: 100%; border: 3px solid blue; }
+.page-zoom-wrapper { flex-shrink: 0; overflow: hidden; width: 100%; border: 3px solid blue; min-height: 200px; }
 
 .page {
   position: relative;
@@ -570,6 +570,7 @@ body { margin: 0; background: #f3f5f8; }
   box-shadow: var(--shadow-page);
   overflow: hidden;
   border: 3px solid red;
+  min-height: 200px;
 }
 
 .scan-image {
