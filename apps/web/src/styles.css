@@ -1493,6 +1493,18 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
   /* Mobile app layout: single column, only toolbar + editor visible */
   .app { grid-template-columns: 0 1fr 0 !important; grid-template-areas: 'toolbar toolbar' 'editor editor' !important; }
   .panel, .props { display: none !important; }
+
+  /* Editor: full width, no overflow clipping */
+  .editor { width: 100% !important; overflow: visible !important; height: auto !important; }
+
+  /* Page zoom wrapper: fills width, visible */
+  .page-zoom-wrapper { width: 100% !important; height: auto !important; overflow: visible !important; display: flex !important; }
+
+  /* Page: ensure it's visible */
+  .page { width: 100% !important; min-height: 150px !important; }
+
+  /* Multi-page stack: column layout */
+  .multi-pages-stack { display: flex !important; flex-direction: column !important; gap: 12px !important; }
 }
 
 /* Large phone (600px): icon bar → bottom dock */
