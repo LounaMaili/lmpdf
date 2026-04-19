@@ -445,11 +445,20 @@ body {
   margin-top: 8px;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid #ddd;
-  background: #111;
-  color: #fff;
+  border: 1px solid #94a3b8;
+  background: #fff;
+  color: #1e293b;
   cursor: pointer;
   font-size: 13px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.panel button:hover,
+.properties-panel button:not(.btn-delete):hover {
+  background: #f0f4ff;
+  border-color: #3b82f6;
+  color: #1e40af;
 }
 
 .status {
