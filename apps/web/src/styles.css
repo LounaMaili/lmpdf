@@ -1448,21 +1448,32 @@ body {
 
 /* ===== DETECT BUTTON ===== */
 .btn-detect {
-  margin-top: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 2px solid #10b981;
-  background: #ecfdf5;
-  color: #059669;
-  font-weight: 600;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 8px 12px 4px;
+  padding: 7px 12px;
+  width: calc(100% - 24px);
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .btn-detect:hover {
-  background: #10b981;
-  color: #fff;
+  background: #f0f4ff;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+.btn-detect:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .detect-preset-desc {
@@ -3636,7 +3647,7 @@ body {
   font-size: 12px;
   font-weight: 500;
   color: #374151;
-  margin: 0 12px 6px;
+  margin: 0 12px 8px;
 }
 
 .panel-section label select,
