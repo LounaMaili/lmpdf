@@ -570,7 +570,7 @@ body { margin: 0; background: #f3f5f8; }
   box-shadow: var(--shadow-page);
   overflow: hidden;
   border: 3px solid red;
-  min-height: 200px;
+  min-height: 400px;
 }
 
 .scan-image {
@@ -617,7 +617,7 @@ body { margin: 0; background: #f3f5f8; }
 .pdf-pagination button:disabled { color: #ccc; cursor: default; }
 
 /* Multi-page stack */
-.multi-pages-stack { position: relative; border: 3px solid green; }
+.multi-pages-stack { position: relative; border: 3px solid green; min-height: 400px; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    13. EDITOR — Zoom / Rotation / Fit Mode Controls
