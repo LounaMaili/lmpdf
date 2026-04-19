@@ -562,7 +562,7 @@ body { margin: 0; background: #f3f5f8; }
   box-sizing: border-box;
 }
 
-.page-zoom-wrapper { flex-shrink: 0; overflow: hidden; }
+.page-zoom-wrapper { flex-shrink: 0; overflow: hidden; width: 100%; }
 
 .page {
   position: relative;
@@ -1493,10 +1493,20 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
 
 /* Large phone (600px): icon bar → bottom dock */
 @media (max-width: 600px) {
+  /* Full-width editor: icon bar and right panel are now fixed/docked */
+  .app {
+    grid-template-columns: 0 minmax(0, 1fr) 0 !important;
+    grid-template-areas: 'toolbar toolbar' 'editor editor' !important;
+  }
+  /* Hide the grid areas that are now handled by fixed elements */
+  .panel-icon-bar,
+  .right-panel-wrapper {
+    /* fixed positioning handles these */
+  }
   .app-toolbar.app-toolbar-single-row { padding: 2px 4px; gap: 2px; }
   .toolbar-group-brand,
   .toolbar-status-text,
-  .toolbar-group-doc .toolbar-doc-name { display: none; }
+  .toolbar-doc-name { display: none; }
   .toolbar-group-right { gap: 4px; }
 
   /* Icon bar → bottom dock (always visible, blue top border) */
