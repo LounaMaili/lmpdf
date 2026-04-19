@@ -1489,6 +1489,10 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
   .panel-icon-btn { width: 32px; height: 32px; }
   .panel-expanded { left: 40px; width: 260px; }
   .editor { padding: 10px; }
+
+  /* Mobile app layout: single column, only toolbar + editor visible */
+  .app { grid-template-columns: 0 1fr 0 !important; grid-template-areas: 'toolbar toolbar' 'editor editor' !important; }
+  .panel, .props { display: none !important; }
 }
 
 /* Large phone (600px): icon bar → bottom dock */
