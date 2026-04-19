@@ -4064,14 +4064,12 @@ body {
   transform: translateX(100%);
   visibility: hidden;
   opacity: 0;
-  pointer-events: none;
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, visibility 0.2s;
 }
 .right-panel-wrapper.visible {
   transform: translateX(0);
   visibility: visible;
   opacity: 1;
-  pointer-events: auto;
 }
 
 /* Mobile: right panel is a bottom sheet */
