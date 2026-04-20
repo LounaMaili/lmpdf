@@ -476,12 +476,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     const availableH = Math.max(200, el.clientHeight - 32);
     const fit = fitMode === 'width' ? (availableW / w) : Math.min(availableW / w, availableH / h);
 
-    // In 'width' fit mode: if the document at 100% has > 50px margin on each side,
+    // In 'width' fit mode: if the document at 100% has > 100px margin on each side,
     // allow the document to scale up beyond 100% to fill the available space.
     // In 'page' fit mode: never exceed 100% (page must fit within viewport).
     let effectiveFit = fit;
     if (fitMode === 'width' && fit < 1.0) {
-      const excessW = availableW - w; // extra space if doc shown at 100%
+      // fit < 1.0 means document at 100% is smaller than available space
+      // Check if there's enough excess space to justify zooming in
+      const excessW = availableW - w;
       if (excessW > 100) {
         // How much would we need to zoom so the page fills the available width?
         effectiveFit = availableW / w;
@@ -624,6 +626,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   useEffect(() => {
     applyFitZoom(pageW, pageH);
   }, [fitMode, pageW, pageH, applyFitZoom]);
+
+  // Recalculate zoom when window is resized (editor.availableWidth changes)
+  useEffect(() => {
+    const handler = () => applyFitZoom(pageW, pageH);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [pageW, pageH, applyFitZoom]);
 
   /** Callback when the source image loads and its natural dimensions become available. */
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
