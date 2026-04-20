@@ -566,8 +566,8 @@ body { margin: 0; background: #f3f5f8; }
 .editor {
   grid-area: editor;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   padding: 12px;
   overflow: auto;
   width: 100%;
@@ -582,12 +582,8 @@ body { margin: 0; background: #f3f5f8; }
 }
 
 .page-zoom-wrapper {
-  overflow: hidden;
   flex-shrink: 0;
-  margin: 0 auto;
   box-sizing: border-box;
-  /* Wrapper is sized at dispW × dispH (natural page dimensions). 
-     CSS transform handles the zoom, keeping layout in sync with visual size. */
 }
 
 .page {
