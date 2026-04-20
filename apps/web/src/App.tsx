@@ -495,12 +495,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
     const clamped = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], effectiveFit));
 
-    // Snap to largest step that fits within available space
-    // Use maxZoom directly to guarantee no overflow
-    const maxZoom = availableW / w;
+    // Snap to largest step <= clamped (document never exceeds available space)
     let best = 0;
     for (let i = 0; i < ZOOM_STEPS.length; i++) {
-      if (ZOOM_STEPS[i] <= maxZoom) best = i;
+      if (ZOOM_STEPS[i] <= clamped) best = i;
     }
     setZoomIndex(best);
   }, [fitMode]);
@@ -2207,11 +2205,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const isPdf = sourceMime === 'application/pdf';
 
   // ── Wrapper has no transform — sized at visual dimensions ──
-  // The wrapper layout = visual size (dispW*zoom × dispH*zoom).
-  // The page inside uses scale(zoom) to visually shrink to fit.
+  // Wrapper is sized at dispW*zoom × dispH*zoom (visual = layout, no divergence).
+  // The page inside uses scale(zoom) + rotation transform.
+  // NOTE: scale() causes layout box (pageW × pageH) to differ from visual size.
+  // This divergence is the root cause of the "document too far right" bug.
 
   // ── Page rotation transform (applied to .page inside wrapper) ──
-  // Only rotation — zoom is applied via CSS zoom property (affects layout)
+  // Only rotation — zoom is applied via transform: scale() (NOT CSS zoom property)
   const pageRotation = (() => {
     if (rotation === 90) return `translate(${pageH}px, 0) rotate(90deg)`;
     if (rotation === 180) return `translate(${pageW}px, ${pageH}px) rotate(180deg)`;
@@ -2667,14 +2667,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           {/* Render each page with its zoom wrapper and field overlays */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
             <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
-              {/* Page container: CSS zoom property (affects layout, unlike transform:scale) + rotation */}
+              {/* Page container: scale for zoom + rotation */}
               <div
                 className="page"
                 style={{
                   width: pageW,
                   height: pageH,
-                  zoom: zoom as number,
-                  transform: pageRotation || undefined,
+                  transform: `scale(${zoom})${pageRotation ? ' ' + pageRotation : ''}`,
                   transformOrigin: 'top left',
                   outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
                 }}

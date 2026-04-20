@@ -555,19 +555,17 @@ body { margin: 0; background: #f3f5f8; }
    12. EDITOR — Page, Zoom, PDF Viewer
    ───────────────────────────────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────────────────────────────────
-   12. EDITOR — Document Display (clean rewrite)
-   Layout: .editor > .multi-pages-stack > .page-zoom-wrapper > .page
-   - .editor: flex container, scrollable, normal padding
-   - .multi-pages-stack: vertical stack of pages
-   - .page-zoom-wrapper: sized at dispW*zoom × dispH*zoom, clips overflow
+   12. EDITOR — Document Display
+   Layout: .editor (grid item) > .multi-pages-stack (flex column) > .page-zoom-wrapper > .page
+   - .editor: grid-area editor, NOT a flex container. Scrollable via overflow: auto.
+   - .multi-pages-stack: flex column, align-items: center (centers pages horizontally)
+   - .page-zoom-wrapper: sized at dispW*zoom × dispH*zoom, overflow: hidden
    - .page: natural pageW × pageH with transform: scale(zoom) + rotation
+   - NOTE: scale() causes layout box (pageW × pageH) to differ from visual size → bug
    ───────────────────────────────────────────────────────────────────────────── */
 
 .editor {
   grid-area: editor;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
   padding: 12px;
   overflow: auto;
   width: 100%;
@@ -579,6 +577,7 @@ body { margin: 0; background: #f3f5f8; }
   display: flex;
   flex-direction: column;
   gap: 16px;
+  align-items: center;
 }
 
 .page-zoom-wrapper {
