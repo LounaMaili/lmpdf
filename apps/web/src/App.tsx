@@ -410,6 +410,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [isDetecting, setIsDetecting] = useState(false);
   /** Ref to the editor scroll container (used for zoom fitting). */
   const editorRef = useRef<HTMLDivElement>(null);
+  const iconBarRef = useRef<HTMLElement>(null);
   /** ID of a field that should receive DOM focus after the next render (Tab navigation). */
   const pendingFocusRef = useRef<string | null>(null);
 
@@ -494,10 +495,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
     const clamped = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], effectiveFit));
 
-    // Snap to the largest step that's <= clamped (always fit, never overflow)
+    // Snap to largest step that fits within available space
+    // Use maxZoom directly to guarantee no overflow
+    const maxZoom = availableW / w;
     let best = 0;
     for (let i = 0; i < ZOOM_STEPS.length; i++) {
-      if (ZOOM_STEPS[i] <= clamped + 0.001) best = i;
+      if (ZOOM_STEPS[i] <= maxZoom) best = i;
     }
     setZoomIndex(best);
   }, [fitMode]);
@@ -628,6 +631,54 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, [pageW, pageH, applyFitZoom]);
+
+  // Force icon bar into bottom dock on narrow screens (bypass CSS issues)
+  useEffect(() => {
+    const apply = () => {
+      const el = iconBarRef.current;
+      if (!el) return;
+      if (window.innerWidth <= 768) {
+        el.style.position = 'fixed';
+        el.style.bottom = '0';
+        el.style.left = '0';
+        el.style.right = '0';
+        el.style.top = 'auto';
+        el.style.width = '100%';
+        el.style.height = '52px';
+        el.style.display = 'flex';
+        el.style.flexDirection = 'row';
+        el.style.justifyContent = 'space-around';
+        el.style.alignItems = 'center';
+        el.style.zIndex = '99';
+        el.style.borderRight = 'none';
+        el.style.borderTop = '2px solid #3b82f6';
+        el.style.background = '#fff';
+        el.style.boxShadow = '0 -4px 16px rgba(59,130,246,0.25)';
+        el.style.padding = '4px 8px';
+      } else {
+        el.style.position = '';
+        el.style.bottom = '';
+        el.style.left = '';
+        el.style.right = '';
+        el.style.top = '';
+        el.style.width = '';
+        el.style.height = '';
+        el.style.display = '';
+        el.style.flexDirection = '';
+        el.style.justifyContent = '';
+        el.style.alignItems = '';
+        el.style.zIndex = '';
+        el.style.borderRight = '';
+        el.style.borderTop = '';
+        el.style.background = '';
+        el.style.boxShadow = '';
+        el.style.padding = '';
+      }
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, []);
 
   /** Callback when the source image loads and its natural dimensions become available. */
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -2382,7 +2433,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
            LEFT PANEL: Édition / outils de travail
          ═══════════════════════════════════════════════════════════ */}
             {/* ── Compact icon bar (always visible) ── */}
-      <aside className={`panel-icon-bar ${panelExpanded ? 'expanded' : ''}`}>
+      <aside ref={iconBarRef} className={`panel-icon-bar ${panelExpanded ? 'expanded' : ''}`}>
         {/* Toggle panel — always first */}
         <button className={`panel-icon-btn ${panelExpanded ? 'active' : ''}`} title={panelExpanded ? 'Hide tools' : 'Show tools'} onClick={() => setPanelExpanded((v) => !v)}>
           {panelExpanded ? <PanelRightIcon size={18} /> : <PanelLeftIcon size={18} />}
