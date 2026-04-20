@@ -472,23 +472,22 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     const el = editorRef.current;
     if (!el || w <= 0 || h <= 0) return;
 
-    const availableW = Math.max(200, el.clientWidth);
-    const availableH = Math.max(200, el.clientHeight - 32);
+    // Use actual content area (clientWidth minus padding) for accurate fit calculation
+    const cs = getComputedStyle(el);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const availableW = Math.max(200, el.clientWidth - padL - padR);
+    const availableH = Math.max(200, el.clientHeight - padT - padB);
     const fit = fitMode === 'width' ? (availableW / w) : Math.min(availableW / w, availableH / h);
 
-    // In 'width' fit mode: if the document at 100% has > 100px margin on each side,
-    // allow the document to scale up beyond 100% to fill the available space.
-    // In 'page' fit mode: never exceed 100% (page must fit within viewport).
     let effectiveFit = fit;
-    if (fitMode === 'width' && fit < 1.0) {
-      // fit < 1.0 means document at 100% is smaller than available space
-      // Check if there's enough excess space to justify zooming in
-      const excessW = availableW - w;
-      if (excessW > 100) {
-        // How much would we need to zoom so the page fills the available width?
-        effectiveFit = availableW / w;
-      }
+    // In 'width' mode: allow zoom > 1 if document is small enough to fill width
+    if (fitMode === 'width' && fit > 1.0 && (availableW - w) > 100) {
+      effectiveFit = availableW / w;
     }
+    // In 'page' mode: never exceed 100%
     if (fitMode === 'page') {
       effectiveFit = Math.min(effectiveFit, 1.0);
     }
@@ -2161,13 +2160,16 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   /**
    * Compose the CSS transform string for a page element, combining zoom and rotation.
-   * Computed once so all overlays/background stay in the same coordinate space.
+   * The transform is applied with transform-origin: top left.
+   *
+   * Transform order (right-to-left): rotate → translate → scale
+   * This ensures the page ends up at (0,0) to (dispW*zoom, dispH*zoom) for all rotations.
    */
   const pageTransform = (() => {
     const parts: string[] = [`scale(${zoom})`];
-    if (rotation === 90) parts.push(`translate(${pageH}px, 0) rotate(90deg)`);
+    if (rotation === 90) parts.push(`translate(0, ${pageW}px) rotate(90deg)`);
     else if (rotation === 180) parts.push(`translate(${pageW}px, ${pageH}px) rotate(180deg)`);
-    else if (rotation === 270) parts.push(`translate(0, ${pageW}px) rotate(270deg)`);
+    else if (rotation === 270) parts.push(`translate(${pageH}px, 0) rotate(270deg)`);
     return parts.join(' ');
   })();
 
@@ -2613,10 +2615,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           </div>
         )}
         {/* Multi-page stack: renders all pages vertically */}
-        <div className="multi-pages-stack" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="multi-pages-stack">
           {/* Render each page with its zoom wrapper and field overlays */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
-            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW, height: dispH }}>
+            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
               {/* Page container: applies transform for zoom + rotation */}
               <div
                 className="page"
