@@ -567,7 +567,7 @@ body { margin: 0; background: #f3f5f8; }
   grid-area: editor;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   padding: 12px;
   overflow: auto;
   width: 100%;
@@ -1505,27 +1505,17 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
   .toolbar-group-brand .toolbar-brand { display: none; }
   .toolbar-group-doc { min-width: 60px; }
   .toolbar-group-right .toolbar-user-area { gap: 4px; }
-  .panel-icon-bar { width: 40px; padding: 4px 2px; }
   .panel-icon-btn { width: 32px; height: 32px; }
-  .panel-expanded { left: 40px; width: 260px; }
+  .panel-expanded { left: 0; width: 260px; }
   .editor { padding: 10px !important; }
 
   /* Mobile app layout: single column, only toolbar + editor visible */
   .app { grid-template-columns: 0 1fr 0 !important; grid-template-areas: 'toolbar toolbar' 'editor editor' !important; }
   .panel, .props { display: none !important; }
-}
 
-/* Large phone (600px): icon bar → bottom dock */
-@media (max-width: 600px) {
-  .app-toolbar.app-toolbar-single-row { padding: 2px 4px; gap: 2px; }
-  .toolbar-group-brand,
-  .toolbar-status-text,
-  .toolbar-group-doc .toolbar-doc-name { display: none; }
-  .toolbar-group-right { gap: 4px; }
-
-  /* Icon bar → bottom dock (always visible, blue top border) */
+  /* Icon bar → fixed bottom dock on all mobile/tablet screens */
   .panel-icon-bar {
-    position: fixed; bottom: 0; left: 0; right: 0; top: auto;
+    position: fixed !important; bottom: 0; left: 0; right: 0; top: auto;
     width: 100%; height: 52px;
     display: flex !important;
     flex-direction: row; justify-content: space-around;
@@ -1538,7 +1528,6 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
   .panel-icon-btn { width: 42px; height: 42px; border-radius: 10px; }
   .panel-icon-divider { width: 1px; height: 28px; margin: 0 4px; background: var(--color-border); }
 
-  /* Right panel: hide floating toggle, show bottom dock right-toggle */
   .right-panel-toggle { display: none; }
   .panel-icon-bar .right-toggle { display: flex; }
 
@@ -1559,9 +1548,19 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
     border-radius: 0; box-shadow: none; z-index: 40;
   }
 
-
-  /* Editor: full width, bottom padding for dock */
+  /* Editor: bottom padding for dock */
   .editor { padding: 8px !important; padding-bottom: 64px !important; height: auto !important; }
+}
+
+/* Large phone (600px): ultra compact toolbar, hide doc name */
+@media (max-width: 600px) {
+  .app-toolbar.app-toolbar-single-row { padding: 2px 4px; gap: 2px; }
+  .toolbar-group-brand,
+  .toolbar-status-text,
+  .toolbar-group-doc .toolbar-doc-name { display: none; }
+  .toolbar-group-right { gap: 4px; }
+
+  .panel-icon-btn { width: 42px; height: 42px; border-radius: 10px; }
 }
 
 @media (min-width: 601px) {

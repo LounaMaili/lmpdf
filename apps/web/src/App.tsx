@@ -494,14 +494,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
     const clamped = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], effectiveFit));
 
+    // Snap to the largest step that's <= clamped (always fit, never overflow)
     let best = 0;
-    let bestDiff = Number.POSITIVE_INFINITY;
     for (let i = 0; i < ZOOM_STEPS.length; i++) {
-      const diff = Math.abs(ZOOM_STEPS[i] - clamped);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = i;
-      }
+      if (ZOOM_STEPS[i] <= clamped + 0.001) best = i;
     }
     setZoomIndex(best);
   }, [fitMode]);
