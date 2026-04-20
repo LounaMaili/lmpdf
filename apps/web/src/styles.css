@@ -622,7 +622,7 @@ body { margin: 0; background: #f3f5f8; }
 .pdf-pagination button:disabled { color: #ccc; cursor: default; }
 
 /* Multi-page stack */
-.multi-pages-stack { position: relative; }
+.multi-pages-stack { position: relative; overflow: hidden; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    13. EDITOR — Zoom / Rotation / Fit Mode Controls
