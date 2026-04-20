@@ -566,8 +566,8 @@ body { margin: 0; background: #f3f5f8; }
 .page-zoom-wrapper {
   flex-shrink: 1;
   overflow: hidden;
-  width: 100% !important;
-  max-width: 100% !important;
+  width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
 }
 
