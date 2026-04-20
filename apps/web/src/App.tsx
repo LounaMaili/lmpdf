@@ -2208,6 +2208,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   // The page inside uses scale(zoom) to visually shrink to fit.
 
   // ── Page rotation transform (applied to .page inside wrapper) ──
+  // Only rotation — zoom is applied via CSS zoom property (affects layout)
   const pageRotation = (() => {
     if (rotation === 90) return `translate(${pageH}px, 0) rotate(90deg)`;
     if (rotation === 180) return `translate(${pageW}px, ${pageH}px) rotate(180deg)`;
@@ -2661,13 +2662,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           {/* Render each page with its zoom wrapper and field overlays */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
             <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
-              {/* Page container: scale for zoom + rotation */}
+              {/* Page container: CSS zoom property (affects layout, unlike transform:scale) + rotation */}
               <div
                 className="page"
                 style={{
                   width: pageW,
                   height: pageH,
-                  transform: `scale(${zoom})${pageRotation ? ' ' + pageRotation : ''}`,
+                  zoom: zoom as number,
+                  transform: pageRotation || undefined,
                   transformOrigin: 'top left',
                   outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
                 }}
