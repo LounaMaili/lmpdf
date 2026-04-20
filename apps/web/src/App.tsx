@@ -2156,22 +2156,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Whether the current source document is a PDF (as opposed to an image). */
   const isPdf = sourceMime === 'application/pdf';
 
-  // ── Page transform: combines zoom and rotation into a single CSS transform ──
-
-  /**
-   * Compose the CSS transform string for a page element, combining zoom and rotation.
-   * The transform is applied with transform-origin: top left.
-   *
-   * Transform order (right-to-left): rotate → translate → scale
-   * This ensures the page ends up at (0,0) to (dispW*zoom, dispH*zoom) for all rotations.
-   */
-  const pageTransform = (() => {
-    const parts: string[] = [`scale(${zoom})`];
-    if (rotation === 90) parts.push(`translate(0, ${pageW}px) rotate(90deg)`);
-    else if (rotation === 180) parts.push(`translate(${pageW}px, ${pageH}px) rotate(180deg)`);
-    else if (rotation === 270) parts.push(`translate(${pageH}px, 0) rotate(270deg)`);
-    return parts.join(' ');
-  })();
+  // ── Wrapper transform: applies zoom (and rotation when applicable) ──
+  const wrapperTransform = `scale(${zoom})`;
 
 
   // ── Draft restore / ignore handlers ──
@@ -2618,15 +2604,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         <div className="multi-pages-stack">
           {/* Render each page with its zoom wrapper and field overlays */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
-            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
-              {/* Page container: applies transform for zoom + rotation */}
+            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW, height: dispH, transform: wrapperTransform, transformOrigin: 'top left' }}>
+              {/* Page container: applies rotation only (zoom is on wrapper) */}
               <div
                 className="page"
                 style={{
                   width: pageW,
                   height: pageH,
-                  transform: pageTransform,
-                  transformOrigin: 'top left',
                   outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
                 }}
                 aria-label={`Page document ${pageNum}`}
