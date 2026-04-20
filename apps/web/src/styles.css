@@ -575,6 +575,7 @@ body { margin: 0; background: #f3f5f8; }
 }
 
 .multi-pages-stack {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -636,9 +637,6 @@ body { margin: 0; background: #f3f5f8; }
 }
 .pdf-pagination button { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 6px; color: var(--color-blue-legacy); }
 .pdf-pagination button:disabled { color: #ccc; cursor: default; }
-
-/* Multi-page stack */
-.multi-pages-stack { position: relative; overflow: hidden; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    13. EDITOR — Zoom / Rotation / Fit Mode Controls
