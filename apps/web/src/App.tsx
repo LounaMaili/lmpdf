@@ -2616,7 +2616,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         <div className="multi-pages-stack" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Render each page with its zoom wrapper and field overlays */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
-            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
+            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * Math.min(zoom, 1), height: dispH * Math.min(zoom, 1) }}>
               {/* Page container: applies transform for zoom + rotation */}
               <div
                 className="page"

@@ -568,8 +568,6 @@ body { margin: 0; background: #f3f5f8; }
   overflow: hidden;
   width: 100% !important;
   max-width: 100% !important;
-  min-width: 0 !important;
-  flex-basis: auto !important;
   box-sizing: border-box;
 }
 
