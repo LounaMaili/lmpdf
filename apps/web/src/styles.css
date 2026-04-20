@@ -556,7 +556,7 @@ body { margin: 0; background: #f3f5f8; }
    ───────────────────────────────────────────────────────────────────────────── */
 .editor {
   grid-area: editor;
-  display: flex; justify-content: center; align-items: center;
+  display: flex; justify-content: flex-start; align-items: flex-start;
   padding: 12px 12px 12px calc(var(--panel-icon-bar-width) + 8px);
   overflow: auto;
   width: 100%;
