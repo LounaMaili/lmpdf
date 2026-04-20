@@ -557,14 +557,16 @@ body { margin: 0; background: #f3f5f8; }
 .editor {
   grid-area: editor;
   display: flex; justify-content: center; align-items: center;
-  padding: 12px; overflow: auto;
+  padding: 12px 12px 12px calc(var(--panel-icon-bar-width) + 8px);
+  overflow: auto;
   width: 100%;
   box-sizing: border-box;
 }
 
 .page-zoom-wrapper {
-  flex-shrink: 0;
+  flex-shrink: 1;
   overflow: hidden;
+  width: 100%;
   max-width: 100%;
   box-sizing: border-box;
 }

@@ -258,7 +258,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Tracks visual/overflow state per group key (continuous & fused modes). */
   const [fusedUiState, setFusedUiState] = useState<Record<string, OverflowUiStateEntry>>({});
   /** Viewport fit strategy: 'page' fits the entire page, 'width' fits only the width. */
-  const [fitMode, setFitMode] = useState<'page' | 'width'>('page');
+  const [fitMode, setFitMode] = useState<'page' | 'width'>('width');
 
   // ───── Draft restore state ─────
   const [pendingDraft, setPendingDraft] = useState<DraftRecord | null>(null);
