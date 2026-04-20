@@ -583,6 +583,7 @@ body { margin: 0; background: #f3f5f8; }
 
 .page-zoom-wrapper {
   flex-shrink: 0;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -1526,6 +1527,7 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
   .panel-icon-bar {
     position: fixed; bottom: 0; left: 0; right: 0; top: auto;
     width: 100%; height: 52px;
+    display: flex !important;
     flex-direction: row; justify-content: space-around;
     padding: 4px 8px; border-right: none;
     border-top: 2px solid var(--color-blue);

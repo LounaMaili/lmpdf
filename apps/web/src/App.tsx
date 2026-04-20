@@ -2156,12 +2156,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Whether the current source document is a PDF (as opposed to an image). */
   const isPdf = sourceMime === 'application/pdf';
 
-  // ── Wrapper transform: zoom only ──
-  // Scale is on the wrapper so its layout box stays at dispW × dispH.
-  const wrapperTransform = `scale(${zoom})`;
+  // ── Wrapper has no transform — sized at visual dimensions ──
+  // The wrapper layout = visual size (dispW*zoom × dispH*zoom).
+  // The page inside uses scale(zoom) to visually shrink to fit.
 
   // ── Page rotation transform (applied to .page inside wrapper) ──
-  // Rotation is separate so the page's layout (pageW × pageH) stays correct for field positioning.
   const pageRotation = (() => {
     if (rotation === 90) return `translate(${pageH}px, 0) rotate(90deg)`;
     if (rotation === 180) return `translate(${pageW}px, ${pageH}px) rotate(180deg)`;
@@ -2614,14 +2613,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         <div className="multi-pages-stack">
           {/* Render each page with its zoom wrapper and field overlays */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
-            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW, height: dispH, transform: wrapperTransform, transformOrigin: 'top left' }}>
-              {/* Page container: rotation only (zoom is on wrapper) */}
+            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
+              {/* Page container: scale for zoom + rotation */}
               <div
                 className="page"
                 style={{
                   width: pageW,
                   height: pageH,
-                  transform: pageRotation || undefined,
+                  transform: `scale(${zoom})${pageRotation ? ' ' + pageRotation : ''}`,
                   transformOrigin: 'top left',
                   outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
                 }}
