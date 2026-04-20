@@ -472,7 +472,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     const el = editorRef.current;
     if (!el || w <= 0 || h <= 0) return;
 
-    const availableW = Math.max(200, el.clientWidth - 32);
+    const availableW = Math.max(200, el.clientWidth);
     const availableH = Math.max(200, el.clientHeight - 32);
     const fit = fitMode === 'width' ? (availableW / w) : Math.min(availableW / w, availableH / h);
 
