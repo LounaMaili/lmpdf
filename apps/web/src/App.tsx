@@ -582,8 +582,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    * la largeur disponible (fit-to-width).
    */
   const onPdfDimensions = useCallback((w: number, h: number, origW: number, origH: number) => {
-    setPageW(w);
-    setPageH(h);
+    // On utilise les dimensions originales (native PDF) comme référence.
+    // w/h sont les dimensions rendues par pdf.js (déjà mises à l'échelle),
+    // origW/origH sont les dimensions natives du document.
+    // pageW/pageH stockent les dimensions natives pour le calcul de dispRatio.
+    setPageW(origW);
+    setPageH(origH);
     setSrcW(origW);
     setSrcH(origH);
     // Calculer dispRatio pour que le document remplisse la largeur disponible
@@ -593,7 +597,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       const padL = parseFloat(cs.paddingLeft) || 0;
       const padR = parseFloat(cs.paddingRight) || 0;
       const availableW = Math.max(200, el.clientWidth - padL - padR);
-      const ratio = availableW / w;
+      const ratio = availableW / origW;
       setDispRatio(Math.max(DISP_RATIO_MIN, Math.min(DISP_RATIO_MAX, ratio)));
     }
   }, []);
