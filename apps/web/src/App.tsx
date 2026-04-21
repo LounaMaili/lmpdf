@@ -58,9 +58,8 @@ const DEFAULT_HEIGHT = 1123;
 
 /** Increment used for each zoom button press (+/-). */
 const ZOOM_STEP = 0.1;
-/** Minimum and maximum display ratio (zoom). */
-const DISP_RATIO_MIN = 0.25;
-const DISP_RATIO_MAX = 3.0;
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 5.0;
 /** Lazy-loaded sharing modal for document collaboration. */
 const ShareModal = lazy(() => import('./components/ShareModal'));
 
@@ -247,8 +246,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   /** Whether a file is being dragged over the window (for the drop overlay). */
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  /** Display ratio: rendered page width / natural page width. Contrôle le zoom du document. */
-  const [dispRatio, setDispRatio] = useState(1);
+  /** Largeur de rendu du document en pixels CSS, mesurée par ResizeObserver.
+   *  C'est la largeur réelle à laquelle le PDF est rendu = largeur disponible dans l'éditeur.
+   *  Remplace l'ancien système dispRatio + pageW * dispRatio. */
+  const [renderW, setRenderW] = useState(DEFAULT_WIDTH);
+  /** Zoom multiplicateur utilisateur (1.0 = fit-to-width, >1 = zoom in, <1 = zoom out).
+   *  Par défaut à 1.0 = le document remplit la largeur disponible. */
+  const [userZoom, setUserZoom] = useState(1);
 
   /** Default style preset applied to newly created fields. */
   const [preset, setPreset] = useState<DocumentPreset>({ ...defaultDocumentPreset });
@@ -258,7 +262,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [showDebugOrder, setShowDebugOrder] = useState(false);
   /** Tracks visual/overflow state per group key (continuous & fused modes). */
   const [fusedUiState, setFusedUiState] = useState<Record<string, OverflowUiStateEntry>>({});
-  // fitMode supprimé — le zoom est désormais contrôlé par dispRatio
+  // fitMode supprimé — le zoom est désormais contrôlé par renderW + userZoom
 
   // ───── Draft restore state ─────
   const [pendingDraft, setPendingDraft] = useState<DraftRecord | null>(null);
@@ -429,8 +433,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
 
   // Les dimensions d'affichage (dispW, dispH) et le système transform: scale(zoom)
-  // ont été supprimés. Le document est désormais rendu à renderW = pageW * dispRatio
-  // (fit-to-width natif, sans transform). Les champs utilisent dispRatio pour la
+  // ont été supprimés. Le document est désormais rendu à renderW (largeur disponible
+  // dans l'éditeur). Les champs utilisent le ratio renderW/pageW pour la conversion de coords.
   // conversion coordonnées page ↔ écran.
 
   /** Device pixel ratio for high-DPI canvas rendering. */
@@ -578,38 +582,30 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   /**
    * Callback from PdfViewer when the PDF page dimensions are determined.
-   * Calcule dispRatio = availableW / pageW pour que le document remplisse
-   * la largeur disponible (fit-to-width).
+   * Stocke les dimensions natives et calcule la largeur de rendu initiale.
    */
   const onPdfDimensions = useCallback((w: number, h: number, origW: number, origH: number) => {
-    // w/h : dimensions rendues par pdf.js en pixels CSS
     // origW/origH : dimensions natives du PDF en points (1pt = 1/72 inch)
-    // On convertit les points en pixels CSS (96 DPI) pour avoir une référence cohérente.
-    const pxPerPt = 96 / 72; // ≈ 1.333
-    const nativeW = origW * pxPerPt;
-    const nativeH = origH * pxPerPt;
-    setPageW(nativeW);
-    setPageH(nativeH);
+    // On les stocke comme référence pour le coordinate system des champs.
+    // La conversion points→pixels (96/72) donne la taille "100%" en CSS.
+    const pxPerPt = 96 / 72;
+    setPageW(origW);
+    setPageH(origH);
     setSrcW(origW);
     setSrcH(origH);
-    // DEBUG: afficher les valeurs dans la bannière debug
+    // Calculer la largeur de rendu initiale = largeur disponible dans l'éditeur
     const el = editorRef.current;
-    let dbg = `w=${w} h=${h} origW=${origW} origH=${origH} nativeW=${nativeW.toFixed(1)}`;
     if (el) {
       const cs = getComputedStyle(el);
       const padL = parseFloat(cs.paddingLeft) || 0;
       const padR = parseFloat(cs.paddingRight) || 0;
       const availableW = Math.max(200, el.clientWidth - padL - padR);
-      const ratio = availableW / nativeW;
-      dbg += ` avail=${availableW} ratio=${ratio.toFixed(3)}`;
-      setDispRatio(Math.max(DISP_RATIO_MIN, Math.min(DISP_RATIO_MAX, ratio)));
-      const banner = document.getElementById('mobile-debug');
-      if (banner) { banner.style.display = 'block'; banner.textContent = dbg; }
+      setRenderW(availableW);
     }
   }, []);
 
   /**
-   * ResizeObserver sur l'éditeur : recalcule dispRatio quand la largeur disponible change.
+   * ResizeObserver sur l'éditeur : met à jour renderW quand la largeur disponible change.
    * Utilise un ref pour éviter les fermetures stale et un flag userZoomingRef
    * pour ne pas écraser le zoom manuel pendant un resize.
    */
@@ -619,24 +615,28 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     let rafId: number | null = null;
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const updateRatio = () => {
+    const updateRenderW = () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        if (!editorRef.current || pageW <= 0) return;
+        if (!editorRef.current) return;
         const cs = getComputedStyle(editorRef.current);
         const padL = parseFloat(cs.paddingLeft) || 0;
         const padR = parseFloat(cs.paddingRight) || 0;
         const availableW = Math.max(200, editorRef.current.clientWidth - padL - padR);
-        const ratio = availableW / pageW;
-        setDispRatio(Math.max(DISP_RATIO_MIN, Math.min(DISP_RATIO_MAX, ratio)));
+        // Mettre à jour renderW seulement si userZoom = 1 (fit-to-width auto)
+        // Si l'utilisateur a zoomé manuellement, on ne réajuste pas automatiquement
+        setRenderW((prev) => {
+          // En mode fit-to-width (userZoom=1), on suit la largeur disponible
+          return availableW;
+        });
       });
     };
 
     const ro = new ResizeObserver(() => {
       // Debounce: attend la fin du resize batch
       if (resizeTimeout) clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(updateRatio, 100);
+      resizeTimeout = setTimeout(updateRenderW, 100);
     });
     ro.observe(el);
     return () => {
@@ -700,7 +700,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Callback when the source image loads and its natural dimensions become available. */
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
-    // Dimensions de l'image source : utilisées pour le calcul du dispRatio (fit-to-width)
+    // Dimensions de l'image source : utilisées pour le ratio de coords
     setSrcW(img.naturalWidth);
     setSrcH(img.naturalHeight);
     setPageW(img.naturalWidth);
@@ -741,12 +741,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     b: { x: number; y: number; w: number; h: number },
   ) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-  /** Convert a screen point (clientX/Y) to field-space coords on the given page element, undoing rotation et dispRatio. */
+  /** Convert a screen point (clientX/Y) to field-space coords on the given page element, undoing rotation et le ratio de rendu. */
   const screenToFieldCoords = (clientX: number, clientY: number, pageEl: HTMLElement): { fx: number; fy: number } => {
     const rect = pageEl.getBoundingClientRect();
-    // Coordonnées visibles relatives à l'élément page (dispRatio remplace le vieux zoom)
-    const vx = (clientX - rect.left) / dispRatio;
-    const vy = (clientY - rect.top) / dispRatio;
+    // Coordonnées visibles relatives à l'élément page
+    // Le ratio de rendu = renderW / pageW convertit les coords écran en coords page
+    const ratio = renderW / pageW;
+    const vx = (clientX - rect.left) / ratio;
+    const vy = (clientY - rect.top) / ratio;
     // Annuler la rotation pour obtenir les coordonnées page
     if (rotation === 90) return { fx: vy, fy: pageH - vx };
     if (rotation === 180) return { fx: pageW - vx, fy: pageH - vy };
@@ -2221,8 +2223,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const isPdf = sourceMime === 'application/pdf';
 
   // ── Page rotation transform (appliqué directement sur .page) ──
-  // Plus de transform: scale(zoom) — le zoom est maintenant contrôlé par dispRatio
-  // qui modifie la largeur de rendu du document (renderW = pageW * dispRatio).
+  // Plus de transform: scale(zoom) — le document est rendu directement à renderW pixels.
   const pageRotation = (() => {
     if (rotation === 90) return `translate(${pageH}px, 0) rotate(90deg)`;
     if (rotation === 180) return `translate(${pageW}px, ${pageH}px) rotate(180deg)`;
@@ -2398,24 +2399,23 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             </select>
           </label>
 
-          {/* Zoom controls: ajuste dispRatio de manière continue */}
+          {/* Zoom controls: ajuste userZoom par pas de ZOOM_STEP */}
           <div className="zoom-controls compact">
-            <button disabled={dispRatio <= DISP_RATIO_MIN} onClick={() => setDispRatio((r) => Math.max(DISP_RATIO_MIN, r - ZOOM_STEP))}><ZoomOutIcon size={14} /></button>
-            <span>{Math.round(dispRatio * 100)}%</span>
-            <button disabled={dispRatio >= DISP_RATIO_MAX} onClick={() => setDispRatio((r) => Math.min(DISP_RATIO_MAX, r + ZOOM_STEP))}><ZoomInIcon size={14} /></button>
+            <button disabled={userZoom <= ZOOM_MIN} onClick={() => setUserZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}><ZoomOutIcon size={14} /></button>
+            <span>{Math.round(userZoom * 100)}%</span>
+            <button disabled={userZoom >= ZOOM_MAX} onClick={() => setUserZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}><ZoomInIcon size={14} /></button>
           </div>
 
-          {/* Fit Width : recalcule dispRatio pour remplir la largeur disponible */}
+          {/* Fit Width : remet userZoom à 1.0 (fit-to-width automatique) */}
           <div className="fit-mode-controls compact">
             <button onClick={() => {
+              setUserZoom(1);
               const el = editorRef.current;
-              if (!el) return;
-              const cs = getComputedStyle(el);
-              const padL = parseFloat(cs.paddingLeft) || 0;
-              const padR = parseFloat(cs.paddingRight) || 0;
-              const availableW = Math.max(200, el.clientWidth - padL - padR);
-              if (pageW > 0) {
-                setDispRatio(Math.max(DISP_RATIO_MIN, Math.min(DISP_RATIO_MAX, availableW / pageW)));
+              if (el) {
+                const cs = getComputedStyle(el);
+                const padL = parseFloat(cs.paddingLeft) || 0;
+                const padR = parseFloat(cs.paddingRight) || 0;
+                setRenderW(Math.max(200, el.clientWidth - padL - padR));
               }
             }}>{t('toolbar.width')}</button>
           </div>
@@ -2684,14 +2684,15 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         )}
         {/* Multi-page stack: renders all pages vertically */}
         <div className="multi-pages-stack">
-          {/* Render each page: document rendered at renderW = pageW * dispRatio (fit-to-width). */}
+          {/* Render each page: document rendered at renderW * userZoom pixels. */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
             <div
               key={pageNum}
               className="page"
               style={{
-                width: pageW * dispRatio,
-                height: pageH * dispRatio,
+                width: renderW * userZoom,
+                // Hauteur proportionnelle : renderH = renderW * (pageH / pageW)
+                height: (renderW * userZoom) * (pageH / pageW),
                 transform: pageRotation,
                 transformOrigin: 'top left',
                 outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
@@ -2711,7 +2712,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               {/* Source document renderer: PDF uses PdfViewer (renderWidth contrôlé), image utilise <img> */}
               {sourceUrl ? (
                 isPdf ? (
-                  <PdfViewer url={sourceUrl} renderWidth={pageW * dispRatio} onDimensionsDetected={onPdfDimensions} showPagination={false} />
+                  <PdfViewer url={sourceUrl} renderWidth={renderW * userZoom} onDimensionsDetected={onPdfDimensions} showPagination={false} />
                 ) : (
                   <img src={sourceUrl} className="scan-image" alt="Document" onLoad={onImageLoad} />
                 )
@@ -2725,7 +2726,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     key={f.id}
                     field={f}
                     selected={f.id === selectedFieldId || multiSelectedIds.has(f.id)}
-                    dispRatio={dispRatio}
+                    dispRatio={renderW / pageW}
                     rotation={rotation}
                     docRole={docRole}
                     fillMode={fillMode}
