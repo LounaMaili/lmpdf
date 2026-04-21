@@ -2694,7 +2694,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 // Hauteur proportionnelle : renderH = renderW * (pageH / pageW)
                 height: (renderW * userZoom) * (pageH / pageW),
                 transform: pageRotation,
-                transformOrigin: 'top left',
+                transformOrigin: rotation !== 0 ? 'top left' : undefined,
                 outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
               }}
               aria-label={`Page document ${pageNum}`}
