@@ -2408,7 +2408,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           {/* Zoom controls: ajuste userZoom par pas de ZOOM_STEP */}
           <div className="zoom-controls compact">
             <button disabled={userZoom <= ZOOM_MIN} onClick={() => setUserZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}><ZoomOutIcon size={14} /></button>
-            <span>{Math.round(userZoom * 100)}%</span>
+            <span>{Math.round((renderW * userZoom / (pageW * (96/72))) * 100)}%</span>
             <button disabled={userZoom >= ZOOM_MAX} onClick={() => setUserZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}><ZoomInIcon size={14} /></button>
           </div>
 

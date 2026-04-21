@@ -564,10 +564,12 @@ export default function FieldOverlay({
       ].filter(Boolean).join(' ')}
       style={{
         // Use fused bounds when anchor, otherwise the field's own geometry.
-        left: fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.x : field.x,
-        top: fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.y : field.y,
-        width: effectiveW,
-        height: effectiveH,
+        // Toutes les coordonnées sont multipliées par dispRatio (renderW / pageW)
+        // pour passer du coordinate system PDF à l'affichage en pixels.
+        left: (fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.x : field.x) * dispRatio,
+        top: (fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.y : field.y) * dispRatio,
+        width: effectiveW * dispRatio,
+        height: effectiveH * dispRatio,
         cursor: structureLocked ? 'default' : undefined,
         // Ghost fields (overflow overflow overflow recipients) are hidden.
         ...(isHiddenGhost ? { display: 'none' } : {}),
