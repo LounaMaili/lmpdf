@@ -639,6 +639,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       resizeTimeout = setTimeout(updateRenderW, 100);
     });
     ro.observe(el);
+    // Appel initial pour mesurer la largeur disponible dès le montage
+    updateRenderW();
     return () => {
       ro.disconnect();
       if (rafId !== null) cancelAnimationFrame(rafId);
