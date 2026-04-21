@@ -690,12 +690,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Callback when the source image loads and its natural dimensions become available. */
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
+    // Dimensions de l'image source : utilisées pour le calcul du dispRatio (fit-to-width)
     setSrcW(img.naturalWidth);
     setSrcH(img.naturalHeight);
     setPageW(img.naturalWidth);
     setPageH(img.naturalHeight);
-    applyFitZoom(img.naturalWidth, img.naturalHeight);
-  }, [applyFitZoom]);
+  }, []);
 
   /**
    * Select a field by ID, supporting additive (Ctrl/Cmd) multi-selection.
@@ -2852,7 +2852,6 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     }}
                   />
                 )}
-              </div>
             </div>
           ))}
 
