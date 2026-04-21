@@ -57,7 +57,7 @@ const DEFAULT_WIDTH = 794;
 const DEFAULT_HEIGHT = 1123;
 
 /** Increment used for each zoom button press (+/-). */
-const ZOOM_STEP = 0.1;
+const ZOOM_STEP = 0.05;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 5.0;
 /** Lazy-loaded sharing modal for document collaboration. */
@@ -747,8 +747,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const screenToFieldCoords = (clientX: number, clientY: number, pageEl: HTMLElement): { fx: number; fy: number } => {
     const rect = pageEl.getBoundingClientRect();
     // Coordonnées visibles relatives à l'élément page
-    // Le ratio de rendu = renderW / pageW convertit les coords écran en coords page
-    const ratio = renderW / pageW;
+    // Le ratio de rendu = (renderW * userZoom) / pageW convertit les coords écran en coords page
+    const ratio = (renderW * userZoom) / pageW;
     const vx = (clientX - rect.left) / ratio;
     const vy = (clientY - rect.top) / ratio;
     // Annuler la rotation pour obtenir les coordonnées page
@@ -2732,7 +2732,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     key={f.id}
                     field={f}
                     selected={f.id === selectedFieldId || multiSelectedIds.has(f.id)}
-                    dispRatio={renderW / pageW}
+                    dispRatio={(renderW * userZoom) / pageW}
                     rotation={rotation}
                     docRole={docRole}
                     fillMode={fillMode}
