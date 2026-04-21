@@ -6,9 +6,9 @@
  * manages selection, dragging, resizing, and value changes.
  *
  * Key concepts:
- * - Fields are positioned in page coordinates (not screen pixels); the parent
- *   PDF canvas applies a zoom transform. Delta conversion (screen → page) happens
- *   via `screenToFieldDelta`.
+ * - Fields are positioned in page coordinates (pageW × pageH). Le document PDF
+ *   est rendu à une largeur disponible (fit-to-width). dispRatio (renderW / pageW)
+ *   est le facteur de conversion screen ↔ page via `screenToFieldDelta`.
  * - Rich text (bold, italic, underline, colors) is only available in fillMode or
  *   when the field is selected. When neither is true the field renders as a plain
  *   div with dangerouslySetInnerHTML for performance.
@@ -33,7 +33,8 @@ import SelectionToolbar from './SelectionToolbar';
 type Props = {
   field: FieldModel;
   selected: boolean;
-  zoom: number;
+  /** Ratio de la largeur rendue sur la largeur naturelle de la page (dispRatio = renderW / pageW). */
+  dispRatio: number;
   rotation: Rotation;
   /** Role of the current user in this document. */
   docRole?: 'owner' | 'editor' | 'filler' | null;
@@ -93,7 +94,7 @@ function tallyMarks(count: number): string {
 export default function FieldOverlay({
   field,
   selected,
-  zoom,
+  dispRatio,
   rotation,
   docRole,
   fillMode,
@@ -171,7 +172,8 @@ export default function FieldOverlay({
       const rawDx = ev.clientX - startX;
       const rawDy = ev.clientY - startY;
       // Convert screen pixels → page coordinates, accounting for zoom and rotation.
-      const [dx, dy] = screenToFieldDelta(rawDx, rawDy, zoom, rotation);
+      // Convertir les pixels écran → coordonnées page en divisant par dispRatio
+      const [dx, dy] = screenToFieldDelta(rawDx, rawDy, dispRatio, rotation);
       onMove(
         clamp(initialX + dx, 0, pageWidth - field.w),
         clamp(initialY + dy, 0, pageHeight - field.h),
@@ -211,7 +213,8 @@ export default function FieldOverlay({
     const onMouseMove = (ev: MouseEvent) => {
       const rawDx = ev.clientX - startX;
       const rawDy = ev.clientY - startY;
-      const [dw, dh] = screenToFieldDelta(rawDx, rawDy, zoom, rotation);
+      // Convertir les pixels écran → coordonnées page en divisant par dispRatio
+      const [dw, dh] = screenToFieldDelta(rawDx, rawDy, dispRatio, rotation);
       onResize(
         clamp(initialW + dw, 20, pageWidth - field.x),
         clamp(initialH + dh, 12, pageHeight - field.y),

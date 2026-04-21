@@ -552,16 +552,16 @@ body { margin: 0; background: #f3f5f8; }
 .color-palette-swatch.selected { border: 2px solid var(--color-blue-alt); }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   12. EDITOR — Page, Zoom, PDF Viewer
+   12. EDITOR — Document Display
    ───────────────────────────────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────────────────────────────────
    12. EDITOR — Document Display
-   Layout: .editor (grid item) > .multi-pages-stack (flex column) > .page-zoom-wrapper > .page
+   Layout: .editor (grid item) > .multi-pages-stack (flex column) > .page
    - .editor: grid-area editor, NOT a flex container. Scrollable via overflow: auto.
    - .multi-pages-stack: flex column, align-items: center (centers pages horizontally)
-   - .page-zoom-wrapper: sized at dispW*zoom × dispH*zoom, overflow: hidden
-   - .page: natural pageW × pageH with transform: scale(zoom) + rotation
-   - NOTE: scale() causes layout box (pageW × pageH) to differ from visual size → bug
+   - .page: dimensionné à pageW*dispRatio × pageH*dispRatio (largeur de rendu = fit-to-width).
+     Plus de transform: scale(zoom) — le zoom contrôle désormais la largeur de rendu.
+     La rotation CSS (transform) est appliquée directement sur .page.
    ───────────────────────────────────────────────────────────────────────────── */
 
 .editor {
@@ -580,18 +580,17 @@ body { margin: 0; background: #f3f5f8; }
   align-items: center;
 }
 
-.page-zoom-wrapper {
-  flex-shrink: 0;
-  overflow: hidden;
-  max-width: 100%;
-  box-sizing: border-box;
-}
+/* .page-zoom-wrapper supprimé — sa fonction (wrapper avec overflow:hidden) était
+   nécessaire pour le système transform:scale() qui est maintenant retiré.
+   La largeur du .page est définie directement en JS (pageW * dispRatio). */
+.page-zoom-wrapper { display: none; }
 
 .page {
   position: relative;
   background: var(--color-white);
   box-shadow: var(--shadow-page);
   overflow: hidden;
+  /* La largeur/hauteur sont définies en inline-style (pageW * dispRatio) */
 }
 
 .scan-image {

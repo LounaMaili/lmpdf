@@ -42,7 +42,7 @@ import {
 import type { FolderModel } from './api';
 import { defaultDocumentPreset, defaultFieldStyle } from './types';
 import { exportFilledPdf, generateFilledPdfBlob } from './exportPdf';
-import { displayDims, findNearestField } from './utils';
+import { findNearestField } from './utils';
 import type { Rotation } from './utils';
 import type { DocumentPreset, FieldModel, FieldType, TemplateModel } from './types';
 import { getStoredUser } from './auth';
@@ -56,8 +56,11 @@ const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, '');
 const DEFAULT_WIDTH = 794;
 const DEFAULT_HEIGHT = 1123;
 
-/** Discrete zoom levels available to the user via +/- buttons. */
-const ZOOM_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.75, 2.0];
+/** Increment used for each zoom button press (+/-). */
+const ZOOM_STEP = 0.1;
+/** Minimum and maximum display ratio (zoom). */
+const DISP_RATIO_MIN = 0.25;
+const DISP_RATIO_MAX = 3.0;
 /** Lazy-loaded sharing modal for document collaboration. */
 const ShareModal = lazy(() => import('./components/ShareModal'));
 
@@ -242,12 +245,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Current page rotation in degrees (0, 90, 180, or 270). */
   const [rotation, setRotation] = useState<Rotation>(0);
 
-  /** Index into ZOOM_STEPS for the current zoom level. */
-  const [zoomIndex, setZoomIndex] = useState(4);
   /** Whether a file is being dragged over the window (for the drop overlay). */
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  /** Computed zoom factor from the current zoom index. */
-  const zoom = ZOOM_STEPS[zoomIndex];
+  /** Display ratio: rendered page width / natural page width. Contrôle le zoom du document. */
+  const [dispRatio, setDispRatio] = useState(1);
 
   /** Default style preset applied to newly created fields. */
   const [preset, setPreset] = useState<DocumentPreset>({ ...defaultDocumentPreset });
@@ -257,8 +258,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [showDebugOrder, setShowDebugOrder] = useState(false);
   /** Tracks visual/overflow state per group key (continuous & fused modes). */
   const [fusedUiState, setFusedUiState] = useState<Record<string, OverflowUiStateEntry>>({});
-  /** Viewport fit strategy: 'page' fits the entire page, 'width' fits only the width. */
-  const [fitMode, setFitMode] = useState<'page' | 'width'>('width');
+  // fitMode supprimé — le zoom est désormais contrôlé par dispRatio
 
   // ───── Draft restore state ─────
   const [pendingDraft, setPendingDraft] = useState<DraftRecord | null>(null);
@@ -428,9 +428,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** The currently selected field model, or null. */
   const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
 
-  // Wrapper dimensions follow rotation to keep the editor scroll area aligned.
-  /** Display dimensions accounting for rotation (width/height may be swapped). */
-  const [dispW, dispH] = displayDims(pageW, pageH, rotation);
+  // Les dimensions d'affichage (dispW, dispH) et le système transform: scale(zoom)
+  // ont été supprimés. Le document est désormais rendu à renderW = pageW * dispRatio
+  // (fit-to-width natif, sans transform). Les champs utilisent dispRatio pour la
+  // conversion coordonnées page ↔ écran.
 
   /** Device pixel ratio for high-DPI canvas rendering. */
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -465,43 +466,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     getMyDocRole(sourceFileId).then((r) => setDocRole(r.docRole as any)).catch(() => setDocRole(null));
   }, [sourceFileId]);
 
-  /**
-   * Adjust the zoom level so the page fits within the editor viewport.
-   * Snaps to the nearest discrete ZOOM_STEP.
-   */
-  const applyFitZoom = useCallback((w: number, h: number) => {
-    const el = editorRef.current;
-    if (!el || w <= 0 || h <= 0) return;
-
-    // Use actual content area (clientWidth minus padding) for accurate fit calculation
-    const cs = getComputedStyle(el);
-    const padL = parseFloat(cs.paddingLeft) || 0;
-    const padR = parseFloat(cs.paddingRight) || 0;
-    const padT = parseFloat(cs.paddingTop) || 0;
-    const padB = parseFloat(cs.paddingBottom) || 0;
-    const availableW = Math.max(200, el.clientWidth - padL - padR);
-    const availableH = Math.max(200, el.clientHeight - padT - padB);
-    const fit = fitMode === 'width' ? (availableW / w) : Math.min(availableW / w, availableH / h);
-
-    let effectiveFit = fit;
-    // In 'width' mode: allow zoom > 1 if document is small enough to fill width
-    if (fitMode === 'width' && fit > 1.0 && (availableW - w) > 100) {
-      effectiveFit = availableW / w;
-    }
-    // In 'page' mode: never exceed 100%
-    if (fitMode === 'page') {
-      effectiveFit = Math.min(effectiveFit, 1.0);
-    }
-
-    const clamped = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], effectiveFit));
-
-    // Snap to largest step <= clamped (document never exceeds available space)
-    let best = 0;
-    for (let i = 0; i < ZOOM_STEPS.length; i++) {
-      if (ZOOM_STEPS[i] <= clamped) best = i;
-    }
-    setZoomIndex(best);
-  }, [fitMode]);
+  // applyFitZoom a été supprimé — la logique de fit est désormais dans onPdfDimensions
+  // et l'ajustement au resize via ResizeObserver sur editorRef.
 
   // ───── Global keyboard shortcuts ─────
   // Keep keyboard shortcuts global while scoping Tab cycling to the editor area.
@@ -610,25 +576,65 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     });
   }, [selectedFieldId]);
 
-  /** Callback from PdfViewer when the PDF page dimensions are determined. */
+  /**
+   * Callback from PdfViewer when the PDF page dimensions are determined.
+   * Calcule dispRatio = availableW / pageW pour que le document remplisse
+   * la largeur disponible (fit-to-width).
+   */
   const onPdfDimensions = useCallback((w: number, h: number, origW: number, origH: number) => {
     setPageW(w);
     setPageH(h);
     setSrcW(origW);
     setSrcH(origH);
-    applyFitZoom(w, h);
-  }, [applyFitZoom]);
+    // Calculer dispRatio pour que le document remplisse la largeur disponible
+    const el = editorRef.current;
+    if (el) {
+      const cs = getComputedStyle(el);
+      const padL = parseFloat(cs.paddingLeft) || 0;
+      const padR = parseFloat(cs.paddingRight) || 0;
+      const availableW = Math.max(200, el.clientWidth - padL - padR);
+      const ratio = availableW / w;
+      setDispRatio(Math.max(DISP_RATIO_MIN, Math.min(DISP_RATIO_MAX, ratio)));
+    }
+  }, []);
 
+  /**
+   * ResizeObserver sur l'éditeur : recalcule dispRatio quand la largeur disponible change.
+   * Utilise un ref pour éviter les fermetures stale et un flag userZoomingRef
+   * pour ne pas écraser le zoom manuel pendant un resize.
+   */
   useEffect(() => {
-    applyFitZoom(pageW, pageH);
-  }, [fitMode, pageW, pageH, applyFitZoom]);
+    const el = editorRef.current;
+    if (!el) return;
+    let rafId: number | null = null;
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Recalculate zoom when window is resized (editor.availableWidth changes)
-  useEffect(() => {
-    const handler = () => applyFitZoom(pageW, pageH);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, [pageW, pageH, applyFitZoom]);
+    const updateRatio = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!editorRef.current || pageW <= 0) return;
+        const cs = getComputedStyle(editorRef.current);
+        const padL = parseFloat(cs.paddingLeft) || 0;
+        const padR = parseFloat(cs.paddingRight) || 0;
+        const availableW = Math.max(200, editorRef.current.clientWidth - padL - padR);
+        const ratio = availableW / pageW;
+        setDispRatio(Math.max(DISP_RATIO_MIN, Math.min(DISP_RATIO_MAX, ratio)));
+      });
+    };
+
+    const ro = new ResizeObserver(() => {
+      // Debounce: attend la fin du resize batch
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(updateRatio, 100);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+    };
+  }, [pageW]);
 
   // Force icon bar into bottom dock on narrow screens (bypass CSS issues)
   useEffect(() => {
@@ -725,13 +731,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     b: { x: number; y: number; w: number; h: number },
   ) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-  /** Convert a screen point (clientX/Y) to field-space coords on the given page element, undoing rotation. */
+  /** Convert a screen point (clientX/Y) to field-space coords on the given page element, undoing rotation et dispRatio. */
   const screenToFieldCoords = (clientX: number, clientY: number, pageEl: HTMLElement): { fx: number; fy: number } => {
     const rect = pageEl.getBoundingClientRect();
-    // Visible coords relative to the page element (before accounting for zoom/rotation transform)
-    const vx = (clientX - rect.left) / zoom;
-    const vy = (clientY - rect.top) / zoom;
-    // Undo rotation to get field-space coords
+    // Coordonnées visibles relatives à l'élément page (dispRatio remplace le vieux zoom)
+    const vx = (clientX - rect.left) / dispRatio;
+    const vy = (clientY - rect.top) / dispRatio;
+    // Annuler la rotation pour obtenir les coordonnées page
     if (rotation === 90) return { fx: vy, fy: pageH - vx };
     if (rotation === 180) return { fx: pageW - vx, fy: pageH - vy };
     if (rotation === 270) return { fx: pageW - vy, fy: vx };
@@ -2204,14 +2210,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Whether the current source document is a PDF (as opposed to an image). */
   const isPdf = sourceMime === 'application/pdf';
 
-  // ── Wrapper has no transform — sized at visual dimensions ──
-  // Wrapper is sized at dispW*zoom × dispH*zoom (visual = layout, no divergence).
-  // The page inside uses scale(zoom) + rotation transform.
-  // NOTE: scale() causes layout box (pageW × pageH) to differ from visual size.
-  // This divergence is the root cause of the "document too far right" bug.
-
-  // ── Page rotation transform (applied to .page inside wrapper) ──
-  // Only rotation — zoom is applied via transform: scale() (NOT CSS zoom property)
+  // ── Page rotation transform (appliqué directement sur .page) ──
+  // Plus de transform: scale(zoom) — le zoom est maintenant contrôlé par dispRatio
+  // qui modifie la largeur de rendu du document (renderW = pageW * dispRatio).
   const pageRotation = (() => {
     if (rotation === 90) return `translate(${pageH}px, 0) rotate(90deg)`;
     if (rotation === 180) return `translate(${pageW}px, ${pageH}px) rotate(180deg)`;
@@ -2387,17 +2388,26 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             </select>
           </label>
 
-          {/* Zoom controls: step through predefined zoom levels */}
+          {/* Zoom controls: ajuste dispRatio de manière continue */}
           <div className="zoom-controls compact">
-            <button disabled={zoomIndex <= 0} onClick={() => setZoomIndex((i) => i - 1)}><ZoomOutIcon size={14} /></button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button disabled={zoomIndex >= ZOOM_STEPS.length - 1} onClick={() => setZoomIndex((i) => i + 1)}><ZoomInIcon size={14} /></button>
+            <button disabled={dispRatio <= DISP_RATIO_MIN} onClick={() => setDispRatio((r) => Math.max(DISP_RATIO_MIN, r - ZOOM_STEP))}><ZoomOutIcon size={14} /></button>
+            <span>{Math.round(dispRatio * 100)}%</span>
+            <button disabled={dispRatio >= DISP_RATIO_MAX} onClick={() => setDispRatio((r) => Math.min(DISP_RATIO_MAX, r + ZOOM_STEP))}><ZoomInIcon size={14} /></button>
           </div>
 
-          {/* Fit mode: fit entire page or fit width only */}
+          {/* Fit Width : recalcule dispRatio pour remplir la largeur disponible */}
           <div className="fit-mode-controls compact">
-            <button className={fitMode === 'page' ? 'active' : ''} onClick={() => setFitMode('page')}>{t('toolbar.page')}</button>
-            <button className={fitMode === 'width' ? 'active' : ''} onClick={() => setFitMode('width')}>{t('toolbar.width')}</button>
+            <button onClick={() => {
+              const el = editorRef.current;
+              if (!el) return;
+              const cs = getComputedStyle(el);
+              const padL = parseFloat(cs.paddingLeft) || 0;
+              const padR = parseFloat(cs.paddingRight) || 0;
+              const availableW = Math.max(200, el.clientWidth - padL - padR);
+              if (pageW > 0) {
+                setDispRatio(Math.max(DISP_RATIO_MIN, Math.min(DISP_RATIO_MAX, availableW / pageW)));
+              }
+            }}>{t('toolbar.width')}</button>
           </div>
 
           {/* Rotation controls: rotate 90° left/right */}
@@ -2664,41 +2674,40 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         )}
         {/* Multi-page stack: renders all pages vertically */}
         <div className="multi-pages-stack">
-          {/* Render each page with its zoom wrapper and field overlays */}
+          {/* Render each page: document rendered at renderW = pageW * dispRatio (fit-to-width). */}
           {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((pageNum) => (
-            <div key={pageNum} className="page-zoom-wrapper" style={{ width: dispW * zoom, height: dispH * zoom }}>
-              {/* Page container: scale for zoom + rotation */}
-              <div
-                className="page"
-                style={{
-                  width: pageW,
-                  height: pageH,
-                  transform: `scale(${zoom})${pageRotation ? ' ' + pageRotation : ''}`,
-                  transformOrigin: 'top left',
-                  outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
-                }}
-                aria-label={`Page document ${pageNum}`}
-                onMouseDown={(e) => startMarquee(e, pageNum)}
-                onClick={(e) => {
-                  if (marqueeJustEndedRef.current) return;
-                  if (e.target === e.currentTarget) {
-                    setActivePage(pageNum);
-                    handleSelectField(null);
-                  }
-                }}
-              >
-                {/* Page label shown above each page */}
-                <div style={{ position: 'absolute', top: -22, right: 0, fontSize: 12, color: '#666' }}>{t('panel.pageLabel', { n: pageNum })}</div>
-                {/* Source document renderer: PDF uses PdfViewer, image uses <img> */}
-                {sourceUrl ? (
-                  isPdf ? (
-                    <PdfViewer url={sourceUrl} onDimensionsDetected={onPdfDimensions} showPagination={false} />
-                  ) : (
-                    <img src={sourceUrl} className="scan-image" alt="Document" onLoad={onImageLoad} />
-                  )
+            <div
+              key={pageNum}
+              className="page"
+              style={{
+                width: pageW * dispRatio,
+                height: pageH * dispRatio,
+                transform: pageRotation,
+                transformOrigin: 'top left',
+                outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
+              }}
+              aria-label={`Page document ${pageNum}`}
+              onMouseDown={(e) => startMarquee(e, pageNum)}
+              onClick={(e) => {
+                if (marqueeJustEndedRef.current) return;
+                if (e.target === e.currentTarget) {
+                  setActivePage(pageNum);
+                  handleSelectField(null);
+                }
+              }}
+            >
+              {/* Page label shown above each page */}
+              <div style={{ position: 'absolute', top: -22, right: 0, fontSize: 12, color: '#666' }}>{t('panel.pageLabel', { n: pageNum })}</div>
+              {/* Source document renderer: PDF uses PdfViewer (renderWidth contrôlé), image utilise <img> */}
+              {sourceUrl ? (
+                isPdf ? (
+                  <PdfViewer url={sourceUrl} renderWidth={pageW * dispRatio} onDimensionsDetected={onPdfDimensions} showPagination={false} />
                 ) : (
-                  <div className="scan-bg"><p>{t('panel.importScanHint')}</p></div>
-                )}
+                  <img src={sourceUrl} className="scan-image" alt="Document" onLoad={onImageLoad} />
+                )
+              ) : (
+                <div className="scan-bg"><p>{t('panel.importScanHint')}</p></div>
+              )}
 
                 {/* Field overlays: render interactive FieldOverlay for each field on this page */}
                 {fields.filter((f) => (f.pageNumber ?? 1) === pageNum).map((f) => (
@@ -2706,7 +2715,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     key={f.id}
                     field={f}
                     selected={f.id === selectedFieldId || multiSelectedIds.has(f.id)}
-                    zoom={zoom}
+                    dispRatio={dispRatio}
                     rotation={rotation}
                     docRole={docRole}
                     fillMode={fillMode}

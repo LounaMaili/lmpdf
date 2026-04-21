@@ -8,25 +8,29 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pd
 
 type Props = {
   url: string;
+  /** Largeur demandée pour le rendu de la page PDF. */
+  renderWidth?: number;
   onDimensionsDetected?: (displayW: number, displayH: number, origW: number, origH: number) => void;
   onPageChange?: (page: number, total: number) => void;
   showPagination?: boolean;
 };
 
-export default function PdfViewer({ url, onDimensionsDetected, onPageChange, showPagination = true }: Props) {
+export default function PdfViewer({ url, renderWidth: renderWidthProp, onDimensionsDetected, onPageChange, showPagination = true }: Props) {
   const { t } = useTranslation();
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [renderWidth, setRenderWidth] = useState<number>(794);
+  // renderWidth interne : utilise la prop si fournie, sinon la valeur par défaut (794).
+  const [renderWidth, setRenderWidth] = useState<number>(renderWidthProp ?? 794);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
 
   const dpr = useMemo(() => (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1), []);
 
+  // Reset complet quand l'URL change
   useEffect(() => {
     setNumPages(0);
     setCurrentPage(1);
-    setRenderWidth(794);
+    setRenderWidth(renderWidthProp ?? 794);
     setLoadError(null);
     setPdfBuffer(null);
 
@@ -51,7 +55,14 @@ export default function PdfViewer({ url, onDimensionsDetected, onPageChange, sho
     })();
 
     return () => ac.abort();
-  }, [url, t]);
+  }, [url, t, renderWidthProp]);
+
+  // Quand la prop renderWidth change, mettre à jour l'état interne
+  useEffect(() => {
+    if (renderWidthProp != null) {
+      setRenderWidth(renderWidthProp);
+    }
+  }, [renderWidthProp]);
 
   // pdf.js may detach buffers in the worker; clone once per render to avoid intermittent blank pages.
   const fileSource = useMemo(() => {
@@ -61,11 +72,14 @@ export default function PdfViewer({ url, onDimensionsDetected, onPageChange, sho
 
   const handlePageLoadSuccess = useCallback(
     (page: { width: number; height: number; originalWidth: number; originalHeight: number }) => {
+      // page.width / page.height = dimensions after scaling par pdf.js
+      // Ces dimensions correspondent à ce qui est effectivement affiché dans le canvas.
       const viewW = page.width;
       const viewH = page.height;
       const origW = page.originalWidth;
       const origH = page.originalHeight;
 
+      // Mettre à jour renderWidth interne pour refléter la taille réelle après dpi scaling
       setRenderWidth(viewW);
       onDimensionsDetected?.(viewW, viewH, origW, origH);
     },
