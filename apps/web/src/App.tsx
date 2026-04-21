@@ -2224,10 +2224,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   // ── Page rotation transform (appliqué directement sur .page) ──
   // Plus de transform: scale(zoom) — le document est rendu directement à renderW pixels.
+  // Dimensions rendues du div .page (en pixels CSS)
+  const renderedW = renderW * userZoom;
+  const renderedH = renderedW * (pageH / pageW);
+
   const pageRotation = (() => {
-    if (rotation === 90) return `translate(${pageH}px, 0) rotate(90deg)`;
-    if (rotation === 180) return `translate(${pageW}px, ${pageH}px) rotate(180deg)`;
-    if (rotation === 270) return `translate(0, ${pageW}px) rotate(270deg)`;
+    if (rotation === 90) return `translate(${renderedH}px, 0) rotate(90deg)`;
+    if (rotation === 180) return `translate(${renderedW}px, ${renderedH}px) rotate(180deg)`;
+    if (rotation === 270) return `translate(0, ${renderedW}px) rotate(270deg)`;
     return '';
   })();
 
