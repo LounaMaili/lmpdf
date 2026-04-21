@@ -577,7 +577,9 @@ body { margin: 0; background: #f3f5f8; }
   display: flex;
   flex-direction: column;
   gap: 16px;
-  align-items: safe center;
+  align-items: flex-start;
+  width: 100%;
+  min-width: fit-content;
 }
 
 /* .page-zoom-wrapper supprimé — sa fonction (wrapper avec overflow:hidden) était
@@ -590,7 +592,8 @@ body { margin: 0; background: #f3f5f8; }
   background: var(--color-white);
   box-shadow: var(--shadow-page);
   overflow: hidden;
-  /* La largeur/hauteur sont définies en inline-style (pageW * dispRatio) */
+  margin: 0 auto;
+  /* La largeur/hauteur sont définies en inline-style (renderW * userZoom) */
 }
 
 .scan-image {
