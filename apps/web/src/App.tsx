@@ -592,15 +592,19 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setPageH(nativeH);
     setSrcW(origW);
     setSrcH(origH);
-    // Calculer dispRatio pour que le document remplisse la largeur disponible
+    // DEBUG: afficher les valeurs dans la bannière debug
     const el = editorRef.current;
+    let dbg = `w=${w} h=${h} origW=${origW} origH=${origH} nativeW=${nativeW.toFixed(1)}`;
     if (el) {
       const cs = getComputedStyle(el);
       const padL = parseFloat(cs.paddingLeft) || 0;
       const padR = parseFloat(cs.paddingRight) || 0;
       const availableW = Math.max(200, el.clientWidth - padL - padR);
       const ratio = availableW / nativeW;
+      dbg += ` avail=${availableW} ratio=${ratio.toFixed(3)}`;
       setDispRatio(Math.max(DISP_RATIO_MIN, Math.min(DISP_RATIO_MAX, ratio)));
+      const banner = document.getElementById('mobile-debug');
+      if (banner) { banner.style.display = 'block'; banner.textContent = dbg; }
     }
   }, []);
 
