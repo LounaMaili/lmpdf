@@ -758,18 +758,33 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     b: { x: number; y: number; w: number; h: number },
   ) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-  /** Convert a screen point (clientX/Y) to field-space coords on the given page element, undoing rotation et le ratio de rendu. */
+  /** Convert a screen point (clientX/Y) to field-space coords.
+   * Utilise le div .page externe (pas le wrapper interne rotaté) pour des coords fiables.
+   */
   const screenToFieldCoords = (clientX: number, clientY: number, pageEl: HTMLElement): { fx: number; fy: number } => {
-    const rect = pageEl.getBoundingClientRect();
-    // Coordonnées visibles relatives à l'élément page
-    // Le ratio de rendu = (renderW * userZoom) / pageW convertit les coords écran en coords page
+    // pageEl est le wrapper interne (avec rotation). On remonte au .page parent.
+    const outerPage = pageEl.parentElement as HTMLElement;
+    const rect = outerPage.getBoundingClientRect();
     const ratio = (renderW * userZoom) / pageW;
-    const vx = (clientX - rect.left) / ratio;
-    const vy = (clientY - rect.top) / ratio;
-    // Annuler la rotation pour obtenir les coordonnées page
-    if (rotation === 90) return { fx: vy, fy: pageH - vx };
-    if (rotation === 180) return { fx: pageW - vx, fy: pageH - vy };
-    if (rotation === 270) return { fx: pageW - vy, fy: vx };
+    // Coordonnées relatives au .page externe (post-rotation)
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    // Convertir en coords page en annulant la rotation
+    let vx: number, vy: number;
+    if (rotation === 90) {
+      // Le document visuel fait renderedH × renderedW. Visuellement: x→y, y→(visW-x)
+      vx = py / ratio;
+      vy = (pageDivW * ratio - px) / ratio;
+    } else if (rotation === 180) {
+      vx = (pageDivW - px) / ratio;
+      vy = (pageDivH - py) / ratio;
+    } else if (rotation === 270) {
+      vx = (pageDivH * ratio - py) / ratio;
+      vy = px / ratio;
+    } else {
+      vx = px / ratio;
+      vy = py / ratio;
+    }
     return { fx: vx, fy: vy };
   };
 

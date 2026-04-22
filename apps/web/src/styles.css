@@ -128,7 +128,7 @@ body { margin: 0; background: #f3f5f8; }
 }
 .toolbar-group-brand  { gap: 4px;  flex-shrink: 0; }
 .toolbar-group-doc    { min-width: 0; flex: 1; gap: 6px; }
-.toolbar-group-controls { padding-left: 8px; border-left: 1px solid #ececec; flex-wrap: wrap; }
+.toolbar-group-controls { padding-left: 8px; border-left: 1px solid #ececec; flex-wrap: nowrap; }
 .toolbar-group-right  { margin-left: auto; gap: 8px; flex-shrink: 1; min-width: 0; align-items: center; }
 
 /* Toolbar brand */
