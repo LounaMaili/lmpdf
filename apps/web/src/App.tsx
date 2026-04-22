@@ -654,8 +654,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       resizeTimeout = setTimeout(updateRenderW, 100);
     });
     ro.observe(el);
-    // Appel initial pour mesurer la largeur disponible dès le montage
-    updateRenderW();
+    // Appel initial après un court délai pour laisser le layout se stabiliser
+    setTimeout(updateRenderW, 50);
     return () => {
       ro.disconnect();
       if (rafId !== null) cancelAnimationFrame(rafId);
@@ -2749,14 +2749,6 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
               }}
               aria-label={`Page document ${pageNum}`}
-              onMouseDown={(e) => startMarquee(e, pageNum)}
-              onClick={(e) => {
-                if (marqueeJustEndedRef.current) return;
-                if (e.target === e.currentTarget) {
-                  setActivePage(pageNum);
-                  handleSelectField(null);
-                }
-              }}
             >
               {/* Wrapper interne avec rotation : dimensions AVANT rotation */}
               <div style={{
@@ -2765,7 +2757,16 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 transform: innerRotation,
                 transformOrigin: 'top left',
                 position: 'relative',
-              }}>
+              }}
+              onMouseDown={(e) => startMarquee(e, pageNum)}
+              onClick={(e) => {
+                if (marqueeJustEndedRef.current) return;
+                if (e.target === e.currentTarget) {
+                  setActivePage(pageNum);
+                  handleSelectField(null);
+                }
+              }}
+              >>
               {/* Page label shown above each page */}
               <div style={{ position: 'absolute', top: -22, right: 0, fontSize: 12, color: '#666' }}>{t('panel.pageLabel', { n: pageNum })}</div>
               {/* Source document renderer: PDF uses PdfViewer (renderWidth contrôlé), image utilise <img> */}
