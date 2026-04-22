@@ -2766,7 +2766,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                   handleSelectField(null);
                 }
               }}
-              >>
+              >
               {/* Page label shown above each page */}
               <div style={{ position: 'absolute', top: -22, right: 0, fontSize: 12, color: '#666' }}>{t('panel.pageLabel', { n: pageNum })}</div>
               {/* Source document renderer: PDF uses PdfViewer (renderWidth contrôlé), image utilise <img> */}
