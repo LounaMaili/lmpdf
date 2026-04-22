@@ -79,8 +79,8 @@ export default function PdfViewer({ url, renderWidth: renderWidthProp, onDimensi
       const origW = page.originalWidth;
       const origH = page.originalHeight;
 
-      // Mettre à jour renderWidth interne pour refléter la taille réelle après dpi scaling
-      setRenderWidth(viewW);
+      // Appeler onDimensionsDetected seulement avec les dimensions originales.
+      // Ne PAS mettre à jour renderWidth interne ici pour éviter une boucle de re-render.
       onDimensionsDetected?.(viewW, viewH, origW, origH);
     },
     [onDimensionsDetected],

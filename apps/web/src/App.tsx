@@ -584,7 +584,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    * Callback from PdfViewer when the PDF page dimensions are determined.
    * Stocke les dimensions natives et calcule la largeur de rendu initiale.
    */
+  // Ref pour éviter les appels répétés de onPdfDimensions (même document)
+  const lastOrigDims = useRef('');
+
   const onPdfDimensions = useCallback((w: number, h: number, origW: number, origH: number) => {
+    // Éviter les appels en boucle : ne traiter que si les dimensions changent
+    const key = `${origW}:${origH}`;
+    if (lastOrigDims.current === key) return;
+    lastOrigDims.current = key;
     // origW/origH : dimensions natives du PDF en points (1pt = 1/72 inch)
     setPageW(origW);
     setPageH(origH);
