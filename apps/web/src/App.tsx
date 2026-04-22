@@ -599,13 +599,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       const padT = parseFloat(cs.paddingTop) || 0;
       const padB = parseFloat(cs.paddingBottom) || 0;
       const availableW = Math.max(200, el.clientWidth - padL - padR);
-      const availableH = Math.max(200, el.clientHeight - padT - padB);
       const nativeW = origW * (96 / 72);
       const nativeH = origH * (96 / 72);
-      const ratioW = availableW / nativeW;
-      const ratioH = availableH / nativeH;
-      const fitRatio = Math.min(ratioW, ratioH);
-      setRenderW(nativeW * fitRatio);
+      const isRot = rotation === 90 || rotation === 270;
+      const visualW = isRot ? nativeH : nativeW;
+      setRenderW(nativeW * (availableW / visualW));
     }
   }, []);
 
@@ -638,18 +636,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         // On prend le min pour que le document tienne en largeur ET en hauteur.
         const nativeW = pageW * (96 / 72); // points → pixels
         const nativeH = pageH * (96 / 72);
-        // Dimensions visuelles après rotation
+        // Fit-to-width : le document remplit la largeur disponible
+        // Dimensions visuelles après rotation pour le calcul
         const isRot = rotation === 90 || rotation === 270;
         const visualW = isRot ? nativeH : nativeW;
-        const visualH = isRot ? nativeW : nativeH;
-        const ratioW = availableW / visualW;
-        const ratioH = availableH / visualH;
-        const fitRatio = Math.min(ratioW, ratioH);
-        // renderW = largeur rendue AVANT rotation
-        const newRenderW = nativeW * fitRatio;
+        const newRenderW = nativeW * (availableW / visualW);
         // Debug
         const dbg = document.getElementById('mobile-debug');
-        if (dbg) { dbg.textContent = `fit=${(fitRatio*100).toFixed(0)}% rW=${newRenderW.toFixed(0)} vis=${visualW.toFixed(0)}×${visualH.toFixed(0)} rot=${rotation}°`; }
+        if (dbg) { dbg.textContent = `fitW=100% rW=${newRenderW.toFixed(0)} vis=${visualW.toFixed(0)}×${(isRot ? nativeW : nativeH).toFixed(0)} rot=${rotation}°`; }
         setRenderW(newRenderW);
       });
     };
@@ -2440,8 +2434,23 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             <button disabled={userZoom >= ZOOM_MAX} onClick={() => setUserZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}><ZoomInIcon size={14} /></button>
           </div>
 
-          {/* Ajuster : remet userZoom à 1.0 et recalcule fit-to-page */}
+          {/* Largeur : fit-to-width (remplit la largeur, scroll vertical possible) */}
           <div className="fit-mode-controls compact">
+            <button onClick={() => {
+              setUserZoom(1);
+              const el = editorRef.current;
+              if (el && pageW > 0) {
+                const cs = getComputedStyle(el);
+                const padL = parseFloat(cs.paddingLeft) || 0;
+                const padR = parseFloat(cs.paddingRight) || 0;
+                const availableW = Math.max(200, el.clientWidth - padL - padR);
+                const nativeW = pageW * (96 / 72);
+                const nativeH = pageH * (96 / 72);
+                const isRot = rotation === 90 || rotation === 270;
+                const visualW = isRot ? nativeH : nativeW;
+                setRenderW(nativeW * (availableW / visualW));
+              }
+            }}>{t('toolbar.width')}</button>
             <button onClick={() => {
               setUserZoom(1);
               const el = editorRef.current;
@@ -2461,7 +2470,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 const fitRatio = Math.min(availableW / visualW, availableH / visualH);
                 setRenderW(nativeW * fitRatio);
               }
-            }}>{t('toolbar.width')}</button>
+            }}>{t('toolbar.fitPage', 'Page')}</button>
           </div>
 
           {/* Rotation controls: rotate 90° left/right */}
