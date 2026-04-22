@@ -433,7 +433,7 @@ export default function FieldOverlay({
             direction: 'ltr',
             unicodeBidi: 'plaintext',
             fontFamily: field.style.fontFamily,
-            fontSize: field.style.fontSize ? `${parseFloat(String(field.style.fontSize)) * dispRatio}px` : undefined,
+            fontSize: field.style.fontSize,
             fontWeight: field.style.fontWeight,
             fontStyle: field.style.fontStyle,
             textDecoration: field.style.textDecoration,
@@ -466,7 +466,7 @@ export default function FieldOverlay({
           maxLength={10}
           style={{
             fontFamily: field.style.fontFamily,
-            fontSize: field.style.fontSize ? `${parseFloat(String(field.style.fontSize)) * dispRatio}px` : undefined,
+            fontSize: field.style.fontSize,
             fontWeight: field.style.fontWeight,
             fontStyle: field.style.fontStyle,
             textDecoration: field.style.textDecoration,
@@ -479,7 +479,7 @@ export default function FieldOverlay({
 
     const textEditStyle = {
       fontFamily: field.style.fontFamily,
-      fontSize: field.style.fontSize ? `${parseFloat(String(field.style.fontSize)) * dispRatio}px` : undefined,
+      fontSize: field.style.fontSize,
       fontWeight: field.style.fontWeight,
       fontStyle: field.style.fontStyle,
       textDecoration: field.style.textDecoration,
@@ -546,7 +546,7 @@ export default function FieldOverlay({
   // ── Computed styles ─────────────────────────────────────────────────────────
 
   // Font size for the checkbox glyph — scales with the smaller of width/height.
-  const checkboxFontSize = (field.style.checkSize ?? Math.max(12, Math.min(field.w, field.h) * 0.75)) * dispRatio;
+  const checkboxFontSize = field.style.checkSize ?? Math.max(12, Math.min(field.w, field.h) * 0.75);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -564,12 +564,14 @@ export default function FieldOverlay({
       ].filter(Boolean).join(' ')}
       style={{
         // Use fused bounds when anchor, otherwise the field's own geometry.
-        // Toutes les coordonnées sont multipliées par dispRatio (renderW / pageW)
-        // pour passer du coordinate system PDF à l'affichage en pixels.
-        left: (fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.x : field.x) * dispRatio,
-        top: (fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.y : field.y) * dispRatio,
-        width: effectiveW * dispRatio,
-        height: effectiveH * dispRatio,
+        // Coordonnées natives du champ + CSS zoom pour l'affichage à l'échelle.
+        // zoom affecte le layout : l'élément occupe field.w*dispRatio × field.h*dispRatio
+        // mais le contenu interne reste à l'échelle native (fontSize, padding, etc.).
+        left: fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.x : field.x,
+        top: fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.y : field.y,
+        width: effectiveW,
+        height: effectiveH,
+        zoom: dispRatio,
         cursor: structureLocked ? 'default' : undefined,
         // Ghost fields (overflow overflow overflow recipients) are hidden.
         ...(isHiddenGhost ? { display: 'none' } : {}),
