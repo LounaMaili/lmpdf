@@ -638,14 +638,18 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         // On prend le min pour que le document tienne en largeur ET en hauteur.
         const nativeW = pageW * (96 / 72); // points → pixels
         const nativeH = pageH * (96 / 72);
-        const ratioW = availableW / nativeW;
-        const ratioH = availableH / nativeH;
+        // Dimensions visuelles après rotation
+        const isRot = rotation === 90 || rotation === 270;
+        const visualW = isRot ? nativeH : nativeW;
+        const visualH = isRot ? nativeW : nativeH;
+        const ratioW = availableW / visualW;
+        const ratioH = availableH / visualH;
         const fitRatio = Math.min(ratioW, ratioH);
-        // renderW = largeur rendue du document = nativeW * fitRatio
+        // renderW = largeur rendue AVANT rotation
         const newRenderW = nativeW * fitRatio;
         // Debug
         const dbg = document.getElementById('mobile-debug');
-        if (dbg) { dbg.textContent = `fitW=${(ratioW*100).toFixed(0)}% fitH=${(ratioH*100).toFixed(0)}% → fit=${(fitRatio*100).toFixed(0)}% renderW=${newRenderW.toFixed(0)}px native=${nativeW.toFixed(0)}×${nativeH.toFixed(0)}`; }
+        if (dbg) { dbg.textContent = `fit=${(fitRatio*100).toFixed(0)}% rW=${newRenderW.toFixed(0)} vis=${visualW.toFixed(0)}×${visualH.toFixed(0)} rot=${rotation}°`; }
         setRenderW(newRenderW);
       });
     };
@@ -2243,11 +2247,18 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   // ── Page rotation transform (appliqué directement sur .page) ──
   // Plus de transform: scale(zoom) — le document est rendu directement à renderW pixels.
-  // Dimensions rendues du div .page (en pixels CSS)
+  // Dimensions rendues du contenu (avant rotation)
   const renderedW = renderW * userZoom;
   const renderedH = renderedW * (pageH / pageW);
 
-  const pageRotation = (() => {
+  // Le div .page a les dimensions POST-rotation pour que le layout soit correct.
+  // Le contenu interne est dans un wrapper avec la rotation CSS.
+  const isRotated90 = rotation === 90 || rotation === 270;
+  const pageDivW = isRotated90 ? renderedH : renderedW;
+  const pageDivH = isRotated90 ? renderedW : renderedH;
+
+  // Rotation du contenu interne (le wrapper a les dimensions avant rotation)
+  const innerRotation = (() => {
     if (rotation === 90) return `translate(${renderedH}px, 0) rotate(90deg)`;
     if (rotation === 180) return `translate(${renderedW}px, ${renderedH}px) rotate(180deg)`;
     if (rotation === 270) return `translate(0, ${renderedW}px) rotate(270deg)`;
@@ -2444,7 +2455,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 const availableH = Math.max(200, el.clientHeight - padT - padB);
                 const nativeW = pageW * (96 / 72);
                 const nativeH = pageH * (96 / 72);
-                const fitRatio = Math.min(availableW / nativeW, availableH / nativeH);
+                const isRot = rotation === 90 || rotation === 270;
+                const visualW = isRot ? nativeH : nativeW;
+                const visualH = isRot ? nativeW : nativeH;
+                const fitRatio = Math.min(availableW / visualW, availableH / visualH);
                 setRenderW(nativeW * fitRatio);
               }
             }}>{t('toolbar.width')}</button>
@@ -2720,11 +2734,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               key={pageNum}
               className="page"
               style={{
-                width: renderW * userZoom,
-                // Hauteur proportionnelle : renderH = renderW * (pageH / pageW)
-                height: (renderW * userZoom) * (pageH / pageW),
-                transform: pageRotation,
-                transformOrigin: rotation !== 0 ? 'top left' : undefined,
+                // Dimensions POST-rotation : le div occupe l'espace visuel correct
+                width: pageDivW,
+                height: pageDivH,
                 outline: pageNum === activePage ? '2px solid #0077ff' : '1px solid #d0d0d0',
               }}
               aria-label={`Page document ${pageNum}`}
@@ -2737,6 +2749,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 }
               }}
             >
+              {/* Wrapper interne avec rotation : dimensions AVANT rotation */}
+              <div style={{
+                width: renderedW,
+                height: renderedH,
+                transform: innerRotation,
+                transformOrigin: 'top left',
+                position: 'relative',
+              }}>
               {/* Page label shown above each page */}
               <div style={{ position: 'absolute', top: -22, right: 0, fontSize: 12, color: '#666' }}>{t('panel.pageLabel', { n: pageNum })}</div>
               {/* Source document renderer: PDF uses PdfViewer (renderWidth contrôlé), image utilise <img> */}
@@ -2893,6 +2913,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     }}
                   />
                 )}
+              </div>{/* fin wrapper interne avec rotation */}
             </div>
           ))}
 
