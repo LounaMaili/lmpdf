@@ -605,7 +605,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       const visualW = isRot ? nativeH : nativeW;
       setRenderW(nativeW * (availableW / visualW));
     }
-  }, []);
+  }, [rotation]);
 
   /**
    * ResizeObserver sur l'éditeur : met à jour renderW quand la largeur disponible change.
@@ -661,7 +661,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (resizeTimeout) clearTimeout(resizeTimeout);
     };
-  }, [pageW]);
+  }, [pageW, pageH, rotation]);
 
   // Force icon bar into bottom dock on narrow screens (bypass CSS issues)
   useEffect(() => {
@@ -2470,7 +2470,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 const fitRatio = Math.min(availableW / visualW, availableH / visualH);
                 setRenderW(nativeW * fitRatio);
               }
-            }}>{t('toolbar.fitPage', 'Page')}</button>
+            }}>{t('toolbar.fitPage') || 'Page'}</button>
           </div>
 
           {/* Rotation controls: rotate 90° left/right */}
