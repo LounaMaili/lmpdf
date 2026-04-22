@@ -586,21 +586,26 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    */
   const onPdfDimensions = useCallback((w: number, h: number, origW: number, origH: number) => {
     // origW/origH : dimensions natives du PDF en points (1pt = 1/72 inch)
-    // On les stocke comme référence pour le coordinate system des champs.
-    // La conversion points→pixels (96/72) donne la taille "100%" en CSS.
-    const pxPerPt = 96 / 72;
     setPageW(origW);
     setPageH(origH);
     setSrcW(origW);
     setSrcH(origH);
-    // Calculer la largeur de rendu initiale = largeur disponible dans l'éditeur
+    // Calculer renderW initial avec fit-to-page
     const el = editorRef.current;
     if (el) {
       const cs = getComputedStyle(el);
       const padL = parseFloat(cs.paddingLeft) || 0;
       const padR = parseFloat(cs.paddingRight) || 0;
+      const padT = parseFloat(cs.paddingTop) || 0;
+      const padB = parseFloat(cs.paddingBottom) || 0;
       const availableW = Math.max(200, el.clientWidth - padL - padR);
-      setRenderW(availableW);
+      const availableH = Math.max(200, el.clientHeight - padT - padB);
+      const nativeW = origW * (96 / 72);
+      const nativeH = origH * (96 / 72);
+      const ratioW = availableW / nativeW;
+      const ratioH = availableH / nativeH;
+      const fitRatio = Math.min(ratioW, ratioH);
+      setRenderW(nativeW * fitRatio);
     }
   }, []);
 
@@ -619,19 +624,29 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        if (!editorRef.current) return;
+        if (!editorRef.current || pageW <= 0 || pageH <= 0) return;
         const cs = getComputedStyle(editorRef.current);
         const padL = parseFloat(cs.paddingLeft) || 0;
         const padR = parseFloat(cs.paddingRight) || 0;
+        const padT = parseFloat(cs.paddingTop) || 0;
+        const padB = parseFloat(cs.paddingBottom) || 0;
         const availableW = Math.max(200, editorRef.current.clientWidth - padL - padR);
-        // Debug: afficher les valeurs de layout
+        const availableH = Math.max(200, editorRef.current.clientHeight - padT - padB);
+        // Fit-to-page : le document doit tenir entièrement dans la zone visible.
+        // ratioW = availableW / pageW (en supposant pageW en pixels natifs)
+        // ratioH = availableH / pageH
+        // On prend le min pour que le document tienne en largeur ET en hauteur.
+        const nativeW = pageW * (96 / 72); // points → pixels
+        const nativeH = pageH * (96 / 72);
+        const ratioW = availableW / nativeW;
+        const ratioH = availableH / nativeH;
+        const fitRatio = Math.min(ratioW, ratioH);
+        // renderW = largeur rendue du document = nativeW * fitRatio
+        const newRenderW = nativeW * fitRatio;
+        // Debug
         const dbg = document.getElementById('mobile-debug');
-        if (dbg) { dbg.textContent = `clientW=${editorRef.current.clientWidth} pad=${padL+padR} avail=${availableW.toFixed(0)} renderW_prev= pageW=${pageW} userZoom=${userZoom}`; }
-        // Mettre à jour renderW
-        setRenderW((prev) => {
-          if (dbg) { dbg.textContent += ` prev=${prev.toFixed(0)}`; }
-          return availableW;
-        });
+        if (dbg) { dbg.textContent = `fitW=${(ratioW*100).toFixed(0)}% fitH=${(ratioH*100).toFixed(0)}% → fit=${(fitRatio*100).toFixed(0)}% renderW=${newRenderW.toFixed(0)}px native=${nativeW.toFixed(0)}×${nativeH.toFixed(0)}`; }
+        setRenderW(newRenderW);
       });
     };
 
@@ -2414,16 +2429,23 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             <button disabled={userZoom >= ZOOM_MAX} onClick={() => setUserZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}><ZoomInIcon size={14} /></button>
           </div>
 
-          {/* Fit Width : remet userZoom à 1.0 (fit-to-width automatique) */}
+          {/* Ajuster : remet userZoom à 1.0 et recalcule fit-to-page */}
           <div className="fit-mode-controls compact">
             <button onClick={() => {
               setUserZoom(1);
               const el = editorRef.current;
-              if (el) {
+              if (el && pageW > 0 && pageH > 0) {
                 const cs = getComputedStyle(el);
                 const padL = parseFloat(cs.paddingLeft) || 0;
                 const padR = parseFloat(cs.paddingRight) || 0;
-                setRenderW(Math.max(200, el.clientWidth - padL - padR));
+                const padT = parseFloat(cs.paddingTop) || 0;
+                const padB = parseFloat(cs.paddingBottom) || 0;
+                const availableW = Math.max(200, el.clientWidth - padL - padR);
+                const availableH = Math.max(200, el.clientHeight - padT - padB);
+                const nativeW = pageW * (96 / 72);
+                const nativeH = pageH * (96 / 72);
+                const fitRatio = Math.min(availableW / nativeW, availableH / nativeH);
+                setRenderW(nativeW * fitRatio);
               }
             }}>{t('toolbar.width')}</button>
           </div>
