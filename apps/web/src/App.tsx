@@ -2938,12 +2938,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                   <div
                     className="marquee-rect"
                     style={{
-                      left: marqueeRect.x,
-                      top: marqueeRect.y,
-                      width: marqueeRect.w,
-                      height: marqueeRect.h,
-                      // Même zoom que les champs pour être dans le même coordinate system
-                      zoom: (renderW * userZoom) / pageW,
+                      left: marqueeRect.x * ((renderW * userZoom) / pageW),
+                      top: marqueeRect.y * ((renderW * userZoom) / pageW),
+                      width: marqueeRect.w * ((renderW * userZoom) / pageW),
+                      height: marqueeRect.h * ((renderW * userZoom) / pageW),
                     }}
                   />
                 )}

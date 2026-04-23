@@ -563,15 +563,11 @@ export default function FieldOverlay({
         fillMode && hovered && !selected && 'field-fill-hover',
       ].filter(Boolean).join(' ')}
       style={{
-        // Use fused bounds when anchor, otherwise the field's own geometry.
-        // Coordonnées natives du champ + CSS zoom pour l'affichage à l'échelle.
-        // zoom affecte le layout : l'élément occupe field.w*dispRatio × field.h*dispRatio
-        // mais le contenu interne reste à l'échelle native (fontSize, padding, etc.).
-        left: fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.x : field.x,
-        top: fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.y : field.y,
-        width: effectiveW,
-        height: effectiveH,
-        zoom: dispRatio,
+        // Coordonnées manuellement scalées par dispRatio
+        left: (fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.x : field.x) * dispRatio,
+        top: (fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.y : field.y) * dispRatio,
+        width: effectiveW * dispRatio,
+        height: effectiveH * dispRatio,
         cursor: structureLocked ? 'default' : undefined,
         // Ghost fields (overflow overflow overflow recipients) are hidden.
         ...(isHiddenGhost ? { display: 'none' } : {}),
@@ -587,6 +583,11 @@ export default function FieldOverlay({
       <div
         className="field-content"
         style={{
+          // Zoom inverse pour ramener le contenu à l'échelle native
+          // Le champ externe est dispRatio × plus grand, donc on compense
+          zoom: 1 / dispRatio,
+          width: effectiveW,
+          height: effectiveH,
           ...(contentStyle ?? {}),
           background: field.style.maskBackground
             ? (field.style.backgroundColor || '#ffffff')
