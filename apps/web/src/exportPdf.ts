@@ -70,10 +70,10 @@ function normalizeRotation(angle: number): Rotation {
 }
 
 // Proportional padding constants (module-level, shared by portrait & landscape)
-const PAD_RATIO_X = 0.06; // 6% of field width
-const PAD_RATIO_Y = 0.06; // 6% of field height
-const BASELINE_RATIO = 0.04; // 4% of field height
-const MIN_PAD_PT = 1.5; // minimum padding in PDF points
+const PAD_RATIO_X = 0.02; // 2% of field width
+const PAD_RATIO_Y = 0.02; // 2% of field height
+const BASELINE_RATIO = 0.0;  // no extra baseline shift
+const MIN_PAD_PT = 0.5; // minimum padding in PDF points
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
