@@ -153,6 +153,9 @@ export default function FieldOverlay({
     if (e.altKey) return;
     if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
 
+    // Empêcher le marquee de se déclencher quand on clique sur un champ
+    e.stopPropagation();
+
     const tag = (e.target as HTMLElement).tagName;
     // Preserve native text editing when the field is already selected.
     if ((tag === 'INPUT' || tag === 'TEXTAREA') && selected) return;
@@ -563,11 +566,13 @@ export default function FieldOverlay({
         fillMode && hovered && !selected && 'field-fill-hover',
       ].filter(Boolean).join(' ')}
       style={{
-        // Coordonnées manuellement scalées par dispRatio
-        left: (fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.x : field.x) * dispRatio,
-        top: (fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.y : field.y) * dispRatio,
-        width: effectiveW * dispRatio,
-        height: effectiveH * dispRatio,
+        // Coordonnées natives + CSS zoom pour l'échelle visuelle.
+        // zoom affecte layout ET hit-testing uniformément.
+        left: fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.x : field.x,
+        top: fusedMeta?.anchor && fusedMeta.bounds ? fusedMeta.bounds.y : field.y,
+        width: effectiveW,
+        height: effectiveH,
+        zoom: dispRatio,
         cursor: structureLocked ? 'default' : undefined,
         // Ghost fields (overflow overflow overflow recipients) are hidden.
         ...(isHiddenGhost ? { display: 'none' } : {}),
@@ -583,11 +588,6 @@ export default function FieldOverlay({
       <div
         className="field-content"
         style={{
-          // Zoom inverse pour ramener le contenu à l'échelle native
-          // Le champ externe est dispRatio × plus grand, donc on compense
-          zoom: 1 / dispRatio,
-          width: effectiveW,
-          height: effectiveH,
           ...(contentStyle ?? {}),
           background: field.style.maskBackground
             ? (field.style.backgroundColor || '#ffffff')

@@ -807,8 +807,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     if (fillMode) return; // Don't start marquee in fill mode
     const target = e.target as HTMLElement;
     const forceMarquee = e.altKey;
-    // If the click lands on a field, skip unless Alt forces marquee mode.
-    if (target.closest('.field') && !forceMarquee) return;
+    // Les champs appellent e.stopPropagation(), donc si on arrive ici,
+    // le clic n'était pas sur un champ (sauf Alt force marquee).
+    // Pas besoin de vérifier target.closest('.field').
 
     const pageEl = e.currentTarget as HTMLElement;
     const { fx: startFx, fy: startFy } = screenToFieldCoords(e.clientX, e.clientY, pageEl);
@@ -2938,10 +2939,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                   <div
                     className="marquee-rect"
                     style={{
-                      left: marqueeRect.x * ((renderW * userZoom) / pageW),
-                      top: marqueeRect.y * ((renderW * userZoom) / pageW),
-                      width: marqueeRect.w * ((renderW * userZoom) / pageW),
-                      height: marqueeRect.h * ((renderW * userZoom) / pageW),
+                      left: marqueeRect.x,
+                      top: marqueeRect.y,
+                      width: marqueeRect.w,
+                      height: marqueeRect.h,
+                      zoom: (renderW * userZoom) / pageW,
                     }}
                   />
                 )}
