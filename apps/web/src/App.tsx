@@ -765,34 +765,46 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     b: { x: number; y: number; w: number; h: number },
   ) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-  /** Convert a screen point (clientX/Y) to field-space coords.
-   * Utilise le div .page externe (pas le wrapper interne rotaté) pour des coords fiables.
+  /** Convert a screen point (clientX/Y) to field-space coordinates.
+   * pageEl = wrapper interne (avec transform rotate). Les champs sont en coords
+   * natives (points PDF) avec CSS zoom: dispRatio.
+   *
+   * Le top-left du contenu visible = top-left du .page parent.
+   * On y soustrait la rotation CSS puis divise par dispRatio.
    */
   const screenToFieldCoords = (clientX: number, clientY: number, pageEl: HTMLElement): { fx: number; fy: number } => {
-    // pageEl est le wrapper interne (avec rotation). On remonte au .page parent.
+    // Le wrapper interne a transform: rotate(). Son parent .page n'a pas de rotation.
+    // Le top-left du contenu affiché correspond au top-left du .page.
     const outerPage = pageEl.parentElement as HTMLElement;
     const rect = outerPage.getBoundingClientRect();
-    const ratio = (renderW * userZoom) / pageW;
-    // Coordonnées relatives au .page externe (post-rotation)
-    const px = clientX - rect.left;
-    const py = clientY - rect.top;
-    // Convertir en coords page en annulant la rotation
-    let vx: number, vy: number;
+    const ratio = (renderW * userZoom) / pageW; // = dispRatio
+
+    // Offset dans le .page (pixels écran, post-rotation)
+    const ox = clientX - rect.left;
+    const oy = clientY - rect.top;
+
+    // Le .page fait pageDivW × pageDivH (post-rotation).
+    // Le contenu interne fait renderedW × renderedH (avant rotation).
+    // Annuler la rotation pour obtenir les coords dans l'espace interne.
+    let localX: number, localY: number;
     if (rotation === 90) {
-      // Le document visuel fait renderedH × renderedW. Visuellement: x→y, y→(visW-x)
-      vx = py / ratio;
-      vy = (pageDivW * ratio - px) / ratio;
+      // Visuel: le contenu est pivoté 90° CW. L'axe X interne correspond à Y visuel.
+      localX = oy;
+      localY = pageDivW - ox; // pageDivW = renderedH (la largeur visuelle)
     } else if (rotation === 180) {
-      vx = (pageDivW - px) / ratio;
-      vy = (pageDivH - py) / ratio;
+      localX = renderedW - ox; // renderedW = pageDivW
+      localY = renderedH - oy;
     } else if (rotation === 270) {
-      vx = (pageDivH * ratio - py) / ratio;
-      vy = px / ratio;
+      localX = pageDivH - oy; // pageDivH = renderedW
+      localY = ox;
     } else {
-      vx = px / ratio;
-      vy = py / ratio;
+      localX = ox;
+      localY = oy;
     }
-    return { fx: vx, fy: vy };
+
+    // localX/Y sont en pixels écran dans l'espace du contenu interne.
+    // Les champs utilisent zoom: dispRatio, donc leurs coords natives = local / dispRatio.
+    return { fx: localX / ratio, fy: localY / ratio };
   };
 
   /**
