@@ -2942,6 +2942,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                       top: marqueeRect.y,
                       width: marqueeRect.w,
                       height: marqueeRect.h,
+                      // Même zoom que les champs pour être dans le même coordinate system
+                      zoom: (renderW * userZoom) / pageW,
                     }}
                   />
                 )}
