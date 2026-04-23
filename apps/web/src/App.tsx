@@ -262,8 +262,6 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [showDebugOrder, setShowDebugOrder] = useState(false);
   /** Tracks visual/overflow state per group key (continuous & fused modes). */
   const [fusedUiState, setFusedUiState] = useState<Record<string, OverflowUiStateEntry>>({});
-  // fitMode supprimé — le zoom est désormais contrôlé par renderW + userZoom
-
   // ───── Draft restore state ─────
   const [pendingDraft, setPendingDraft] = useState<DraftRecord | null>(null);
   const [loadedTemplateId, setLoadedTemplateId] = useState<string | null>(null);
@@ -432,11 +430,6 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** The currently selected field model, or null. */
   const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
 
-  // Les dimensions d'affichage (dispW, dispH) et le système transform: scale(zoom)
-  // ont été supprimés. Le document est désormais rendu à renderW (largeur disponible
-  // dans l'éditeur). Les champs utilisent le ratio renderW/pageW pour la conversion de coords.
-  // conversion coordonnées page ↔ écran.
-
   /** Device pixel ratio for high-DPI canvas rendering. */
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
@@ -470,8 +463,29 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     getMyDocRole(sourceFileId).then((r) => setDocRole(r.docRole as any)).catch(() => setDocRole(null));
   }, [sourceFileId]);
 
-  // applyFitZoom a été supprimé — la logique de fit est désormais dans onPdfDimensions
-  // et l'ajustement au resize via ResizeObserver sur editorRef.
+  /** Calcule renderW pour fit-to-width ou fit-to-page */
+  const calcFitRenderW = useCallback((mode: 'width' | 'page') => {
+    const el = editorRef.current;
+    if (!el || pageW <= 0) return;
+    const cs = getComputedStyle(el);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const availableW = Math.max(200, el.clientWidth - padL - padR);
+    const nativeW = pageW * (96 / 72);
+    const nativeH = pageH * (96 / 72);
+    const isRot = rotation === 90 || rotation === 270;
+    const visualW = isRot ? nativeH : nativeW;
+    if (mode === 'width') {
+      setRenderW(nativeW * (availableW / visualW));
+    } else {
+      const availableH = Math.max(200, el.clientHeight - padT - padB);
+      const visualH = isRot ? nativeW : nativeH;
+      const fitRatio = Math.min(availableW / visualW, availableH / visualH);
+      setRenderW(nativeW * fitRatio);
+    }
+  }, [pageW, pageH, rotation]);
 
   // ───── Global keyboard shortcuts ─────
   // Keep keyboard shortcuts global while scoping Tab cycling to the editor area.
@@ -2275,13 +2289,11 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const isPdf = sourceMime === 'application/pdf';
 
   // ── Page rotation transform (appliqué directement sur .page) ──
-  // Plus de transform: scale(zoom) — le document est rendu directement à renderW pixels.
   // Dimensions rendues du contenu (avant rotation)
   const renderedW = renderW * userZoom;
   const renderedH = renderedW * (pageH / pageW);
 
-  // Le div .page a les dimensions POST-rotation pour que le layout soit correct.
-  // Le contenu interne est dans un wrapper avec la rotation CSS.
+  // Le div .page a les dimensions POST-rotation. Le contenu interne est dans un wrapper avec rotation CSS.
   const isRotated90 = rotation === 90 || rotation === 270;
   const pageDivW = isRotated90 ? renderedH : renderedW;
   const pageDivH = isRotated90 ? renderedW : renderedH;
@@ -2471,41 +2483,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
           {/* Largeur : fit-to-width (remplit la largeur, scroll vertical possible) */}
           <div className="fit-mode-controls compact">
-            <button onClick={() => {
-              setUserZoom(1);
-              const el = editorRef.current;
-              if (el && pageW > 0) {
-                const cs = getComputedStyle(el);
-                const padL = parseFloat(cs.paddingLeft) || 0;
-                const padR = parseFloat(cs.paddingRight) || 0;
-                const availableW = Math.max(200, el.clientWidth - padL - padR);
-                const nativeW = pageW * (96 / 72);
-                const nativeH = pageH * (96 / 72);
-                const isRot = rotation === 90 || rotation === 270;
-                const visualW = isRot ? nativeH : nativeW;
-                setRenderW(nativeW * (availableW / visualW));
-              }
-            }}>{t('toolbar.width')}</button>
-            <button onClick={() => {
-              setUserZoom(1);
-              const el = editorRef.current;
-              if (el && pageW > 0 && pageH > 0) {
-                const cs = getComputedStyle(el);
-                const padL = parseFloat(cs.paddingLeft) || 0;
-                const padR = parseFloat(cs.paddingRight) || 0;
-                const padT = parseFloat(cs.paddingTop) || 0;
-                const padB = parseFloat(cs.paddingBottom) || 0;
-                const availableW = Math.max(200, el.clientWidth - padL - padR);
-                const availableH = Math.max(200, el.clientHeight - padT - padB);
-                const nativeW = pageW * (96 / 72);
-                const nativeH = pageH * (96 / 72);
-                const isRot = rotation === 90 || rotation === 270;
-                const visualW = isRot ? nativeH : nativeW;
-                const visualH = isRot ? nativeW : nativeH;
-                const fitRatio = Math.min(availableW / visualW, availableH / visualH);
-                setRenderW(nativeW * fitRatio);
-              }
-            }}>{t('toolbar.fitPage') || 'Page'}</button>
+            <button onClick={() => { setUserZoom(1); calcFitRenderW('width'); }}>{t('toolbar.width')}</button>
+            <button onClick={() => { setUserZoom(1); calcFitRenderW('page'); }}>{t('toolbar.fitPage') || 'Page'}</button>
           </div>
 
           {/* Rotation controls: rotate 90° left/right */}

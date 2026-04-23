@@ -561,9 +561,6 @@ body { margin: 0; background: #f3f5f8; }
    Layout: .editor (grid item) > .multi-pages-stack (flex column) > .page
    - .editor: grid-area editor, NOT a flex container. Scrollable via overflow: auto.
    - .multi-pages-stack: flex column, align-items: center (centers pages horizontally)
-   - .page: dimensionné à pageW*dispRatio × pageH*dispRatio (largeur de rendu = fit-to-width).
-     Plus de transform: scale(zoom) — le zoom contrôle désormais la largeur de rendu.
-     La rotation CSS (transform) est appliquée directement sur .page.
    ───────────────────────────────────────────────────────────────────────────── */
 
 .editor {
@@ -583,18 +580,12 @@ body { margin: 0; background: #f3f5f8; }
   width: 100%;
 }
 
-/* .page-zoom-wrapper supprimé — sa fonction (wrapper avec overflow:hidden) était
-   nécessaire pour le système transform:scale() qui est maintenant retiré.
-   La largeur du .page est définie directement en JS (pageW * dispRatio). */
-.page-zoom-wrapper { display: none; }
-
 .page {
   position: relative;
   background: var(--color-white);
   box-shadow: var(--shadow-page);
   overflow: hidden;
   margin: 0 auto;
-  /* La largeur/hauteur sont définies en inline-style (renderW * userZoom) */
 }
 
 /* Quand le document est plus petit que l'éditeur, on le centre.
@@ -1463,8 +1454,6 @@ label.inline input[type="number"] { width: 60px; padding: 4px 6px; }
   .app { display: block !important; height: auto !important; min-height: auto !important; }
 
   .editor { overflow: visible !important; margin: 0 !important; padding: 0 !important; height: auto !important; }
-
-  .page-zoom-wrapper { width: auto !important; height: auto !important; page-break-after: always; }
 
   .page { transform: none !important; transform-origin: top left !important; position: relative !important; outline: none !important; border: none !important; }
 
