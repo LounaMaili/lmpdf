@@ -2368,7 +2368,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       {/* Drag overlay shown when a file is dragged over the app window */}
       {isDraggingOver && <div className="drag-overlay"><UploadIcon size={18} /> <span>Déposez le fichier ici</span></div>}
       {/* DEBUG: Mobile dock test */}
-      <div id="mobile-debug" style={{ display: 'block', position: 'fixed', top: 0, left: 0, right: 0, background: 'red', color: 'white', padding: '8px', textAlign: 'center', zIndex: 9999, fontSize: '14px', fontWeight: 'bold' }}>Loading...</div>
+      <div id="mobile-debug" style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, background: 'red', color: 'white', padding: '8px', textAlign: 'center', zIndex: 9999, fontSize: '14px', fontWeight: 'bold' }}>Loading...</div>
       {/* ── Top toolbar: brand, file menu, document name, view controls, user area ── */}
       <header className="app-toolbar app-toolbar-single-row">
         {/* ── Left: Brand + File menu ── */}
