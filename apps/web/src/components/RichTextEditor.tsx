@@ -173,7 +173,7 @@ export default function RichTextEditor({
         whiteSpace: 'pre-wrap',
         cursor: 'text',
         // 4 px left padding prevents the first character being clipped at the field edge.
-        paddingLeft: '4px',
+        paddingLeft: '2px',
         boxSizing: 'border-box',
       }}
     />
