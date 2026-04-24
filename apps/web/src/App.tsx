@@ -2404,6 +2404,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 <button onClick={() => { setShowShareModal(true); setFileMenuOpen(false); }} disabled={!sourceFileId} title={t('toolbar.share')}>
                   <ShareIcon size={14} /> {t('toolbar.share')}
                 </button>
+                <button onClick={() => { onSaveDraft(); setFileMenuOpen(false); }} disabled={!draftKey} title={t('toolbar.saveDraft')}>
+                  <CloudUploadIcon size={14} /> {t('toolbar.saveDraft')}
+                </button>
               </div>
             )}
           </div>
