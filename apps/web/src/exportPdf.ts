@@ -433,7 +433,7 @@ function drawFieldPortrait(
     const raw = fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
-    const lineHeight = Math.max(fontSize * 1.1, 8);
+    const lineHeight = Math.max(fontSize * 1.15, 8);
     const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
@@ -576,7 +576,7 @@ function drawFieldLandscape(
     const raw = fieldValue ?? '';
     const maxTextWidth = Math.max(8, dispW - PAD * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
-    const lineHeight = Math.max(fontSize * 1.1, 8);
+    const lineHeight = Math.max(fontSize * 1.15, 8);
     const maxLines = Math.max(1, Math.floor((dispH - PAD * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 

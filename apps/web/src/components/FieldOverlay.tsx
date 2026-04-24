@@ -488,7 +488,7 @@ export default function FieldOverlay({
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
       color: field.style.color,
-      lineHeight: 1.1,
+      lineHeight: 1.15,
     };
 
     // ── Rich text mode (fillMode or selected) ──────────────────────────────
