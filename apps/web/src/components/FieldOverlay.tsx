@@ -409,20 +409,9 @@ export default function FieldOverlay({
             e.stopPropagation();
             onValueChange(isChecked ? 'false' : 'true');
           }}
-          style={{ width: '100%', height: '100%', position: 'relative' }}
+          style={{ fontSize: field.style.checkSize ?? Math.max(12, Math.min(field.w, field.h) * 0.75), color: field.style.color, lineHeight: 1 }}
         >
-          {isChecked && (
-            <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }} preserveAspectRatio="none">
-              <polyline
-                points="18,55 40,25 82,78"
-                fill="none"
-                stroke={field.style.color || '#000000'}
-                strokeWidth={Math.max(6, Math.min(100, 100) * 0.09)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          )}
+          {isChecked ? '✓' : ''}
         </div>
       );
     }
@@ -561,7 +550,7 @@ export default function FieldOverlay({
   // ── Computed styles ─────────────────────────────────────────────────────────
 
   // Font size for the checkbox glyph — scales with the smaller of width/height.
-  // checkboxFontSize: non utilisé — les coches sont en SVG maintenant
+  const checkboxFontSize = field.style.checkSize ?? Math.max(12, Math.min(field.w, field.h) * 0.75);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
