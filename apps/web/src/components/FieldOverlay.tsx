@@ -488,6 +488,7 @@ export default function FieldOverlay({
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
       color: field.style.color,
+      lineHeight: 1.1,
     };
 
     // ── Rich text mode (fillMode or selected) ──────────────────────────────
@@ -549,7 +550,7 @@ export default function FieldOverlay({
   // ── Computed styles ─────────────────────────────────────────────────────────
 
   // Font size for the checkbox glyph — scales with the smaller of width/height.
-  const checkboxFontSize = field.style.checkSize ?? Math.max(12, Math.min(field.w, field.h) * 0.75);
+  const checkboxFontSize = field.style.checkSize ?? Math.max(8, Math.min(field.w, field.h) * 0.6);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

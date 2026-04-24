@@ -347,8 +347,8 @@ async function renderFieldsOnPages(
       const boxW = pdf.w;
       const boxH = pdf.h;
 
-      // CSS px (96 DPI) → PDF points (72 pt/inch)
-      const fontSize = Math.min(f.style.fontSize * 72 / 96, boxH - 2);
+      // fontSize est en points PDF (coords natives) — pas de conversion nécessaire
+      const fontSize = Math.min(f.style.fontSize, boxH - 2);
       const selectedFont =
         f.style.fontWeight === 'bold' ? fontBold : font;
 
@@ -357,10 +357,10 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Padding to match editor field border/padding
-      const padX = Math.max(1.5, boxW * 0.02);
-      const padTop = Math.max(1.5, boxH * 0.02);
-      const baselineDown = Math.max(1.5, boxH * 0.04);
+      // Padding to match editor: border 1px + padding 0-1px ≈ 1pt in native coords
+      const padX = 1;
+      const padTop = 1;
+      const baselineDown = 0;
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
@@ -433,7 +433,7 @@ function drawFieldPortrait(
     const raw = fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
-    const lineHeight = Math.max(fontSize * 1.2, 10);
+    const lineHeight = Math.max(fontSize * 1.1, 8);
     const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
@@ -576,7 +576,7 @@ function drawFieldLandscape(
     const raw = fieldValue ?? '';
     const maxTextWidth = Math.max(8, dispW - PAD * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
-    const lineHeight = Math.max(fontSize * 1.2, 10);
+    const lineHeight = Math.max(fontSize * 1.1, 8);
     const maxLines = Math.max(1, Math.floor((dispH - PAD * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
