@@ -440,7 +440,7 @@ function drawFieldPortrait(
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        y: pdfY + boxH - lineHeight * (idx + 1),
+        y: pdfY + boxH - fontSize * 0.85 - lineHeight * idx,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
