@@ -347,8 +347,8 @@ async function renderFieldsOnPages(
       const boxW = pdf.w;
       const boxH = pdf.h;
 
-      // fontSize est en points PDF (même système que les coords de champ)
-      const fontSize = Math.min(f.style.fontSize, boxH - 2);
+      // CSS px (96 DPI) → PDF points (72 pt/inch)
+      const fontSize = Math.min(f.style.fontSize * 72 / 96, boxH - 2);
       const selectedFont =
         f.style.fontWeight === 'bold' ? fontBold : font;
 
@@ -357,10 +357,10 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Text position: top-left aligned to match editor display
-      const padX = 0;
-      const padTop = 0;
-      const baselineDown = 0;
+      // Padding to match editor field border/padding
+      const padX = Math.max(1.5, boxW * 0.02);
+      const padTop = Math.max(1.5, boxH * 0.02);
+      const baselineDown = Math.max(1.5, boxH * 0.04);
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
