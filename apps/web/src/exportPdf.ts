@@ -347,8 +347,8 @@ async function renderFieldsOnPages(
       const boxW = pdf.w;
       const boxH = pdf.h;
 
-      // CSS px (96 DPI) → PDF points (72 pt/inch)
-      const fontSize = Math.min(f.style.fontSize * 72 / 96, boxH - 2);
+      // fontSize est en points PDF (même système que les coords de champ)
+      const fontSize = Math.min(f.style.fontSize, boxH - 2);
       const selectedFont =
         f.style.fontWeight === 'bold' ? fontBold : font;
 
