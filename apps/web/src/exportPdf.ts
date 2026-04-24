@@ -433,14 +433,14 @@ function drawFieldPortrait(
     const raw = fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
-    const lineHeight = fontSize;
+    const lineHeight = Math.max(fontSize * 1.2, 10);
     const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        y: pdfY + boxH - fontSize - lineHeight * idx,
+        y: pdfY + boxH - lineHeight * (idx + 1),
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),

@@ -442,7 +442,6 @@ export default function FieldOverlay({
             textDecoration: field.style.textDecoration,
             textAlign: field.style.textAlign,
             color: field.style.color,
-            lineHeight: '1',
             backgroundColor: field.style.highlightColor ? 'transparent' : undefined,
           }}
         >
@@ -476,7 +475,6 @@ export default function FieldOverlay({
             textDecoration: field.style.textDecoration,
             textAlign: field.style.textAlign,
             color: field.style.color,
-            lineHeight: '1',
           }}
         />
       );
@@ -490,7 +488,6 @@ export default function FieldOverlay({
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
       color: field.style.color,
-      lineHeight: '1',
     };
 
     // ── Rich text mode (fillMode or selected) ──────────────────────────────
