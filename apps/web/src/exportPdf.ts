@@ -357,10 +357,10 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Proportional padding (scales with field size)
-      const padX = Math.max(MIN_PAD_PT, boxW * PAD_RATIO_X);
-      const padTop = Math.max(MIN_PAD_PT, boxH * PAD_RATIO_Y);
-      const baselineDown = Math.max(MIN_PAD_PT, boxH * BASELINE_RATIO);
+      // Text position: top-left aligned to match editor display
+      const padX = 0;
+      const padTop = 0;
+      const baselineDown = 0;
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
@@ -433,14 +433,14 @@ function drawFieldPortrait(
     const raw = fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
-    const lineHeight = Math.max(fontSize * 1.2, 10);
-    const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
+    const lineHeight = fontSize;
+    const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        y: pdfY + boxH - padTop - lineHeight * (idx + 1) - baselineDown,
+        y: pdfY + boxH - fontSize - lineHeight * idx,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
