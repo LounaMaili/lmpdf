@@ -1,4 +1,5 @@
 /**
+console.log("[LMPDF-MODULE] exportPdf.ts loaded - v2 - 1777145118");
  * exportPdf.ts — PDF export with normalized coordinate mapping
  *
  * Architecture:
