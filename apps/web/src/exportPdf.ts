@@ -70,10 +70,9 @@ function normalizeRotation(angle: number): Rotation {
 }
 
 // Proportional padding constants (module-level, shared by portrait & landscape)
-const PAD_RATIO_X = 0.02; // 2% of field width
-const PAD_RATIO_Y = 0.02; // 2% of field height
-const BASELINE_RATIO = 0.0;  // no extra baseline shift
-const MIN_PAD_PT = 0.5; // minimum padding in PDF points
+const PAD_RATIO_X = 0.06; // 6% of field width
+const PAD_RATIO_Y = 0.06; // 6% of field height
+const MIN_PAD_PT = 1.5; // minimum padding in PDF points
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -347,8 +346,8 @@ async function renderFieldsOnPages(
       const boxW = pdf.w;
       const boxH = pdf.h;
 
-      // fontSize est en points PDF (coords natives) — pas de conversion nécessaire
-      const fontSize = Math.min(f.style.fontSize, boxH - 2);
+      // CSS px (96 DPI) → PDF points (72 pt/inch)
+      const fontSize = Math.min(f.style.fontSize * 72 / 96, boxH - 2);
       const selectedFont =
         f.style.fontWeight === 'bold' ? fontBold : font;
 
@@ -357,10 +356,9 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Padding to match editor: border 1px + padding 0-1px ≈ 1pt in native coords
-      const padX = 1;
-      const padTop = 1;
-      const baselineDown = 0;
+      // Proportional padding (scales with field size)
+      const padX = Math.max(MIN_PAD_PT, boxW * PAD_RATIO_X);
+      const padTop = Math.max(MIN_PAD_PT, boxH * PAD_RATIO_Y);
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
@@ -375,7 +373,7 @@ async function renderFieldsOnPages(
       } else {
         drawFieldPortrait(
           page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          padX, padTop, baselineDown, fontSize,
+          padX, padTop, fontSize,
           selectedFont, cr, cg, cb,
         );
       }
@@ -402,7 +400,6 @@ function drawFieldPortrait(
   boxH: number,
   padX: number,
   padTop: number,
-  baselineDown: number,
   fontSize: number,
   selectedFont: import('pdf-lib').PDFFont,
   cr: number,
@@ -433,14 +430,18 @@ function drawFieldPortrait(
     const raw = fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
-    const lineHeight = Math.max(fontSize * 1.15, 8);
-    const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
+    const lineHeight = Math.max(fontSize * 1.2, 10);
+    // Helvetica ascent ratio (font units 718/1000) — baseline sits at this offset above the line origin.
+    const ascent = fontSize * 0.718;
+    const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        y: pdfY + boxH - lineHeight * (idx + 1),
+        // Baseline: top of box minus padTop, then up by ascent, then down by lineHeight per line.
+        // pdf-lib drawText places text AT the baseline (not above it).
+        y: pdfY + boxH - padTop - ascent - lineHeight * idx,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
@@ -576,7 +577,9 @@ function drawFieldLandscape(
     const raw = fieldValue ?? '';
     const maxTextWidth = Math.max(8, dispW - PAD * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
-    const lineHeight = Math.max(fontSize * 1.15, 8);
+    const lineHeight = Math.max(fontSize * 1.2, 10);
+    // Helvetica ascent ratio — baseline offset from line origin.
+    const ascent = fontSize * 0.718;
     const maxLines = Math.max(1, Math.floor((dispH - PAD * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
@@ -584,13 +587,13 @@ function drawFieldLandscape(
       /*
        * Top-left in display = left-bottom in content:
        *   cy = pdfY + PAD                        (display left edge)
-       *   cx = pdfX + PAD + fontSize * 1.0       (text top = display top)
+       *   cx = pdfX + PAD + ascent               (baseline = display top)
        *
        * Each subsequent line: cx += lineHeight   (display goes downward)
        */
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + PAD + fontSize * 1.1 + lineHeight * idx,
+          x: pdfX + PAD + ascent + lineHeight * idx,
           y: pdfY + PAD,
           size: fontSize,
           font: selectedFont,
@@ -603,7 +606,7 @@ function drawFieldLandscape(
       // rotation 270: mirror the offsets
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + boxW - PAD - fontSize * 1.1 - lineHeight * idx,
+          x: pdfX + boxW - PAD - ascent - lineHeight * idx,
           y: pdfY + boxH - PAD,
           size: fontSize,
           font: selectedFont,
