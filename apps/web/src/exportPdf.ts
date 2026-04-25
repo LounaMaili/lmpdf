@@ -428,7 +428,8 @@ function drawFieldPortrait(
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
     const lineHeight = Math.max(fontSize * 1.15, 8);
-    const ascent = fontSize * 0.718;
+    // Empirical ascent: Helvetica 0.718 + 0.04 correction for browser baseline rendering
+    const ascent = fontSize * 0.758;
     const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
