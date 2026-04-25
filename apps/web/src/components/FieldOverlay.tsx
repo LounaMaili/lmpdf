@@ -441,6 +441,9 @@ export default function FieldOverlay({
             fontStyle: field.style.fontStyle,
             textDecoration: field.style.textDecoration,
             textAlign: field.style.textAlign,
+            lineHeight: 1.15,
+            color: field.style.color,
+            lineHeight: 1.15,
             color: field.style.color,
             backgroundColor: field.style.highlightColor ? 'transparent' : undefined,
           }}
@@ -475,6 +478,7 @@ export default function FieldOverlay({
             textDecoration: field.style.textDecoration,
             textAlign: field.style.textAlign,
             color: field.style.color,
+            lineHeight: 1.15,
           }}
         />
       );
@@ -487,6 +491,9 @@ export default function FieldOverlay({
       fontStyle: field.style.fontStyle,
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
+            lineHeight: 1.15,
+            color: field.style.color,
+            lineHeight: 1.15,
       color: field.style.color,
       lineHeight: 1.15,
     };

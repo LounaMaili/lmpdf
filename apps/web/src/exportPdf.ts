@@ -70,9 +70,6 @@ function normalizeRotation(angle: number): Rotation {
 }
 
 // Proportional padding constants (module-level, shared by portrait & landscape)
-const PAD_RATIO_X = 0.02; // 2% of field width
-const PAD_RATIO_Y = 0.02; // 2% of field height
-const BASELINE_RATIO = 0.0;  // no extra baseline shift
 const MIN_PAD_PT = 0.5; // minimum padding in PDF points
 
 function buildContinuousIndex(
@@ -360,8 +357,6 @@ async function renderFieldsOnPages(
       // Padding to match editor: border 1px + padding 0-1px ≈ 1pt in native coords
       const padX = 1;
       const padTop = 1;
-      const baselineDown = 0;
-
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
 
@@ -375,7 +370,7 @@ async function renderFieldsOnPages(
       } else {
         drawFieldPortrait(
           page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          padX, padTop, baselineDown, fontSize,
+          padX, padTop, fontSize,
           selectedFont, cr, cg, cb,
         );
       }
@@ -402,7 +397,6 @@ function drawFieldPortrait(
   boxH: number,
   padX: number,
   padTop: number,
-  baselineDown: number,
   fontSize: number,
   selectedFont: import('pdf-lib').PDFFont,
   cr: number,
@@ -463,7 +457,7 @@ function drawFieldPortrait(
  * which appears as **rightward** in display.
  *
  * For line i the anchor is:
- *   cx = pdfX + padTop + lineHeight·(i+1) + baselineDown
+ *   cx = pdfX + padTop + ascent + lineHeight·(i)
  *   cy = pdfY + padX
  */
 /**
