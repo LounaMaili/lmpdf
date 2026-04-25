@@ -6,6 +6,6 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 4173,
-    allowedHosts: ['localhost', '127.0.0.1', 'lmpdf.gueguen.org'],
+    allowedHosts: ['localhost', '127.0.0.1', 'lmpdf.gueguen.org', '10.0.1.201', '10.0.1.1'],
   },
 });
