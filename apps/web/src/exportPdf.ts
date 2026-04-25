@@ -428,11 +428,11 @@ function drawFieldPortrait(
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
     const lineHeight = Math.max(fontSize * 1.15, 8);
-    const ascent = fontSize * 0.6;
-    const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
+    const ascent = fontSize * 0.718;
+    const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
-    // Text fields: use ascent for baseline (contentEditable has no top padding, text starts at top).
+    // Text fields: use ascent baseline formula (from commit 0ae2f8e).
     // Date fields: use lineHeight formula (browser <input> centers text vertically).
     const isDate = f.type === "date";
 
@@ -441,7 +441,7 @@ function drawFieldPortrait(
         x: pdfX + padX,
         y: isDate
           ? pdfY + boxH - lineHeight * (idx + 1)
-          : pdfY + boxH - ascent - lineHeight * idx,
+          : pdfY + boxH - padTop - ascent - lineHeight * idx,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
