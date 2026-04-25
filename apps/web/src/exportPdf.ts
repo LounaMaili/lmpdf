@@ -438,10 +438,15 @@ function drawFieldPortrait(
     const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
+    // Date fields: browser <input> centers text vertically. Calculate baseline from center.
+    const isDate = f.type === "date";
+
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        y: pdfY + boxH - ascent - lineHeight * idx,
+        y: isDate
+          ? pdfY + boxH / 2 - fontSize * 0.143 - lineHeight * idx
+          : pdfY + boxH - ascent - lineHeight * idx,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
