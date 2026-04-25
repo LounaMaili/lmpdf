@@ -357,9 +357,11 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Padding to match editor: border 1px + padding 0-1px ≈ 1pt in native coords
-      const padX = 1;
-      const padTop = 1;
+      // Padding to match editor CSS: .field-input has padding 1px 2px, RichTextEditor has paddingLeft: 2px.
+      // padX=2 matches the editor's horizontal padding (2px left/right).
+      // padTop=2 accounts for the 1px top padding + 1px border in the editor.
+      const padX = 2;
+      const padTop = 2;
       const baselineDown = 0;
 
       const isLandscape =
@@ -441,7 +443,9 @@ function drawFieldPortrait(
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        y: pdfY + boxH - ascent - lineHeight * idx,
+        // Y: pdf-lib draws at baseline (glyphs rise upward). Subtract padTop from box top
+        // and ascent (Helvetica ≈ 0.718 × fontSize) so visual text top aligns with padTop.
+        y: pdfY + boxH - padTop - ascent - lineHeight * idx,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
@@ -516,8 +520,9 @@ function drawFieldLandscape(
   const dispW = boxH;
   const dispH = boxW;
 
-  // Small fixed padding in PDF points (resolution-independent)
-  const PAD = 2;
+  // Small fixed padding in PDF points (resolution-independent).
+  // PAD=3 matches the editor's combined padding (1px border + 2px padding) after scaling.
+  const PAD = 3;
 
   // Cap fontSize by display height
   fontSize = Math.min(fontSize, dispH - 2);
