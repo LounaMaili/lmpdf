@@ -432,10 +432,14 @@ function drawFieldPortrait(
     const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
+    // Date fields in the browser <input> have extra internal vertical centering
+    // that pushes text down compared to a plain div. Compensate with a small offset.
+    const dateOffset = f.type === 'date' ? fontSize * 0.075 + 1 : 0;
+
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        y: pdfY + boxH - ascent - lineHeight * idx,
+        y: pdfY + boxH - ascent - lineHeight * idx - dateOffset,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
