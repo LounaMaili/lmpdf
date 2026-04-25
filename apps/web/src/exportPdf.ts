@@ -438,13 +438,16 @@ function drawFieldPortrait(
 
     // Date fields: browser <input> centers text vertically, use lineHeight-based positioning.
     const isDate = f.type === "date";
+    console.log("[LMPDF-EXPORT] field.type=" + f.type + " isDate=" + isDate + " label=" + f.label);
 
     visible.forEach((line, idx) => {
+      const yPos = isDate
+        ? pdfY + boxH - lineHeight * (idx + 1)
+        : pdfY + boxH - padTop - ascent - lineHeight * idx;
+      console.log("[LMPDF-EXPORT] line=" + idx + " y=" + yPos + " isDate=" + isDate);
       page.drawText(line, {
         x: pdfX + padX,
-        y: isDate
-          ? pdfY + boxH - lineHeight * (idx + 1)
-          : pdfY + boxH - padTop - ascent - lineHeight * idx,
+        y: yPos,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
