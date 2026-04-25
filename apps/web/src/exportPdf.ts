@@ -428,18 +428,13 @@ function drawFieldPortrait(
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
     const lineHeight = Math.max(fontSize * 1.15, 8);
-    const ascent = fontSize * 0.718;
-    const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
+    const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
-
-    // Date fields in the browser <input> have extra internal vertical centering
-    // that pushes text down compared to a plain div. Compensate with a small offset.
-    const dateOffset = f.type === 'date' ? fontSize * 0.075 + 1 : 0;
 
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        y: pdfY + boxH - ascent - lineHeight * idx - dateOffset,
+        y: pdfY + boxH - padTop - lineHeight * (idx + 1),
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
@@ -576,7 +571,6 @@ function drawFieldLandscape(
     const maxTextWidth = Math.max(8, dispW - PAD * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
     const lineHeight = Math.max(fontSize * 1.15, 8);
-    const ascent = fontSize * 0.718;
     const maxLines = Math.max(1, Math.floor((dispH - PAD * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
@@ -590,7 +584,7 @@ function drawFieldLandscape(
        */
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + PAD + ascent + lineHeight * idx,
+          x: pdfX + PAD + fontSize * 1.1 + lineHeight * idx,
           y: pdfY + PAD,
           size: fontSize,
           font: selectedFont,
@@ -603,7 +597,7 @@ function drawFieldLandscape(
       // rotation 270: mirror the offsets
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + boxW - PAD - ascent - lineHeight * idx,
+          x: pdfX + boxW - PAD - fontSize * 1.1 - lineHeight * idx,
           y: pdfY + boxH - PAD,
           size: fontSize,
           font: selectedFont,
