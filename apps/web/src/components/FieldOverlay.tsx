@@ -436,9 +436,7 @@ export default function FieldOverlay({
             direction: 'ltr',
             unicodeBidi: 'plaintext',
             fontFamily: field.style.fontFamily,
-          const textEditStyle = {
-      fontFamily: field.style.fontFamily,
-      fontSize: field.style.fontSize,
+            fontSize: field.style.fontSize,
             fontWeight: field.style.fontWeight,
             fontStyle: field.style.fontStyle,
             textDecoration: field.style.textDecoration,
@@ -474,9 +472,7 @@ export default function FieldOverlay({
             maxLength={10}
             style={{
               fontFamily: field.style.fontFamily,
-            const textEditStyle = {
-      fontFamily: field.style.fontFamily,
-      fontSize: field.style.fontSize,
+              fontSize: field.style.fontSize,
               fontWeight: field.style.fontWeight,
               fontStyle: field.style.fontStyle,
               textDecoration: field.style.textDecoration,
@@ -493,9 +489,7 @@ export default function FieldOverlay({
           className="field-input field-textarea"
           style={{
             fontFamily: field.style.fontFamily,
-          const textEditStyle = {
-      fontFamily: field.style.fontFamily,
-      fontSize: field.style.fontSize,
+            fontSize: field.style.fontSize,
             fontWeight: field.style.fontWeight,
             fontStyle: field.style.fontStyle,
             textDecoration: field.style.textDecoration,
@@ -511,6 +505,7 @@ export default function FieldOverlay({
         />
       );
     }
+
     const textEditStyle = {
       fontFamily: field.style.fontFamily,
       fontSize: field.style.fontSize,
