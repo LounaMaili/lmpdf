@@ -731,8 +731,16 @@ body { margin: 0; background: #f3f5f8; }
 }
 .field-selected .resize-handle { background: #ff5500; }
 
-/* Field date input */
-.field-date-input { letter-spacing: 0.5px; }
+/* Field date input — top-align text to match the <div> used for read-only fields,
+   so the vertical position in the editor matches the PDF export baseline formula.
+   Browser <input> elements vertically center text internally; these overrides
+   push the text toward the top of the content box to align with <div> rendering. */
+.field-date-input {
+  letter-spacing: 0.5px;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 1.15 !important;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    15. EDITOR — Field List (left panel)

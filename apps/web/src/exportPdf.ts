@@ -440,12 +440,18 @@ function drawFieldPortrait(
     const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
+    // Date fields use an <input> in the editor which vertically centers text
+    // internally, unlike <div>-based text fields. This offset shifts the PDF
+    // text down so it matches the editor's vertical position for date values.
+    const dateYOffset = f.type === 'date' ? fontSize * 0.15 : 0;
+
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
         // Y: pdf-lib draws at baseline (glyphs rise upward). Subtract padTop from box top
         // and ascent (Helvetica ≈ 0.718 × fontSize) so visual text top aligns with padTop.
-        y: pdfY + boxH - padTop - ascent - lineHeight * idx,
+        // dateYOffset compensates for <input> vertical centering on date fields.
+        y: pdfY + boxH - padTop - ascent - lineHeight * idx + dateYOffset,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
