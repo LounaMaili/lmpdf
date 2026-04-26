@@ -440,12 +440,23 @@ function drawFieldPortrait(
     const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
+    // Date fields use <input> which centers text vertically in the box.
+    // Text fields use <div>/contentEditable which aligns text to the top.
+    // For date: y = center of box + optical center of glyph
+    // For text: y = top of box - padTop - ascent (standard top-alignment)
+    const isDateField = f.type === 'date';
+
     visible.forEach((line, idx) => {
+      const y = isDateField
+        // Vertical centering: baseline at box center + half ascent
+        // (ascent - descent)/2 ≈ 0.46 * fontSize for Helvetica
+        ? pdfY + boxH / 2 + fontSize * 0.46 - lineHeight * idx
+        // Top alignment: standard formula for div/contentEditable
+        : pdfY + boxH - padTop - ascent - lineHeight * idx;
+
       page.drawText(line, {
         x: pdfX + padX,
-        // Baseline: top of box, down by padTop, then ascent positions the visual
-        // top of the text. lineHeight * idx shifts each subsequent line down.
-        y: pdfY + boxH - padTop - ascent - lineHeight * idx,
+        y,
         size: fontSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
