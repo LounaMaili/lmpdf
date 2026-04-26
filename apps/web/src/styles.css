@@ -681,8 +681,8 @@ body { margin: 0; background: #f3f5f8; }
    14. EDITOR — Field Overlay
    ───────────────────────────────────────────────────────────────────────────── */
 .field {
-  position: absolute; border: 1px solid var(--color-blue-legacy);
-  border-radius: 2px; background: rgba(0,119,255,0.06);
+  position: absolute; border: 2px solid var(--color-blue-legacy);
+  border-radius: 4px; background: rgba(0,119,255,0.06);
   box-sizing: border-box; user-select: none;
   cursor: move; z-index: 5; overflow: hidden;
 }
@@ -706,7 +706,7 @@ body { margin: 0; background: #f3f5f8; }
 .field-input {
   width: 100%; height: 100%; border: none;
   background: transparent; outline: none;
-  padding: 1px 2px; box-sizing: border-box; cursor: text;
+  padding: 2px 6px; box-sizing: border-box; cursor: text;
 }
 .field-textarea {
   resize: none; overflow: hidden;

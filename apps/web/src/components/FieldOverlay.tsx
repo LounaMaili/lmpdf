@@ -442,7 +442,6 @@ export default function FieldOverlay({
             textDecoration: field.style.textDecoration,
             textAlign: field.style.textAlign,
             color: field.style.color,
-            lineHeight: 1.15,
             backgroundColor: field.style.highlightColor ? 'transparent' : undefined,
           }}
         >
@@ -452,41 +451,22 @@ export default function FieldOverlay({
     }
 
     if (isDate) {
-      // Edit mode: use <input> for date entry. Read-only: plain div like text fields.
-      if (selected || fillMode) {
-        return (
-          <input
-            ref={dateInputRef}
-            type="text"
-            inputMode="numeric"
-            className="field-input field-date-input"
-            tabIndex={-1}
-            value={valueOverride ?? field.value}
-            onChange={handleDateChange}
-            placeholder={
-              field.style.datePlaceholder
-                || (dateFormat === 'MM/DD/YYYY' ? 'MM/JJ/AAAA'
-                : dateFormat === 'YYYY-MM-DD' ? 'AAAA-MM-JJ'
-                : 'JJ/MM/AAAA')
-            }
-            maxLength={10}
-            style={{
-              fontFamily: field.style.fontFamily,
-              fontSize: field.style.fontSize,
-              fontWeight: field.style.fontWeight,
-              fontStyle: field.style.fontStyle,
-              textDecoration: field.style.textDecoration,
-              textAlign: field.style.textAlign,
-              color: field.style.color,
-              lineHeight: 1.15,
-            }}
-          />
-        );
-      }
-      // Read-only: same rendering as text fields
       return (
-        <div
-          className="field-input field-textarea"
+        <input
+          ref={dateInputRef}
+          type="text"
+          inputMode="numeric"
+          className="field-input field-date-input"
+          tabIndex={-1}
+          value={valueOverride ?? field.value}
+          onChange={handleDateChange}
+          placeholder={
+            field.style.datePlaceholder
+              || (dateFormat === 'MM/DD/YYYY' ? 'MM/JJ/AAAA'
+              : dateFormat === 'YYYY-MM-DD' ? 'AAAA-MM-JJ'
+              : 'JJ/MM/AAAA')
+          }
+          maxLength={10}
           style={{
             fontFamily: field.style.fontFamily,
             fontSize: field.style.fontSize,
@@ -495,13 +475,7 @@ export default function FieldOverlay({
             textDecoration: field.style.textDecoration,
             textAlign: field.style.textAlign,
             color: field.style.color,
-            lineHeight: 1.15,
-            overflow: "hidden",
-            wordWrap: "break-word",
-            whiteSpace: "pre-wrap",
           }}
-          onClick={() => onSelect(false)}
-          dangerouslySetInnerHTML={{ __html: valueOverride ?? field.value }}
         />
       );
     }
@@ -514,7 +488,6 @@ export default function FieldOverlay({
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
       color: field.style.color,
-      lineHeight: 1.15,
     };
 
     // ── Rich text mode (fillMode or selected) ──────────────────────────────

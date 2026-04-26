@@ -70,10 +70,12 @@ function normalizeRotation(angle: number): Rotation {
 }
 
 // Proportional padding constants (module-level, shared by portrait & landscape)
-const PAD_RATIO_X = 0.02; // 2% of field width
-const PAD_RATIO_Y = 0.02; // 2% of field height
-const BASELINE_RATIO = 0.0;  // no extra baseline shift
-const MIN_PAD_PT = 0.5; // minimum padding in PDF points
+// Padding scales with field size to match CSS padding (which is in px at 96 DPI).
+// In PDF points (72 DPI), 1 CSS px ≈ 0.75 pt. CSS .field-input has padding 1px 2px.
+// padX ≈ 2 CSS px ≈ 1.5 pt, padTop ≈ 1 CSS px ≈ 0.75 pt. We use ratios so it scales.
+const PAD_RATIO_X = 0.02; // ~1.4pt for a 70pt-wide field
+const PAD_RATIO_Y = 0.02; // ~0.7pt for a 35pt-high field
+const MIN_PAD_PT = 0.75;   // minimum padding (≈1 CSS px)
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -347,8 +349,9 @@ async function renderFieldsOnPages(
       const boxW = pdf.w;
       const boxH = pdf.h;
 
-      // fontSize est en points PDF (coords natives) — pas de conversion nécessaire
-      const fontSize = Math.min(f.style.fontSize, boxH - 2);
+      // CSS px (96 DPI) → PDF points (72 pt/inch). Fields store fontSize in CSS px,
+      // but PDF coordinates are in points. This conversion aligns the two.
+      const fontSize = Math.min(f.style.fontSize * 72 / 96, boxH - 2);
       const selectedFont =
         f.style.fontWeight === 'bold' ? fontBold : font;
 
@@ -357,12 +360,10 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Padding to match editor CSS: .field-input has padding 1px 2px, RichTextEditor has paddingLeft: 2px.
-      // padX=2 matches the editor's horizontal padding (2px left/right).
-      // padTop=2 accounts for the 1px top padding + 1px border in the editor.
-      const padX = 2;
-      const padTop = 2;
-      const baselineDown = 0;
+      // Proportional padding that scales with field dimensions.
+      // Matches the CSS padding (1px 2px) after the 72/96 conversion.
+      const padX = Math.max(MIN_PAD_PT, boxW * PAD_RATIO_X);
+      const padTop = Math.max(MIN_PAD_PT, boxH * PAD_RATIO_Y);
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
@@ -377,7 +378,7 @@ async function renderFieldsOnPages(
       } else {
         drawFieldPortrait(
           page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          padX, padTop, baselineDown, fontSize,
+          padX, padTop, fontSize,
           selectedFont, cr, cg, cb,
         );
       }
@@ -404,7 +405,6 @@ function drawFieldPortrait(
   boxH: number,
   padX: number,
   padTop: number,
-  baselineDown: number,
   fontSize: number,
   selectedFont: import('pdf-lib').PDFFont,
   cr: number,
@@ -435,16 +435,16 @@ function drawFieldPortrait(
     const raw = fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
-    const lineHeight = Math.max(fontSize * 1.15, 8);
+    const lineHeight = Math.max(fontSize * 1.2, 10);
     const ascent = fontSize * 0.718;
-    const maxLines = Math.max(1, Math.floor(boxH / lineHeight));
+    const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
     visible.forEach((line, idx) => {
       page.drawText(line, {
         x: pdfX + padX,
-        // Y: pdf-lib draws at baseline (glyphs rise upward). Subtract padTop from box top
-        // and ascent (Helvetica ≈ 0.718 × fontSize) so visual text top aligns with padTop.
+        // Baseline: top of box, down by padTop, then ascent positions the visual
+        // top of the text. lineHeight * idx shifts each subsequent line down.
         y: pdfY + boxH - padTop - ascent - lineHeight * idx,
         size: fontSize,
         font: selectedFont,
@@ -467,7 +467,7 @@ function drawFieldPortrait(
  * which appears as **rightward** in display.
  *
  * For line i the anchor is:
- *   cx = pdfX + padTop + lineHeight·(i+1) + baselineDown
+ *   cx = pdfX + padTop + lineHeight·(i+1)
  *   cy = pdfY + padX
  */
 /**
@@ -520,9 +520,8 @@ function drawFieldLandscape(
   const dispW = boxH;
   const dispH = boxW;
 
-  // Small fixed padding in PDF points (resolution-independent).
-  // PAD=3 matches the editor's combined padding (1px border + 2px padding) after scaling.
-  const PAD = 3;
+  // Small fixed padding in PDF points (resolution-independent)
+  const PAD = 2;
 
   // Cap fontSize by display height
   fontSize = Math.min(fontSize, dispH - 2);
@@ -582,7 +581,8 @@ function drawFieldLandscape(
     const raw = fieldValue ?? '';
     const maxTextWidth = Math.max(8, dispW - PAD * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
-    const lineHeight = Math.max(fontSize * 1.15, 8);
+    const lineHeight = Math.max(fontSize * 1.2, 10);
+    // Helvetica ascent ratio (font units 718/1000) — baseline sits at this offset above the line origin.
     const ascent = fontSize * 0.718;
     const maxLines = Math.max(1, Math.floor((dispH - PAD * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
@@ -591,7 +591,7 @@ function drawFieldLandscape(
       /*
        * Top-left in display = left-bottom in content:
        *   cy = pdfY + PAD                        (display left edge)
-       *   cx = pdfX + PAD + fontSize * 1.0       (text top = display top)
+       *   cx = pdfX + PAD + ascent               (baseline = display top)
        *
        * Each subsequent line: cx += lineHeight   (display goes downward)
        */
