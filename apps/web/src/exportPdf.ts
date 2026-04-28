@@ -376,6 +376,12 @@ async function renderFieldsOnPages(
 
       // ── Draw ───────────────────────────────────────────────────────────
 
+      // DEBUG: draw red rectangle to verify field position in export
+      page.drawRectangle({
+        x: pdfX, y: pdfY, width: boxW, height: boxH,
+        borderColor: rgb(1, 0, 0), borderWidth: 1, color: undefined,
+      });
+
       if (isLandscape) {
         drawFieldLandscape(
           page, f, fieldValue, pdfX, pdfY, boxW, boxH,
