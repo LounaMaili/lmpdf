@@ -69,15 +69,20 @@ function normalizeRotation(angle: number): Rotation {
   return 0;
 }
 
-// Proportional padding constants (module-level, shared by portrait & landscape)
-// Padding must match the browser's CSS .field-input { padding: 2px 6px }.
-// In PDF points (72 DPI), 1 CSS px ≈ 0.75 pt, so:
-//   padding-top: 2px → 1.5pt,  padding-left/right: 6px → 4.5pt
-// We use ratios so padding scales with field dimensions.
-const PAD_RATIO_X = 0.04;  // ~2.8pt for a 70pt-wide field (matches 6px CSS ≈ 4.5pt)
-const PAD_RATIO_Y = 0.06;  // ~2.1pt for a 35pt-high field (matches 2px CSS ≈ 1.5pt)
-const MIN_PAD_X = 4.5;     // minimum horizontal padding (6px CSS ≈ 4.5pt)
-const MIN_PAD_Y = 1.5;     // minimum vertical padding (2px CSS ≈ 1.5pt)
+// ── 1:1 constants ─────────────────────────────────────────────────────────
+//
+// The editor uses CSS values interpreted in px CSS. The PDF uses points (pt).
+// 1 CSS px = 72/96 pt = 0.75 pt.
+//
+// CSS .field-input { padding: 2px 6px } → 1.5pt top/bottom, 4.5pt left/right
+// CSS .field-textarea { line-height: 1.2 }
+// CSS default fontSize for fields: 14px → 10.5pt
+//
+// For true 1:1, we convert CSS values directly to PDF points.
+const PX_TO_PT = 72 / 96; // 0.75 — multiply CSS px values by this to get PDF pt
+const CSS_PAD_TOP = 2 * PX_TO_PT;     // 1.5pt
+const CSS_PAD_LEFT = 6 * PX_TO_PT;    // 4.5pt
+const CSS_LINE_HEIGHT = 1.2;
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -362,10 +367,9 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Proportional padding that matches the browser's CSS .field-input { padding: 2px 6px }.
-      // In PDF points: 2px CSS ≈ 1.5pt, 6px CSS ≈ 4.5pt.
-      const padX = Math.max(MIN_PAD_X, boxW * PAD_RATIO_X);
-      const padTop = Math.max(MIN_PAD_Y, boxH * PAD_RATIO_Y);
+      // 1:1 padding — direct CSS conversion, no ratios
+      const padX = CSS_PAD_LEFT;   // 6px CSS → 4.5pt
+      const padTop = CSS_PAD_TOP;  // 2px CSS → 1.5pt
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
@@ -437,33 +441,44 @@ function drawFieldPortrait(
     const raw = fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
-    const lineHeight = Math.max(fontSize * 1.2, 10);
-    const ascent = fontSize * 0.718;
-    // half-leading: the extra space the browser adds above/below text when
-    // line-height > fontSize. CSS .field-input has implicit line-height from
-    // browser (typically ~1.2). Half-leading is split equally top and bottom.
+    // 1:1: use the same line-height as CSS (.field-textarea has line-height: 1.2)
+    const lineHeight = fontSize * CSS_LINE_HEIGHT;
+    const ascent = fontSize * 0.718; // Helvetica ascent ratio
+    // 1:1: half-leading matches browser layout (line-height > fontSize → space split top/bottom)
     const halfLeading = (lineHeight - fontSize) / 2;
     const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
-    // Date fields use <input> which centers text vertically in the box.
-    // Text fields use <div>/contentEditable which aligns text to the top.
-    // For date: baseline at box center + optical center of glyph
-    // For text: padTop + halfLeading + ascent from top (matching browser layout)
+    // 1:1 positioning: reproduce exactly what the browser renders.
+    // Text fields (<div>/contentEditable): padding-top, then half-leading, then ascent to baseline.
+    // Date fields (<input>): browser centers text vertically; baseline ≈ box center + fontSize*0.35
     const isDateField = f.type === 'date';
 
+    // 1:1: respect textAlign from field style
+    const textAlign = f.style.textAlign || 'left';
+
     visible.forEach((line, idx) => {
+      // Horizontal position: match CSS textAlign
+      let x: number;
+      if (textAlign === 'center') {
+        const textWidth = selectedFont.widthOfTextAtSize(line, fontSize);
+        x = pdfX + (boxW - textWidth) / 2;
+      } else if (textAlign === 'right') {
+        const textWidth = selectedFont.widthOfTextAtSize(line, fontSize);
+        x = pdfX + boxW - padX - textWidth;
+      } else {
+        x = pdfX + padX;
+      }
+
+      // Vertical position: match browser layout
       const y = isDateField
-        // Vertical centering: baseline at box center + half ascent
-        // (ascent - descent)/2 ≈ 0.46 * fontSize for Helvetica
-        ? pdfY + boxH / 2 + fontSize * 0.46 - lineHeight * idx
-        // Top alignment: from top, offset by padTop, half-leading, then descent to baseline.
-        // This matches the browser's layout: padding-top, then half-leading above text,
-        // then baseline sits at ascent below the text top.
+        // <input> centers text vertically: baseline ≈ center + fontSize*0.35
+        ? pdfY + boxH / 2 + fontSize * 0.35 - lineHeight * idx
+        // <div> top-aligned: padding-top → half-leading → ascent → baseline
         : pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx;
 
       page.drawText(line, {
-        x: pdfX + padX,
+        x,
         y,
         size: fontSize,
         font: selectedFont,
@@ -485,9 +500,9 @@ function drawFieldPortrait(
  * Text with rotate=degrees(90) CCW extends **upward** in content space,
  * which appears as **rightward** in display.
  *
- * For line i the anchor is:
- *   cx = pdfX + padTop + lineHeight·(i+1)
- *   cy = pdfY + padX
+ * For line i the anchor is (1:1 matching browser layout):
+ *   cx = pdfX + padV + halfLeading + ascent + lineHeight·i
+ *   cy = pdfY + padH
  */
 /**
  * Draw a field when the page has /Rotate 90 (or 270).
@@ -539,8 +554,9 @@ function drawFieldLandscape(
   const dispW = boxH;
   const dispH = boxW;
 
-  // Small fixed padding in PDF points (resolution-independent)
-  const PAD = 2;
+  // 1:1 padding — same as portrait
+  const padH = CSS_PAD_LEFT;  // horizontal in display = CSS 6px = 4.5pt
+  const padV = CSS_PAD_TOP;   // vertical in display = CSS 2px = 1.5pt
 
   // Cap fontSize by display height
   fontSize = Math.min(fontSize, dispH - 2);
@@ -598,26 +614,26 @@ function drawFieldLandscape(
     }
 
     const raw = fieldValue ?? '';
-    const maxTextWidth = Math.max(8, dispW - PAD * 2);
+    const maxTextWidth = Math.max(8, dispW - padH * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
-    const lineHeight = Math.max(fontSize * 1.2, 10);
-    // Helvetica ascent ratio (font units 718/1000) — baseline sits at this offset above the line origin.
+    const lineHeight = fontSize * CSS_LINE_HEIGHT;
     const ascent = fontSize * 0.718;
-    const maxLines = Math.max(1, Math.floor((dispH - PAD * 2) / lineHeight));
+    const halfLeading = (lineHeight - fontSize) / 2;
+    const maxLines = Math.max(1, Math.floor((dispH - padV * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
     if (targetRotation === 90) {
       /*
        * Top-left in display = left-bottom in content:
-       *   cy = pdfY + PAD                        (display left edge)
-       *   cx = pdfX + PAD + ascent               (baseline = display top)
+       *   cy = pdfY + padH                       (display left edge)
+       *   cx = pdfX + padV + halfLeading + ascent (baseline = display top)
        *
        * Each subsequent line: cx += lineHeight   (display goes downward)
        */
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + PAD + ascent + lineHeight * idx,
-          y: pdfY + PAD,
+          x: pdfX + padV + halfLeading + ascent + lineHeight * idx,
+          y: pdfY + padH,
           size: fontSize,
           font: selectedFont,
           color: rgb(cr, cg, cb),
@@ -629,8 +645,8 @@ function drawFieldLandscape(
       // rotation 270: mirror the offsets
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + boxW - PAD - ascent - lineHeight * idx,
-          y: pdfY + boxH - PAD,
+          x: pdfX + boxW - padV - halfLeading - ascent - lineHeight * idx,
+          y: pdfY + boxH - padH,
           size: fontSize,
           font: selectedFont,
           color: rgb(cr, cg, cb),
