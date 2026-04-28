@@ -70,12 +70,14 @@ function normalizeRotation(angle: number): Rotation {
 }
 
 // Proportional padding constants (module-level, shared by portrait & landscape)
-// Padding scales with field size to match CSS padding (which is in px at 96 DPI).
-// In PDF points (72 DPI), 1 CSS px ≈ 0.75 pt. CSS .field-input has padding 1px 2px.
-// padX ≈ 2 CSS px ≈ 1.5 pt, padTop ≈ 1 CSS px ≈ 0.75 pt. We use ratios so it scales.
-const PAD_RATIO_X = 0.02; // ~1.4pt for a 70pt-wide field
-const PAD_RATIO_Y = 0.02; // ~0.7pt for a 35pt-high field
-const MIN_PAD_PT = 0.75;   // minimum padding (≈1 CSS px)
+// Padding must match the browser's CSS .field-input { padding: 2px 6px }.
+// In PDF points (72 DPI), 1 CSS px ≈ 0.75 pt, so:
+//   padding-top: 2px → 1.5pt,  padding-left/right: 6px → 4.5pt
+// We use ratios so padding scales with field dimensions.
+const PAD_RATIO_X = 0.04;  // ~2.8pt for a 70pt-wide field (matches 6px CSS ≈ 4.5pt)
+const PAD_RATIO_Y = 0.06;  // ~2.1pt for a 35pt-high field (matches 2px CSS ≈ 1.5pt)
+const MIN_PAD_X = 4.5;     // minimum horizontal padding (6px CSS ≈ 4.5pt)
+const MIN_PAD_Y = 1.5;     // minimum vertical padding (2px CSS ≈ 1.5pt)
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -360,10 +362,10 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Proportional padding that scales with field dimensions.
-      // Matches the CSS padding (1px 2px) after the 72/96 conversion.
-      const padX = Math.max(MIN_PAD_PT, boxW * PAD_RATIO_X);
-      const padTop = Math.max(MIN_PAD_PT, boxH * PAD_RATIO_Y);
+      // Proportional padding that matches the browser's CSS .field-input { padding: 2px 6px }.
+      // In PDF points: 2px CSS ≈ 1.5pt, 6px CSS ≈ 4.5pt.
+      const padX = Math.max(MIN_PAD_X, boxW * PAD_RATIO_X);
+      const padTop = Math.max(MIN_PAD_Y, boxH * PAD_RATIO_Y);
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
@@ -437,13 +439,17 @@ function drawFieldPortrait(
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
     const lineHeight = Math.max(fontSize * 1.2, 10);
     const ascent = fontSize * 0.718;
+    // half-leading: the extra space the browser adds above/below text when
+    // line-height > fontSize. CSS .field-input has implicit line-height from
+    // browser (typically ~1.2). Half-leading is split equally top and bottom.
+    const halfLeading = (lineHeight - fontSize) / 2;
     const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
     // Date fields use <input> which centers text vertically in the box.
     // Text fields use <div>/contentEditable which aligns text to the top.
-    // For date: y = center of box + optical center of glyph
-    // For text: y = top of box - padTop - ascent (standard top-alignment)
+    // For date: baseline at box center + optical center of glyph
+    // For text: padTop + halfLeading + ascent from top (matching browser layout)
     const isDateField = f.type === 'date';
 
     visible.forEach((line, idx) => {
@@ -451,8 +457,10 @@ function drawFieldPortrait(
         // Vertical centering: baseline at box center + half ascent
         // (ascent - descent)/2 ≈ 0.46 * fontSize for Helvetica
         ? pdfY + boxH / 2 + fontSize * 0.46 - lineHeight * idx
-        // Top alignment: standard formula for div/contentEditable
-        : pdfY + boxH - padTop - ascent - lineHeight * idx;
+        // Top alignment: from top, offset by padTop, half-leading, then descent to baseline.
+        // This matches the browser's layout: padding-top, then half-leading above text,
+        // then baseline sits at ascent below the text top.
+        : pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx;
 
       page.drawText(line, {
         x: pdfX + padX,
