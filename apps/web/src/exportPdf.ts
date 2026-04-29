@@ -76,6 +76,10 @@ const CSS_PAD_TOP = 2;
 const CSS_PAD_LEFT = 6;
 const CSS_LINE_HEIGHT = 1.2;
 
+// Calibration nudges to compensate for irreducible CSS vs pdf-lib rendering differences
+const TEXT_X_NUDGE = -1;
+const TEXT_Y_NUDGE = -1.2;
+
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
 ): Map<number, Array<{ key: string; state: OverflowUiStateEntry }>> {
@@ -425,13 +429,19 @@ function drawFieldPortrait(
 ): void {
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      const p1 = { x: pdfX + boxW * 0.18, y: pdfY + boxH * 0.45 };
-      const p2 = { x: pdfX + boxW * 0.40, y: pdfY + boxH * 0.20 };
-      const p3 = { x: pdfX + boxW * 0.82, y: pdfY + boxH * 0.78 };
-      const lw = Math.max(1.4, Math.min(boxW, boxH) * 0.09);
-      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+      const checkSize = f.style.checkSize ?? Math.max(12, Math.min(boxW, boxH) * 0.75);
+      const check = '\u2713';
+      const textWidth = selectedFont.widthOfTextAtSize(check, checkSize);
+      const textHeight = selectedFont.heightAtSize(checkSize, { descender: false });
+      page.drawText(check, {
+        x: pdfX + (boxW - textWidth) / 2,
+        y: pdfY + (boxH - textHeight) / 2,
+        size: checkSize,
+        font: selectedFont,
+        color: rgb(cr, cg, cb),
+      });
     }
+    return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
     page.drawText(fieldValue || '0', {
       x: pdfX + padX,
@@ -466,14 +476,14 @@ function drawFieldPortrait(
         x = pdfX + (boxW - textWidth) / 2;
       } else if (textAlign === 'right') {
         const textWidth = selectedFont.widthOfTextAtSize(line, fontSize);
-        x = pdfX + boxW - padX - textWidth;
+        x = pdfX + boxW - padX - textWidth + TEXT_X_NUDGE;
       } else {
-        x = pdfX + padX;
+        x = pdfX + padX + TEXT_X_NUDGE;
       }
 
       // Vertical position: unified formula for all field types
       // padding-top → half-leading → ascent → baseline
-      const y = pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx;
+      const y = pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx + TEXT_Y_NUDGE;
 
       page.drawText(line, {
         x,

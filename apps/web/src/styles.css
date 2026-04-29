@@ -745,7 +745,13 @@ body { margin: 0; background: #f3f5f8; }
 .field-selected .resize-handle { background: #ff5500; }
 
 /* Field date input */
-/* Date field now uses RichTextEditor — no special styles needed */
+.field-date-input {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  outline: none;
+  background: transparent;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    15. EDITOR — Field List (left panel)
