@@ -78,7 +78,7 @@ const CSS_LINE_HEIGHT = 1.2;
 
 // Calibration nudges to compensate for irreducible CSS vs pdf-lib rendering differences
 const TEXT_X_NUDGE = -1;
-const TEXT_Y_NUDGE = -1.2;
+const TEXT_Y_NUDGE = -2.8;
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -288,6 +288,7 @@ async function renderFieldsOnPages(
     // Combine existing /Rotate with editor rotation
     const existingRotation = normalizeRotation(page.getRotation().angle);
     const targetRotation = normalizeRotation(existingRotation + rotation);
+    console.log('[export rotation]', { pageIndex, existingRotation, editorRotation: rotation, targetRotation });
     if (targetRotation !== 0) {
       page.setRotation(degrees(targetRotation));
     }
@@ -369,8 +370,8 @@ async function renderFieldsOnPages(
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
       // 1:1 padding — direct CSS conversion, no ratios
-      const padX = CSS_PAD_LEFT;   // 6px CSS → 4.5pt
-      const padTop = CSS_PAD_TOP;  // 2px CSS → 1.5pt
+      const padX = CSS_PAD_LEFT;   // 6pt
+      const padTop = CSS_PAD_TOP;  // 2pt
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
@@ -411,6 +412,45 @@ async function renderFieldsOnPages(
 // Portrait drawing (rotation = 0 or 180)
 // ---------------------------------------------------------------------------
 
+/** Draw a checkbox check mark using the same geometry as the SVG editor.
+ * SVG points: 25,52  42,70  75,30  (origin top-left, Y down)
+ * PDF: origin bottom-left, Y up — so Y is inverted: y_pdf = boxH * (1 - y_svg/100)
+ */
+function drawCheckboxMark(
+  page: import('pdf-lib').PDFPage,
+  pdfX: number,
+  pdfY: number,
+  boxW: number,
+  boxH: number,
+  cr: number,
+  cg: number,
+  cb: number,
+): void {
+  const toPdf = (x: number, y: number) => ({
+    x: pdfX + boxW * (x / 100),
+    y: pdfY + boxH * (1 - y / 100),
+  });
+
+  const p1 = toPdf(25, 52);
+  const p2 = toPdf(42, 70);
+  const p3 = toPdf(75, 30);
+
+  const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
+
+  page.drawLine({
+    start: p1,
+    end: p2,
+    thickness: lw,
+    color: rgb(cr, cg, cb),
+  });
+  page.drawLine({
+    start: p2,
+    end: p3,
+    thickness: lw,
+    color: rgb(cr, cg, cb),
+  });
+}
+
 function drawFieldPortrait(
   page: import('pdf-lib').PDFPage,
   f: FieldModel,
@@ -429,12 +469,7 @@ function drawFieldPortrait(
 ): void {
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      const p1 = { x: pdfX + boxW * 0.25, y: pdfY + boxH * 0.48 };
-      const p2 = { x: pdfX + boxW * 0.42, y: pdfY + boxH * 0.30 };
-      const p3 = { x: pdfX + boxW * 0.75, y: pdfY + boxH * 0.70 };
-      const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
-      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+      drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
@@ -558,20 +593,15 @@ function drawFieldLandscape(
   const dispH = boxW;
 
   // 1:1 padding — same as portrait
-  const padH = CSS_PAD_LEFT;  // horizontal in display = CSS 6px = 4.5pt
-  const padV = CSS_PAD_TOP;   // vertical in display = CSS 2px = 1.5pt
+  const padH = CSS_PAD_LEFT;  // horizontal in display = 6pt
+  const padV = CSS_PAD_TOP;   // vertical in display = 2pt
 
   // Cap fontSize by display height
   fontSize = Math.min(fontSize, dispH - 2);
 
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      const p1 = { x: pdfX + boxW * 0.25, y: pdfY + boxH * 0.48 };
-      const p2 = { x: pdfX + boxW * 0.42, y: pdfY + boxH * 0.30 };
-      const p3 = { x: pdfX + boxW * 0.75, y: pdfY + boxH * 0.70 };
-      const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
-      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+      drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {

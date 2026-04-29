@@ -28,6 +28,9 @@ import { useTranslation } from '../i18n';
 import RichTextEditor from './RichTextEditor';
 import SelectionToolbar from './SelectionToolbar';
 
+/** Shared checkbox geometry: same points used in SVG editor and PDF export. */
+export const CHECK_POINTS = '25,52 42,70 75,30';
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Props = {
@@ -414,7 +417,7 @@ export default function FieldOverlay({
           {isChecked && (
             <svg viewBox="0 0 100 100" width="100%" height="100%">
               <polyline
-                points="25,52 42,70 75,30"
+                points={CHECK_POINTS}
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="8"
@@ -614,14 +617,14 @@ export default function FieldOverlay({
       </div>
 
       {/* Field label tag — hidden in fillMode. */}
-      {!fillMode && (
+      {(selected || hovered) && !fillMode && (
         <div className="field-label-tag">
           {field.locked ? '🔒 ' : ''}{field.label}
         </div>
       )}
 
       {/* Debug field index marker. */}
-      {debugOrder != null && (
+      {debugOrder != null && selected && (
         <div style={{
           position: 'absolute', top: -2, right: -2, background: '#ff6600', color: '#fff',
           borderRadius: '50%', width: 18, height: 18, fontSize: 10, fontWeight: 'bold',
@@ -665,6 +668,18 @@ export default function FieldOverlay({
       {/* Resize handle — bottom-right corner grip; hidden when structureLocked. */}
       {!structureLocked && (
         <div className="resize-handle" onMouseDown={handleResizeDown} />
+      )}
+
+      {/* Move handle — dedicated drag grip so editing text stays possible. */}
+      {!structureLocked && selected && (
+        <button
+          type="button"
+          className="field-move-handle"
+          onMouseDown={handleMouseDown}
+          title="Déplacer le champ"
+        >
+          ⋮⋮
+        </button>
       )}
     </div>
   );

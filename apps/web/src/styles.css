@@ -718,6 +718,24 @@ body { margin: 0; background: #f3f5f8; }
 
 .field-content { position: absolute; inset: 0; overflow: hidden; }
 
+.field-move-handle {
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: var(--color-blue-legacy);
+  color: white;
+  cursor: move;
+  z-index: 20;
+  pointer-events: auto;
+  font-size: 12px;
+  line-height: 1;
+}
+
 /* Liberation Sans — same font used in PDF export */
 @font-face {
   font-family: 'LMPdfSans';
