@@ -27,7 +27,8 @@
  * - mapFieldToPdfBox() — unused after normalized approach
  */
 
-import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
+import { PDFDocument, rgb, degrees } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import type { FieldModel } from './types';
 
 // ---------------------------------------------------------------------------
@@ -69,19 +70,10 @@ function normalizeRotation(angle: number): Rotation {
   return 0;
 }
 
-// ── 1:1 constants ─────────────────────────────────────────────────────────
-//
-// The editor uses CSS values interpreted in px CSS. The PDF uses points (pt).
-// 1 CSS px = 72/96 pt = 0.75 pt.
-//
-// CSS .field-input { padding: 2px 6px } → 1.5pt top/bottom, 4.5pt left/right
-// CSS .field-textarea { line-height: 1.2 }
-// CSS default fontSize for fields: 14px → 10.5pt
-//
-// For true 1:1, we convert CSS values directly to PDF points.
-const PX_TO_PT = 72 / 96; // 0.75 — multiply CSS px values by this to get PDF pt
-const CSS_PAD_TOP = 2 * PX_TO_PT;     // 1.5pt
-const CSS_PAD_LEFT = 6 * PX_TO_PT;    // 4.5pt
+// ── Padding constants (matching CSS .field-input { padding: 2px 6px }) ──
+// Fields are stored in PDF points — no conversion needed.
+const CSS_PAD_TOP = 2;
+const CSS_PAD_LEFT = 6;
 const CSS_LINE_HEIGHT = 1.2;
 
 function buildContinuousIndex(
@@ -273,8 +265,14 @@ async function renderFieldsOnPages(
 
   const { width: pdfW, height: pdfH } = pages[0].getSize();
 
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  // Embed same font as editor (Liberation Sans) to eliminate baseline differences
+  pdfDoc.registerFontkit(fontkit);
+  const [regularBytes, boldBytes] = await Promise.all([
+    fetch('/fonts/LiberationSans-Regular.ttf').then(r => r.arrayBuffer()),
+    fetch('/fonts/LiberationSans-Bold.ttf').then(r => r.arrayBuffer()),
+  ]);
+  const font = await pdfDoc.embedFont(regularBytes);
+  const fontBold = await pdfDoc.embedFont(boldBytes);
 
   const continuousByPage = buildContinuousIndex(overflowUiState);
 
@@ -356,9 +354,8 @@ async function renderFieldsOnPages(
       const boxW = pdf.w;
       const boxH = pdf.h;
 
-      // CSS px (96 DPI) → PDF points (72 pt/inch). Fields store fontSize in CSS px,
-      // but PDF coordinates are in points. This conversion aligns the two.
-      const fontSize = Math.min(f.style.fontSize * 72 / 96, boxH - 2);
+      // Fields are stored in PDF points — fontSize is already in the correct unit.
+      const fontSize = Math.min(f.style.fontSize, boxH - 2);
       const selectedFont =
         f.style.fontWeight === 'bold' ? fontBold : font;
 
@@ -455,12 +452,7 @@ function drawFieldPortrait(
     const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
-    // 1:1 positioning: reproduce exactly what the browser renders.
-    // Text fields (<div>/contentEditable): padding-top, then half-leading, then ascent to baseline.
-    // Date fields (<input>): browser centers text vertically; baseline ≈ box center + fontSize*0.35
-    const isDateField = f.type === 'date';
-
-    // 1:1: respect textAlign from field style
+    // Respect textAlign from field style
     const textAlign = f.style.textAlign || 'left';
 
     visible.forEach((line, idx) => {
@@ -476,12 +468,9 @@ function drawFieldPortrait(
         x = pdfX + padX;
       }
 
-      // Vertical position: match browser layout
-      const y = isDateField
-        // <input> centers text vertically: baseline ≈ center + fontSize*0.35
-        ? pdfY + boxH / 2 + fontSize * 0.35 - lineHeight * idx
-        // <div> top-aligned: padding-top → half-leading → ascent → baseline
-        : pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx;
+      // Vertical position: unified formula for all field types
+      // padding-top → half-leading → ascent → baseline
+      const y = pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx;
 
       page.drawText(line, {
         x,
