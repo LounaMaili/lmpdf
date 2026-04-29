@@ -409,9 +409,20 @@ export default function FieldOverlay({
             e.stopPropagation();
             onValueChange(isChecked ? 'false' : 'true');
           }}
-          style={{ fontSize: field.style.checkSize ?? Math.max(12, Math.min(field.w, field.h) * 0.75), color: field.style.color, lineHeight: 1 }}
+          style={{ width: '100%', height: '100%', color: field.style.color }}
         >
-          {isChecked ? '✓' : ''}
+          {isChecked && (
+            <svg viewBox="0 0 100 100" width="100%" height="100%">
+              <polyline
+                points="25,52 42,70 75,30"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
         </div>
       );
     }
@@ -485,10 +496,11 @@ export default function FieldOverlay({
             textDecoration: field.style.textDecoration,
             textAlign: field.style.textAlign,
             color: field.style.color,
-            lineHeight: `${field.style.fontSize * 1.2}px`,
             padding: '2px 6px',
             boxSizing: 'border-box',
+            lineHeight: 1.2,
             height: '100%',
+            background: 'transparent',
           }}
         />
       );

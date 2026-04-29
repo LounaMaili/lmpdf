@@ -429,17 +429,12 @@ function drawFieldPortrait(
 ): void {
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      const checkSize = f.style.checkSize ?? Math.max(12, Math.min(boxW, boxH) * 0.75);
-      const check = '\u2713';
-      const textWidth = selectedFont.widthOfTextAtSize(check, checkSize);
-      const textHeight = selectedFont.heightAtSize(checkSize, { descender: false });
-      page.drawText(check, {
-        x: pdfX + (boxW - textWidth) / 2,
-        y: pdfY + (boxH - textHeight) / 2 - 0.5,
-        size: checkSize,
-        font: selectedFont,
-        color: rgb(cr, cg, cb),
-      });
+      const p1 = { x: pdfX + boxW * 0.25, y: pdfY + boxH * 0.48 };
+      const p2 = { x: pdfX + boxW * 0.42, y: pdfY + boxH * 0.30 };
+      const p3 = { x: pdfX + boxW * 0.75, y: pdfY + boxH * 0.70 };
+      const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
+      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
+      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
@@ -571,28 +566,12 @@ function drawFieldLandscape(
 
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      const checkSize = f.style.checkSize ?? Math.max(12, Math.min(boxW, boxH) * 0.75);
-      const check = '\u2713';
-
-      if (targetRotation === 90) {
-        const textWidth = selectedFont.widthOfTextAtSize(check, checkSize);
-        const textHeight = selectedFont.heightAtSize(checkSize, { descender: false });
-        const cx = pdfX + boxW / 2 + (textHeight / 2);
-        const cy = pdfY + boxH / 2 - (textWidth / 2);
-        page.drawText(check, {
-          x: cx, y: cy, size: checkSize, font: selectedFont,
-          color: rgb(cr, cg, cb), rotate: degrees(90),
-        });
-      } else if (targetRotation === 270) {
-        const textWidth = selectedFont.widthOfTextAtSize(check, checkSize);
-        const textHeight = selectedFont.heightAtSize(checkSize, { descender: false });
-        const cx = pdfX + boxW / 2 - (textHeight / 2);
-        const cy = pdfY + boxH / 2 + (textWidth / 2);
-        page.drawText(check, {
-          x: cx, y: cy, size: checkSize, font: selectedFont,
-          color: rgb(cr, cg, cb), rotate: degrees(270),
-        });
-      }
+      const p1 = { x: pdfX + boxW * 0.25, y: pdfY + boxH * 0.48 };
+      const p2 = { x: pdfX + boxW * 0.42, y: pdfY + boxH * 0.30 };
+      const p3 = { x: pdfX + boxW * 0.75, y: pdfY + boxH * 0.70 };
+      const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
+      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
+      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
