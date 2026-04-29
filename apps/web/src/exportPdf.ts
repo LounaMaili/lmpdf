@@ -390,7 +390,7 @@ async function renderFieldsOnPages(
       if (isLandscape) {
         drawFieldLandscape(
           page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          pdfW, fontSize, selectedFont, cr, cg, cb, targetRotation,
+          pdfW, fontSize, selectedFont, cr, cg, cb, targetRotation, pdfH,
         );
       } else {
         drawFieldPortrait(
@@ -449,6 +449,51 @@ function drawCheckboxMark(
     thickness: lw,
     color: rgb(cr, cg, cb),
   });
+}
+
+/** Draw a checkbox check mark on a rotated (landscape) page.
+ * Uses the same CHECK_POINTS geometry (25,52 42,70 75,30)
+ * but transforms the display-space coords to content-space PDF coords.
+ */
+function drawCheckboxMarkLandscape(
+  page: import('pdf-lib').PDFPage,
+  pdfX: number,
+  pdfY: number,
+  boxW: number,
+  boxH: number,
+  pdfW: number,
+  pdfH: number,
+  targetRotation: number,
+  cr: number,
+  cg: number,
+  cb: number,
+): void {
+  // Display dimensions: for 90°/270°, width and height swap
+  const dispW = boxH;
+  const dispH = boxW;
+
+  // SVG points in display space (origin top-left, Y down)
+  const dP1 = { x: dispW * 0.25, y: dispH * 0.48 };
+  const dP2 = { x: dispW * 0.42, y: dispH * 0.30 };
+  const dP3 = { x: dispW * 0.75, y: dispH * 0.70 };
+
+  // Transform display → content (PDF) coords
+  const toContent = (dx: number, dy: number) => {
+    if (targetRotation === 90) {
+      return { x: pdfW - (pdfY + dy), y: pdfX + dx };
+    } else { // 270
+      return { x: pdfY + dy, y: pdfH - (pdfX + dx) };
+    }
+  };
+
+  const p1 = toContent(dP1.x, dP1.y);
+  const p2 = toContent(dP2.x, dP2.y);
+  const p3 = toContent(dP3.x, dP3.y);
+
+  const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
+
+  page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
+  page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
 }
 
 function drawFieldPortrait(
@@ -579,6 +624,7 @@ function drawFieldLandscape(
   cg: number,
   cb: number,
   targetRotation: Rotation,
+  pdfH: number,
 ): void {
   const textRot =
     targetRotation === 90
@@ -601,7 +647,7 @@ function drawFieldLandscape(
 
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
+      drawCheckboxMarkLandscape(page, pdfX, pdfY, boxW, boxH, pdfW, pdfH, targetRotation, cr, cg, cb);
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {

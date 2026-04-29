@@ -472,72 +472,42 @@ export default function FieldOverlay({
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
       color: field.style.color,
+      lineHeight: 1.2,
     };
 
-    if (isDate) {
-      return (
-        <input
-          ref={dateInputRef}
-          type="text"
-          inputMode="numeric"
-          className="field-input field-date-input"
-          tabIndex={-1}
-          value={valueOverride ?? field.value}
-          onChange={handleDateChange}
-          placeholder={
-            field.style.datePlaceholder
-              || (dateFormat === 'MM/DD/YYYY' ? 'MM/JJ/AAAA'
-              : dateFormat === 'YYYY-MM-DD' ? 'AAAA-MM-JJ'
-              : 'JJ/MM/AAAA')
-          }
-          maxLength={10}
-          style={{
-            fontFamily: "LMPdfSans, " + (field.style.fontFamily || 'sans-serif'),
-            fontSize: field.style.fontSize,
-            fontWeight: field.style.fontWeight,
-            fontStyle: field.style.fontStyle,
-            textDecoration: field.style.textDecoration,
-            textAlign: field.style.textAlign,
-            color: field.style.color,
-            padding: '2px 6px',
-            boxSizing: 'border-box',
-            lineHeight: 1.2,
-            height: '100%',
-            background: 'transparent',
-          }}
-        />
-      );
-    }
+    const isTextLike = isText || isDate;
 
-    // ── Rich text mode (fillMode or selected) ──────────────────────────────
+    if (isTextLike) {
+      const handleTextLikeChange = (html: string) => {
+        if (isDate) {
+          const text = html.replace(/<[^>]*>/g, '');
+          onValueChange(formatDateValue(text));
+        } else {
+          onValueChange(html);
+        }
+      };
 
-    if (selected || fillMode) {
-      return (
-        <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%', userSelect: 'text' }}>
-          <RichTextEditor
-            // Key forces a remount when fillMode toggles so the editor re-initialises cleanly.
-            key={`${field.id}-${fillMode}`}
-            value={valueOverride ?? field.value}
-            onChange={(html) => onValueChange(html)}
-            style={textEditStyle}
-            placeholder={field.label}
-            onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
-            editorRef={textEditorRef}
-            onContainerRef={(el) => { textEditorRef.current = el; setRichTextEl(el); }}
-          />
-          {/* SelectionToolbar is only mounted when the field is selected —
-              preventing multiple toolbars from appearing across the document. */}
-          {selected && (
-            <SelectionToolbar
-              containerRef={richTextEl}
-              onFormat={(cmd, val) => {
-                const editor = textEditorRef.current;
-                if (!editor) return;
-                // Save the current selection range, refocus the editor (which
-                // can collapse the selection), restore the range, then apply
-                // the formatting command so it applies to the right text.
-                const sel = window.getSelection();
-                let savedRange: Range | null = null;
+      if (selected || fillMode) {
+        return (
+          <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%', userSelect: 'text' }}>
+            <RichTextEditor
+              key={`${field.id}-${fillMode}`}
+              value={valueOverride ?? field.value}
+              onChange={handleTextLikeChange}
+              style={textEditStyle}
+              placeholder={isDate ? (dateFormat === 'MM/DD/YYYY' ? 'MM/JJ/AAAA' : dateFormat === 'YYYY-MM-DD' ? 'AAAA-MM-JJ' : 'JJ/MM/AAAA') : field.label}
+              onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
+              editorRef={textEditorRef}
+              onContainerRef={(el) => { textEditorRef.current = el; setRichTextEl(el); }}
+            />
+            {selected && !isDate && (
+              <SelectionToolbar
+                containerRef={richTextEl}
+                onFormat={(cmd, val) => {
+                  const editor = textEditorRef.current;
+                  if (!editor) return;
+                  const sel = window.getSelection();
+                  let savedRange: Range | null = null;
                 if (sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
                 editor.focus();
                 if (savedRange) {
@@ -563,6 +533,7 @@ export default function FieldOverlay({
         dangerouslySetInnerHTML={{ __html: valueOverride ?? field.value }}
       />
     );
+    } // isTextLike
   };
 
   // ── Computed styles ─────────────────────────────────────────────────────────
