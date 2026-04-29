@@ -435,7 +435,7 @@ function drawFieldPortrait(
       const textHeight = selectedFont.heightAtSize(checkSize, { descender: false });
       page.drawText(check, {
         x: pdfX + (boxW - textWidth) / 2,
-        y: pdfY + (boxH - textHeight) / 2,
+        y: pdfY + (boxH - textHeight) / 2 - 0.5,
         size: checkSize,
         font: selectedFont,
         color: rgb(cr, cg, cb),
@@ -473,7 +473,7 @@ function drawFieldPortrait(
       let x: number;
       if (textAlign === 'center') {
         const textWidth = selectedFont.widthOfTextAtSize(line, fontSize);
-        x = pdfX + (boxW - textWidth) / 2;
+        x = pdfX + (boxW - textWidth) / 2 + TEXT_X_NUDGE;
       } else if (textAlign === 'right') {
         const textWidth = selectedFont.widthOfTextAtSize(line, fontSize);
         x = pdfX + boxW - padX - textWidth + TEXT_X_NUDGE;
@@ -570,28 +570,31 @@ function drawFieldLandscape(
   fontSize = Math.min(fontSize, dispH - 2);
 
   if (f.type === 'checkbox') {
-    if (fieldValue !== 'true') return;
-    if (targetRotation === 90) {
-      // Display → content transform for checkbox points
-      const dx = pdfY;
-      const dy = pdfW - pdfX - boxW;
-      const dp1 = { x: dx + dispW * 0.18, y: dy + dispH * 0.45 };
-      const dp2 = { x: dx + dispW * 0.40, y: dy + dispH * 0.20 };
-      const dp3 = { x: dx + dispW * 0.82, y: dy + dispH * 0.78 };
-      const p1 = { x: pdfW - dp1.y, y: dp1.x };
-      const p2 = { x: pdfW - dp2.y, y: dp2.x };
-      const p3 = { x: pdfW - dp3.y, y: dp3.x };
-      const lw = Math.max(1.4, Math.min(dispW, dispH) * 0.09);
-      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
-    } else {
-      const p1 = { x: pdfX + boxW * 0.18, y: pdfY + boxH * 0.45 };
-      const p2 = { x: pdfX + boxW * 0.40, y: pdfY + boxH * 0.20 };
-      const p3 = { x: pdfX + boxW * 0.82, y: pdfY + boxH * 0.78 };
-      const lw = Math.max(1.4, Math.min(boxW, boxH) * 0.09);
-      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+    if (fieldValue === 'true') {
+      const checkSize = f.style.checkSize ?? Math.max(12, Math.min(boxW, boxH) * 0.75);
+      const check = '\u2713';
+
+      if (targetRotation === 90) {
+        const textWidth = selectedFont.widthOfTextAtSize(check, checkSize);
+        const textHeight = selectedFont.heightAtSize(checkSize, { descender: false });
+        const cx = pdfX + boxW / 2 + (textHeight / 2);
+        const cy = pdfY + boxH / 2 - (textWidth / 2);
+        page.drawText(check, {
+          x: cx, y: cy, size: checkSize, font: selectedFont,
+          color: rgb(cr, cg, cb), rotate: degrees(90),
+        });
+      } else if (targetRotation === 270) {
+        const textWidth = selectedFont.widthOfTextAtSize(check, checkSize);
+        const textHeight = selectedFont.heightAtSize(checkSize, { descender: false });
+        const cx = pdfX + boxW / 2 - (textHeight / 2);
+        const cy = pdfY + boxH / 2 + (textWidth / 2);
+        page.drawText(check, {
+          x: cx, y: cy, size: checkSize, font: selectedFont,
+          color: rgb(cr, cg, cb), rotate: degrees(270),
+        });
+      }
     }
+    return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
     // Counter fields: CENTER the number in the display cell
     const val = fieldValue || '0';

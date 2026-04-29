@@ -160,6 +160,7 @@ export default function RichTextEditor({
       suppressContentEditableWarning
       onInput={handleInput}
       onKeyDown={handleKeyDown}
+      className="field-input field-textarea"
       // Placeholder support via CSS attribute selector `[data-placeholder]:empty::before`.
       data-placeholder={placeholder}
       style={{
@@ -168,8 +169,10 @@ export default function RichTextEditor({
         height: '100%',
         border: 'none',
         outline: 'none',
+        background: 'transparent',
         overflow: 'hidden',
         wordWrap: 'break-word',
+        wordBreak: 'break-word',
         whiteSpace: 'pre-wrap',
         cursor: 'text',
         padding: '2px 6px',
