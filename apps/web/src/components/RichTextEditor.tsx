@@ -172,9 +172,10 @@ export default function RichTextEditor({
         wordWrap: 'break-word',
         whiteSpace: 'pre-wrap',
         cursor: 'text',
-        // 4 px left padding prevents the first character being clipped at the field edge.
         padding: '2px 6px',
         boxSizing: 'border-box',
+        lineHeight: 1.2,
+        display: 'block',
       }}
     />
   );

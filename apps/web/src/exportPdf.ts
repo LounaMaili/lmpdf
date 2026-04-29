@@ -373,11 +373,14 @@ async function renderFieldsOnPages(
 
       // ── Draw ───────────────────────────────────────────────────────────
 
-      // DEBUG: draw red rectangle to verify field position in export
-      page.drawRectangle({
-        x: pdfX, y: pdfY, width: boxW, height: boxH,
-        borderColor: rgb(1, 0, 0), borderWidth: 1, color: undefined,
-      });
+      const DEBUG_FIELD_BOXES = false;
+
+      if (DEBUG_FIELD_BOXES) {
+        page.drawRectangle({
+          x: pdfX, y: pdfY, width: boxW, height: boxH,
+          borderColor: rgb(1, 0, 0), borderWidth: 1,
+        });
+      }
 
       if (isLandscape) {
         drawFieldLandscape(
@@ -446,7 +449,7 @@ function drawFieldPortrait(
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
     // 1:1: use the same line-height as CSS (.field-textarea has line-height: 1.2)
     const lineHeight = fontSize * CSS_LINE_HEIGHT;
-    const ascent = fontSize * 0.718; // Helvetica ascent ratio
+    const ascent = selectedFont.heightAtSize(fontSize, { descender: false });
     // 1:1: half-leading matches browser layout (line-height > fontSize → space split top/bottom)
     const halfLeading = (lineHeight - fontSize) / 2;
     const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
@@ -612,7 +615,7 @@ function drawFieldLandscape(
     const maxTextWidth = Math.max(8, dispW - padH * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
     const lineHeight = fontSize * CSS_LINE_HEIGHT;
-    const ascent = fontSize * 0.718;
+    const ascent = selectedFont.heightAtSize(fontSize, { descender: false });
     const halfLeading = (lineHeight - fontSize) / 2;
     const maxLines = Math.max(1, Math.floor((dispH - padV * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);

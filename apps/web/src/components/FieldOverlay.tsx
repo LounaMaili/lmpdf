@@ -450,6 +450,16 @@ export default function FieldOverlay({
       );
     }
 
+    const textEditStyle = {
+      fontFamily: "LMPdfSans, " + (field.style.fontFamily || 'sans-serif'),
+      fontSize: field.style.fontSize,
+      fontWeight: field.style.fontWeight,
+      fontStyle: field.style.fontStyle,
+      textDecoration: field.style.textDecoration,
+      textAlign: field.style.textAlign,
+      color: field.style.color,
+    };
+
     if (isDate) {
       // Use same component as text fields (RichTextEditor) for unified rendering.
       // Date formatting logic on input: strip non-digits, auto-insert /.
@@ -485,16 +495,6 @@ export default function FieldOverlay({
         />
       );
     }
-
-    const textEditStyle = {
-      fontFamily: "LMPdfSans, " + (field.style.fontFamily || 'sans-serif'),
-      fontSize: field.style.fontSize,
-      fontWeight: field.style.fontWeight,
-      fontStyle: field.style.fontStyle,
-      textDecoration: field.style.textDecoration,
-      textAlign: field.style.textAlign,
-      color: field.style.color,
-    };
 
     // ── Rich text mode (fillMode or selected) ──────────────────────────────
 
