@@ -78,10 +78,10 @@ const CSS_LINE_HEIGHT = 1.2;
 
 // Calibration nudges to compensate for irreducible CSS vs pdf-lib rendering differences
 const TEXT_X_NUDGE = -1;
-const TEXT_Y_NUDGE = -3.4;
-const DATE_EXTRA_Y_NUDGE = -2.2;
-const LANDSCAPE_TEXT_Y_NUDGE = -3.4;
-const LANDSCAPE_DATE_EXTRA_Y_NUDGE = -2.2;
+const TEXT_Y_NUDGE = -2.4;
+const DATE_EXTRA_Y_NUDGE = 0.8;
+const LANDSCAPE_TEXT_Y_NUDGE = -2.4;
+const LANDSCAPE_DATE_EXTRA_Y_NUDGE = 0.8;
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -464,29 +464,36 @@ function drawCheckboxMarkLandscape(
   pdfY: number,
   boxW: number,
   boxH: number,
-  pdfW: number,
-  pdfH: number,
+  _pdfW: number,
+  _pdfH: number,
   targetRotation: number,
   cr: number,
   cg: number,
   cb: number,
 ): void {
-  // Display dimensions: for 90°/270°, width and height swap
+  // Dimensions visuelles du champ apres rotation.
   const dispW = boxH;
   const dispH = boxW;
 
-  // SVG points in display space (origin top-left, Y down)
-  const dP1 = { x: dispW * 0.25, y: dispH * 0.48 };
-  const dP2 = { x: dispW * 0.42, y: dispH * 0.30 };
-  const dP3 = { x: dispW * 0.75, y: dispH * 0.70 };
+  // Meme geometrie que le SVG editeur : 25,52 42,70 75,30
+  // Origine visuelle : haut-gauche, Y vers le bas.
+  const dP1 = { x: dispW * 0.25, y: dispH * 0.52 };
+  const dP2 = { x: dispW * 0.42, y: dispH * 0.70 };
+  const dP3 = { x: dispW * 0.75, y: dispH * 0.30 };
 
-  // Transform display → content (PDF) coords
   const toContent = (dx: number, dy: number) => {
     if (targetRotation === 90) {
-      return { x: pdfW - (pdfY + dy), y: pdfX + dx };
-    } else { // 270
-      return { x: pdfY + dy, y: pdfH - (pdfX + dx) };
+      return {
+        x: pdfX + boxW - dy,
+        y: pdfY + dx,
+      };
     }
+
+    // targetRotation === 270
+    return {
+      x: pdfX + dy,
+      y: pdfY + boxH - dx,
+    };
   };
 
   const p1 = toContent(dP1.x, dP1.y);
@@ -495,8 +502,19 @@ function drawCheckboxMarkLandscape(
 
   const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
 
-  page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-  page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+  page.drawLine({
+    start: p1,
+    end: p2,
+    thickness: lw,
+    color: rgb(cr, cg, cb),
+  });
+
+  page.drawLine({
+    start: p2,
+    end: p3,
+    thickness: lw,
+    color: rgb(cr, cg, cb),
+  });
 }
 
 function drawFieldPortrait(
@@ -517,7 +535,7 @@ function drawFieldPortrait(
 ): void {
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
+      drawCheckboxMarkLandscape(page, pdfX, pdfY, boxW, boxH, pdfW, pdfH, targetRotation, cr, cg, cb);
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
@@ -652,7 +670,7 @@ function drawFieldLandscape(
 
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
+      drawCheckboxMarkLandscape(page, pdfX, pdfY, boxW, boxH, pdfW, pdfH, targetRotation, cr, cg, cb);
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
