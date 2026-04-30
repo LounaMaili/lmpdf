@@ -3,37 +3,28 @@
 Toutes les modifications significatives du projet sont documentées ici. Format `AAAA-MM-DD`.
 
 ---
-
-## [2026-04-18] Export PDF réécrit — coordonnées normalisées
-
-### Changed
-- **Réécriture complète de `exportPdf.ts`** sur une nouvelle branche `fix/export-pdf-rewrite` (partie de zéro depuis `main`)
-- **Pipeline de coordonnées normalisées** : les positions de champs passent par un espace 0→1 avant d'être converties en points PDF, éliminant les erreurs d'arrondi cumulées
-- **Rotation paysage** : `/Rotate 90` sur la page + contre-rotation du texte par `degrees(90)` CCW pour un affichage lisible
-- **Ancrage du texte rotaté corrigé** : géométrie dérivée mathématiquement — le texte rotaté à `(cx, cy)` occupe en display `x:[cy, cy+textWidth]`, `y:[W−cx, W−cx+fontSize]`
-- **Compteurs centrés** dans les cellules d'affichage au lieu d'être alignés en haut à gauche
-- **Padding fixe (2pt)** au lieu de padding proportionnel — résolution-indépendant
-- **Conversion font size** `CSS px × 72/96 → PDF pt`
-- **Cases à cocher** : transformées par la matrice display↔content pour /Rotate 90
-- **Nettoyage du code mort** : suppression de `mapDisplayBoxToPdfBox()`, `mapFieldToPdfBox()`, code dupliqué entre les deux fonctions d'export
-
-### Architecture
-- `renderFieldsOnPages()` partagé entre `exportFilledPdf` et `generateFilledPdfBlob`
-- Fonctions séparées `drawFieldPortrait` / `drawFieldLandscape`
-- Utilitaires `wrapText`, `drawMaskRect`, `drawPageNumber` extraits
-- Constantes de padding au niveau du module
+## [2026-04-30] Corrections d'alignement export et ergonomie éditeur
 
 ### Fixed
-- Texte décalé vers le bas/en bas à gauche en mode paysage
-- Compteurs décalés par colonne (padding calculé sur dimensions contenu au lieu de dimensions display)
-- Signe de l'offset d'ascente inversé pour le centrage vertical
+- **`isText` non déclaré** : ajout de `const isText = field.type === 'text'` dans FieldOverlay.tsx — corrigeait un `ReferenceError` causant une page blanche dès qu'un champ texte/date devait être rendu
+- **Styles partiels** : `normalizeField()` merge désormais `defaultFieldStyle` avec les styles partiels au lieu de les remplacer entirely (`{ ...defaultFieldStyle, ...(f.style ?? {}) }`)
+- **Champ date séparé de RichTextEditor** : le champ date utilise désormais un `<textarea>` mono-ligne stylé comme `.field-input.field-textarea` au lieu de passer par `contentEditable`, ce qui corrige le bug de curseur qui sautait à chaque frappe
+- **Fond jaune sur les champs** : `highlightColor` n'est plus appliqué en mode préparation ; les champs sont transparents. En mode remplissage, le highlight reste possible. `maskBackground` continue d'afficher un fond blanc
+- **Sélection checkbox/counter** : en mode préparation, un clic sur une checkbox ou un compteur sélectionne le champ au lieu de toggler la valeur ; en mode remplissage, le comportement toggle est conservé
+- **Drag sur checkbox/counter** : le handler mousedown ne bloque plus le drag en mode préparation sur `.checkbox-display` / `.counter-display`
+- **Poignée de déplacement** : visible au survol (`selected || hovered`) au lieu de seulement quand sélectionné
+- **Export checkbox portrait** : `drawCheckboxMark` reçoit un guard `Number.isFinite` pour skipper les checkbox aux coordonnées invalides au lieu de crasher l'export
+- **Export checkbox paysage** : `drawCheckboxMarkLandscape` corrigé — transformation basée sur `pdfX/pdfY` à l'intérieur de la boîte du champ au lieu de `pdfW/pdfH` globaux qui envoyaient la coche hors de sa case
+  - 90° : `x = pdfX + boxW - dy`, `y = pdfY + dx`
+  - 270° : `x = pdfX + dy`, `y = pdfY + boxH - dx`
+  - Points SVG recalés sur la géométrie éditeur (0.25/0.52, 0.42/0.70, 0.75/0.30)
+- **Export 0°/180° : debug logging** : `try/catch` autour de `drawFieldPortrait` / `drawFieldLandscape` pour logger l'id, type, rotation et coordonnées du champ qui fait échouer l'export
 
-### Print navigateur
-- **Caché le bandeau** : `.app-toolbar`, `.toolbar-file-menu-wrap` masqués en mode print
-- **Marges nulles** : `@page { margin: 0 }` + reset body margin/padding
-- **Mise en page** : `.app` en block, `.editor` prend toute la hauteur, `.page-zoom-wrapper` en dimensions naturelles (sans forçage 100% qui collapsait le canvas)
-- **Éléments masqués** : breadcrumb, diagnostic, status bar, zoom/rotation controls, pagination
-
+### Changed
+- **`TEXT_Y_NUDGE`** : -2.8 → -2.4 (texte légèrement remonté)
+- **`DATE_EXTRA_Y_NUDGE`** : ajout de +0.8 (la date était trop haute, maintenant légèrement poussée vers le bas)
+- **`LANDSCAPE_TEXT_Y_NUDGE`** : -2.4 et **`LANDSCAPE_DATE_EXTRA_Y_NUDGE`** : +0.8 (calibration paysage alignée sur portrait)
+- **`drawFieldPortrait`** : appelle `drawCheckboxMark` (portrait) pour les checkbox, pas `drawCheckboxMarkLandscape`
 ---
 
 ## [2026-04-16] Corrections toolbar + drag & drop fonctionnel
