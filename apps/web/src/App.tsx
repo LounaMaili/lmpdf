@@ -172,7 +172,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const normalizeField = (f: Partial<FieldModel> & Pick<FieldModel, 'id' | 'label' | 'x' | 'y' | 'w' | 'h' | 'type'>): FieldModel => ({
     ...f,
     value: f.value ?? '',
-    style: f.style ?? { ...defaultFieldStyle },
+    style: { ...defaultFieldStyle, ...(f.style ?? {}) },
     locked: f.locked ?? false,
     overlayVisible: f.overlayVisible ?? true,
     pageNumber: f.pageNumber ?? 1,

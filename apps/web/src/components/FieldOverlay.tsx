@@ -245,6 +245,7 @@ export default function FieldOverlay({
   const isChecked = field.value === 'true';
   const counterVal = Number(field.value || 0);
   const isDate = field.type === 'date';
+  const isText = field.type === 'text';
   const dateFormat = field.style.dateFormat || 'DD/MM/YYYY';
 
   // ── Auto-set date to today ─────────────────────────────────────────────────
