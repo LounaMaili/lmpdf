@@ -390,17 +390,31 @@ async function renderFieldsOnPages(
         });
       }
 
-      if (isLandscape) {
-        drawFieldLandscape(
-          page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          pdfW, fontSize, selectedFont, cr, cg, cb, targetRotation, pdfH,
-        );
-      } else {
-        drawFieldPortrait(
-          page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          padX, padTop, fontSize,
-          selectedFont, cr, cg, cb,
-        );
+      try {
+        if (isLandscape) {
+          drawFieldLandscape(
+            page, f, fieldValue, pdfX, pdfY, boxW, boxH,
+            pdfW, fontSize, selectedFont, cr, cg, cb, targetRotation, pdfH,
+          );
+        } else {
+          drawFieldPortrait(
+            page, f, fieldValue, pdfX, pdfY, boxW, boxH,
+            padX, padTop, fontSize,
+            selectedFont, cr, cg, cb,
+          );
+        }
+      } catch (err) {
+        console.error('[LMPDF] Export field failed', {
+          fieldId: f.id,
+          fieldType: f.type,
+          fieldValue,
+          targetRotation,
+          pdfX,
+          pdfY,
+          boxW,
+          boxH,
+        }, err);
+        throw err;
       }
     }
 
@@ -429,6 +443,23 @@ function drawCheckboxMark(
   cg: number,
   cb: number,
 ): void {
+  if (
+    !Number.isFinite(pdfX) ||
+    !Number.isFinite(pdfY) ||
+    !Number.isFinite(boxW) ||
+    !Number.isFinite(boxH) ||
+    boxW <= 0 ||
+    boxH <= 0
+  ) {
+    console.warn('[LMPDF] Invalid checkbox box, skipped', {
+      pdfX,
+      pdfY,
+      boxW,
+      boxH,
+    });
+    return;
+  }
+
   const toPdf = (x: number, y: number) => ({
     x: pdfX + boxW * (x / 100),
     y: pdfY + boxH * (1 - y / 100),
@@ -440,24 +471,10 @@ function drawCheckboxMark(
 
   const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
 
-  page.drawLine({
-    start: p1,
-    end: p2,
-    thickness: lw,
-    color: rgb(cr, cg, cb),
-  });
-  page.drawLine({
-    start: p2,
-    end: p3,
-    thickness: lw,
-    color: rgb(cr, cg, cb),
-  });
+  page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
+  page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
 }
 
-/** Draw a checkbox check mark on a rotated (landscape) page.
- * Uses the same CHECK_POINTS geometry (25,52 42,70 75,30)
- * but transforms the display-space coords to content-space PDF coords.
- */
 function drawCheckboxMarkLandscape(
   page: import('pdf-lib').PDFPage,
   pdfX: number,
@@ -471,11 +488,29 @@ function drawCheckboxMarkLandscape(
   cg: number,
   cb: number,
 ): void {
-  // Dimensions visuelles du champ apres rotation.
+  if (
+    !Number.isFinite(pdfX) ||
+    !Number.isFinite(pdfY) ||
+    !Number.isFinite(boxW) ||
+    !Number.isFinite(boxH) ||
+    boxW <= 0 ||
+    boxH <= 0
+  ) {
+    console.warn('[LMPDF] Invalid rotated checkbox box, skipped', {
+      pdfX,
+      pdfY,
+      boxW,
+      boxH,
+      targetRotation,
+    });
+    return;
+  }
+
+  // Dimensions visuelles du champ apres rotation 90/270.
   const dispW = boxH;
   const dispH = boxW;
 
-  // Meme geometrie que le SVG editeur : 25,52 42,70 75,30
+  // Meme geometrie que l'editeur : 25,52 42,70 75,30
   // Origine visuelle : haut-gauche, Y vers le bas.
   const dP1 = { x: dispW * 0.25, y: dispH * 0.52 };
   const dP2 = { x: dispW * 0.42, y: dispH * 0.70 };
@@ -489,10 +524,17 @@ function drawCheckboxMarkLandscape(
       };
     }
 
-    // targetRotation === 270
+    if (targetRotation === 270) {
+      return {
+        x: pdfX + dy,
+        y: pdfY + boxH - dx,
+      };
+    }
+
+    // Securite : cette fonction ne devrait jamais etre appelee en 0/180.
     return {
-      x: pdfX + dy,
-      y: pdfY + boxH - dx,
+      x: pdfX + dx,
+      y: pdfY + boxH - dy,
     };
   };
 
@@ -502,19 +544,8 @@ function drawCheckboxMarkLandscape(
 
   const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
 
-  page.drawLine({
-    start: p1,
-    end: p2,
-    thickness: lw,
-    color: rgb(cr, cg, cb),
-  });
-
-  page.drawLine({
-    start: p2,
-    end: p3,
-    thickness: lw,
-    color: rgb(cr, cg, cb),
-  });
+  page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
+  page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
 }
 
 function drawFieldPortrait(
@@ -535,7 +566,7 @@ function drawFieldPortrait(
 ): void {
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      drawCheckboxMarkLandscape(page, pdfX, pdfY, boxW, boxH, pdfW, pdfH, targetRotation, cr, cg, cb);
+      drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
