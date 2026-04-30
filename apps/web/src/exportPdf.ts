@@ -78,8 +78,10 @@ const CSS_LINE_HEIGHT = 1.2;
 
 // Calibration nudges to compensate for irreducible CSS vs pdf-lib rendering differences
 const TEXT_X_NUDGE = -1;
-const TEXT_Y_NUDGE = -2.8;
-const DATE_EXTRA_Y_NUDGE = -2.5;
+const TEXT_Y_NUDGE = -3.4;
+const DATE_EXTRA_Y_NUDGE = -2.2;
+const LANDSCAPE_TEXT_Y_NUDGE = -3.4;
+const LANDSCAPE_DATE_EXTRA_Y_NUDGE = -2.2;
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -650,7 +652,7 @@ function drawFieldLandscape(
 
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      drawCheckboxMarkLandscape(page, pdfX, pdfY, boxW, boxH, pdfW, pdfH, targetRotation, cr, cg, cb);
+      drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
     }
     return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
@@ -699,9 +701,10 @@ function drawFieldLandscape(
        *
        * Each subsequent line: cx += lineHeight   (display goes downward)
        */
+      const typeYNudge = f.type === 'date' ? LANDSCAPE_DATE_EXTRA_Y_NUDGE : 0;
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + padV + halfLeading + ascent + lineHeight * idx,
+          x: pdfX + padV + halfLeading + ascent + lineHeight * idx - LANDSCAPE_TEXT_Y_NUDGE - typeYNudge,
           y: pdfY + padH,
           size: fontSize,
           font: selectedFont,
@@ -712,9 +715,10 @@ function drawFieldLandscape(
       });
     } else {
       // rotation 270: mirror the offsets
+      const typeYNudge270 = f.type === 'date' ? LANDSCAPE_DATE_EXTRA_Y_NUDGE : 0;
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + boxW - padV - halfLeading - ascent - lineHeight * idx,
+          x: pdfX + boxW - padV - halfLeading - ascent - lineHeight * idx + LANDSCAPE_TEXT_Y_NUDGE + typeYNudge270,
           y: pdfY + boxH - padH,
           size: fontSize,
           font: selectedFont,

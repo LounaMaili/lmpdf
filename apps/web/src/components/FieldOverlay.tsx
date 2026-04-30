@@ -162,7 +162,7 @@ export default function FieldOverlay({
     const tag = (e.target as HTMLElement).tagName;
     // Preserve native text editing when the field is already selected.
     if ((tag === 'INPUT' || tag === 'TEXTAREA') && selected) return;
-    if ((e.target as HTMLElement).closest('.checkbox-display, .counter-display')) return;
+    if (fillMode && (e.target as HTMLElement).closest('.checkbox-display, .counter-display')) return;
     // Preserve contentEditable editing in an already-selected rich text field.
     if ((e.target as HTMLElement).closest('[contentEditable]') && selected) return;
 
@@ -415,6 +415,10 @@ export default function FieldOverlay({
           tabIndex={-1}
           onClick={(e) => {
             e.stopPropagation();
+            if (!fillMode) {
+              onSelect(e.ctrlKey || e.metaKey);
+              return;
+            }
             onValueChange(isChecked ? 'false' : 'true');
           }}
           style={{ width: '100%', height: '100%', color: field.style.color }}
@@ -442,6 +446,10 @@ export default function FieldOverlay({
           tabIndex={-1}
           onClick={(e) => {
             e.stopPropagation();
+            if (!fillMode) {
+              onSelect(e.ctrlKey || e.metaKey);
+              return;
+            }
             onValueChange(String(counterVal + 1));
           }}
           // Right-click → decrement
@@ -689,7 +697,7 @@ export default function FieldOverlay({
       )}
 
       {/* Move handle — dedicated drag grip so editing text stays possible. */}
-      {!structureLocked && selected && (
+      {!structureLocked && (selected || hovered) && (
         <button
           type="button"
           className="field-move-handle"
