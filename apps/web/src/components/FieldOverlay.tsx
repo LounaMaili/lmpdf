@@ -248,13 +248,8 @@ export default function FieldOverlay({
   const isText = field.type === 'text';
   const dateFormat = field.style.dateFormat || 'DD/MM/YYYY';
 
-  // Highlight only shown in fillMode; transparent in prep mode.
-  const showFieldHighlight =
-    Boolean(fillMode && field.style.highlightColor && !field.style.maskBackground);
   const contentBackground = field.style.maskBackground
     ? (field.style.backgroundColor || '#ffffff')
-    : showFieldHighlight
-    ? field.style.highlightColor
     : undefined;
 
   // ── Auto-set date to today ─────────────────────────────────────────────────

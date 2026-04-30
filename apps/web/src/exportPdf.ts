@@ -79,6 +79,7 @@ const CSS_LINE_HEIGHT = 1.2;
 // Calibration nudges to compensate for irreducible CSS vs pdf-lib rendering differences
 const TEXT_X_NUDGE = -1;
 const TEXT_Y_NUDGE = -2.8;
+const DATE_EXTRA_Y_NUDGE = -2.5;
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -558,7 +559,9 @@ function drawFieldPortrait(
 
       // Vertical position: unified formula for all field types
       // padding-top → half-leading → ascent → baseline
-      const y = pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx + TEXT_Y_NUDGE;
+      // Date fields get an extra nudge because they use a different HTML primitive (textarea)
+      const typeYNudge = f.type === 'date' ? DATE_EXTRA_Y_NUDGE : 0;
+      const y = pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx + TEXT_Y_NUDGE + typeYNudge;
 
       page.drawText(line, {
         x,
