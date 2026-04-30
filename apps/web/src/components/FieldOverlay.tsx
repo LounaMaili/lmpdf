@@ -126,7 +126,7 @@ export default function FieldOverlay({
   // Plain textarea ref (used for non-rich text fields in edit mode).
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Date input ref — used to restore cursor position after controlled value updates.
-  const dateInputRef = useRef<HTMLInputElement>(null);
+  const dateInputRef = useRef<HTMLTextAreaElement>(null);
   const dateCursorRef = useRef<number>(-1);
   // Text caret position to restore after an overflow update.
   const textCursorRef = useRef<number>(-1);
@@ -248,6 +248,15 @@ export default function FieldOverlay({
   const isText = field.type === 'text';
   const dateFormat = field.style.dateFormat || 'DD/MM/YYYY';
 
+  // Highlight only shown in fillMode; transparent in prep mode.
+  const showFieldHighlight =
+    Boolean(fillMode && field.style.highlightColor && !field.style.maskBackground);
+  const contentBackground = field.style.maskBackground
+    ? (field.style.backgroundColor || '#ffffff')
+    : showFieldHighlight
+    ? field.style.highlightColor
+    : undefined;
+
   // ── Auto-set date to today ─────────────────────────────────────────────────
 
   /**
@@ -297,7 +306,7 @@ export default function FieldOverlay({
    * 4. Stores the new cursor in dateCursorRef; a useLayoutEffect below
    *    restores it after the controlled value update re-renders the input.
    */
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDateChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const input = e.target;
     const selStart = input.selectionStart ?? 0;
     const raw = input.value;
@@ -476,16 +485,59 @@ export default function FieldOverlay({
       lineHeight: 1.2,
     };
 
-    const isTextLike = isText || isDate;
+    // ── Date field: separate path, NO RichTextEditor ───────────────────────
+    if (isDate) {
+      const dateValue = valueOverride ?? field.value ?? '';
 
-    if (isTextLike) {
-      const handleTextLikeChange = (html: string) => {
-        if (isDate) {
-          const text = html.replace(/<[^>]*>/g, '');
-          onValueChange(formatDateValue(text));
-        } else {
-          onValueChange(html);
-        }
+      const dateStyle: CSSProperties = {
+        ...textEditStyle,
+        padding: '2px 6px',
+        boxSizing: 'border-box',
+        lineHeight: 1.2,
+        resize: 'none',
+        overflow: 'hidden',
+        background: 'transparent',
+      };
+
+      if (selected || fillMode) {
+        return (
+          <textarea
+            ref={dateInputRef}
+            className="field-input field-textarea field-date-input"
+            value={dateValue}
+            placeholder={
+              dateFormat === 'MM/DD/YYYY'
+                ? 'MM/JJ/AAAA'
+                : dateFormat === 'YYYY-MM-DD'
+                ? 'AAAA-MM-JJ'
+                : 'JJ/MM/AAAA'
+            }
+            onChange={handleDateChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.preventDefault();
+              onFieldKeyDown?.(field.id, e);
+            }}
+            onClick={() => onSelect(false)}
+            style={dateStyle}
+          />
+        );
+      }
+
+      return (
+        <div
+          className="field-input field-textarea field-date-input"
+          style={dateStyle}
+          onClick={() => onSelect(false)}
+        >
+          {dateValue}
+        </div>
+      );
+    }
+
+    // ── Text field: RichTextEditor path ──────────────────────────────────
+    if (isText) {
+      const handleTextChange = (html: string) => {
+        onValueChange(html);
       };
 
       if (selected || fillMode) {
@@ -494,14 +546,14 @@ export default function FieldOverlay({
             <RichTextEditor
               key={`${field.id}-${fillMode}`}
               value={valueOverride ?? field.value}
-              onChange={handleTextLikeChange}
+              onChange={handleTextChange}
               style={textEditStyle}
-              placeholder={isDate ? (dateFormat === 'MM/DD/YYYY' ? 'MM/JJ/AAAA' : dateFormat === 'YYYY-MM-DD' ? 'AAAA-MM-JJ' : 'JJ/MM/AAAA') : field.label}
+              placeholder={field.label}
               onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
               editorRef={textEditorRef}
               onContainerRef={(el) => { textEditorRef.current = el; setRichTextEl(el); }}
             />
-            {selected && !isDate && (
+            {selected && (
               <SelectionToolbar
                 containerRef={richTextEl}
                 onFormat={(cmd, val) => {
@@ -519,10 +571,10 @@ export default function FieldOverlay({
                 onValueChange(editor.innerHTML);
               }}
             />
-          )}
-        </div>
-      );
-    }
+            )}
+          </div>
+        );
+      }
 
     // ── Read-only display ──────────────────────────────────────────────────
 
@@ -534,7 +586,8 @@ export default function FieldOverlay({
         dangerouslySetInnerHTML={{ __html: valueOverride ?? field.value }}
       />
     );
-    } // isTextLike
+    } // isText
+
   };
 
   // ── Computed styles ─────────────────────────────────────────────────────────
@@ -580,9 +633,7 @@ export default function FieldOverlay({
         className="field-content"
         style={{
           ...(contentStyle ?? {}),
-          background: field.style.maskBackground
-            ? (field.style.backgroundColor || '#ffffff')
-            : (field.style.highlightColor ? field.style.highlightColor : undefined),
+          background: contentBackground,
         }}
       >
         {renderContent()}
