@@ -15,7 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { randomUUID } from 'crypto';
 import { readFile, rename } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve, sep } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { canUser } from '../config/permission-matrix';
 
@@ -131,7 +131,14 @@ export class UploadController {
   @Get('file/:id')
   async streamDocument(@Param('id') id: string, @Request() req: any, @Res() res: any) {
     const doc = await this.assertDocumentAccess(id, req.user);
-    const absPath = join(process.cwd(), 'uploads', doc.path);
+    const uploadsRoot = resolve(process.cwd(), 'uploads');
+    const absPath = resolve(uploadsRoot, doc.path);
+
+    // Defense-in-depth: prevent path traversal even if doc.path is compromised
+    if (!absPath.startsWith(uploadsRoot + sep)) {
+      throw new ForbiddenException('Chemin de fichier invalide');
+    }
+
     res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
     res.setHeader('Cache-Control', 'no-store');
     return res.sendFile(absPath);

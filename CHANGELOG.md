@@ -3,6 +3,14 @@
 Toutes les modifications significatives du projet sont documentées ici. Format `AAAA-MM-DD`.
 
 ---
+## [2026-05-01c] Sécurité : contrôle d'accès /detect + protection path traversal
+
+### Fixed
+- **Contrôle d'accès /detect** : injection de `PermissionsService` dans `DetectController` — vérification `requireDocRole(documentId, user, 'editor')` avant toute détection. Un utilisateur ne peut plus lancer une détection sur un document auquel il n'a pas accès.
+- **Path traversal upload** : ajout d'une vérification `resolve()` + `startsWith()` dans `streamDocument` pour s'assurer que le chemin absolu du fichier reste dans le répertoire `uploads/`, même si `doc.path` venait à être compromis en base.
+- **Vision path renforcé** : le path envoyé à Vision provient désormais uniquement du document vérifié en base, jamais du payload client.
+
+
 ## [2026-05-01b] Sécurité : validation des secrets en production + Vision interne uniquement
 
 ### Fixed
