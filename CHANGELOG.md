@@ -3,6 +3,13 @@
 Toutes les modifications significatives du projet sont documentées ici. Format `AAAA-MM-DD`.
 
 ---
+## [2026-05-01] Correction orientation coche checkbox en paysage (90/270)
+
+### Fixed
+- **Checkbox coche inversée en paysage** : `drawCheckboxMarkLandscape` réécrit — au lieu d'un swap d'axes + inversion partielle qui retournait la coche, la nouvelle version prend la géométrie de base identique au mode portrait et applique une contre-rotation autour du centre de la case pour compenser la rotation de page (90deg -> -PI/2, 270deg -> +PI/2). La coche apparaît désormais dans le bon sens à la fois en portrait (0/180) et en paysage (90/270).
+- **Fallback sécurité** : `drawCheckboxMarkLandscape` appelle `drawCheckboxMark` (portrait) si jamais appelé avec une rotation autre que 90/270, au lieu de silencieusement produire un résultat incorrect.
+
+
 ## [2026-04-30] Corrections d'alignement export et ergonomie éditeur
 
 ### Fixed

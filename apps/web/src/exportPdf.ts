@@ -506,46 +506,64 @@ function drawCheckboxMarkLandscape(
     return;
   }
 
-  // Dimensions visuelles du champ apres rotation 90/270.
-  const dispW = boxH;
-  const dispH = boxW;
+  // Sécurité : si jamais appelé hors 90/270, on retombe sur le mode portrait.
+  if (targetRotation !== 90 && targetRotation !== 270) {
+    drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
+    return;
+  }
 
-  // Meme geometrie que l'editeur : 25,52 42,70 75,30
-  // Origine visuelle : haut-gauche, Y vers le bas.
-  const dP1 = { x: dispW * 0.25, y: dispH * 0.52 };
-  const dP2 = { x: dispW * 0.42, y: dispH * 0.70 };
-  const dP3 = { x: dispW * 0.75, y: dispH * 0.30 };
+  // Géométrie de base de la coche (même que le mode normal),
+  // en coordonnées locales avec origine en haut-gauche de la case.
+  const basePoints = [
+    { x: boxW * 0.25, y: boxH * 0.52 },
+    { x: boxW * 0.42, y: boxH * 0.70 },
+    { x: boxW * 0.75, y: boxH * 0.30 },
+  ];
 
-  const toContent = (dx: number, dy: number) => {
-    if (targetRotation === 90) {
-      return {
-        x: pdfX + boxW - dy,
-        y: pdfY + dx,
-      };
-    }
+  const cx = boxW / 2;
+  const cy = boxH / 2;
 
-    if (targetRotation === 270) {
-      return {
-        x: pdfX + dy,
-        y: pdfY + boxH - dx,
-      };
-    }
+  // On contre-rotate la coche pour qu'elle apparaisse dans le bon sens
+  // une fois la page tournée.
+  const angle = targetRotation === 90 ? -Math.PI / 2 : Math.PI / 2;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
 
-    // Securite : cette fonction ne devrait jamais etre appelee en 0/180.
+  const rotatePoint = (pt: { x: number; y: number }) => {
+    // Coordonnées locales, origine au centre, Y vers le bas
+    const dx = pt.x - cx;
+    const dy = pt.y - cy;
+
+    const rx = dx * cos - dy * sin;
+    const ry = dx * sin + dy * cos;
+
+    // Retour dans la boîte locale, puis conversion en coordonnées PDF
     return {
-      x: pdfX + dx,
-      y: pdfY + boxH - dy,
+      x: pdfX + (cx + rx),
+      y: pdfY + boxH - (cy + ry),
     };
   };
 
-  const p1 = toContent(dP1.x, dP1.y);
-  const p2 = toContent(dP2.x, dP2.y);
-  const p3 = toContent(dP3.x, dP3.y);
+  const p1 = rotatePoint(basePoints[0]);
+  const p2 = rotatePoint(basePoints[1]);
+  const p3 = rotatePoint(basePoints[2]);
 
   const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
+  const color = rgb(cr, cg, cb);
 
-  page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-  page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+  page.drawLine({
+    start: p1,
+    end: p2,
+    thickness: lw,
+    color,
+  });
+
+  page.drawLine({
+    start: p2,
+    end: p3,
+    thickness: lw,
+    color,
+  });
 }
 
 function drawFieldPortrait(
