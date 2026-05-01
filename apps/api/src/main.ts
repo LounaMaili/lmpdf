@@ -5,7 +5,54 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
+/**
+ * Validate that production secrets are not using default/weak values.
+ * Must run before bootstrap to prevent the app from starting with insecure config.
+ */
+function validateProductionSecrets(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+
+  const requiredStrong: Record<string, string> = {
+    JWT_SECRET: process.env.JWT_SECRET || '',
+    POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD || '',
+    S3_SECRET_KEY: process.env.S3_SECRET_KEY || '',
+  };
+
+  const forbiddenValues = [
+    'change-me-in-prod',
+    'lmpdf-secret-key-change-me-in-prod',
+    'lmpdf',
+    'password',
+    'admin',
+    'secret',
+    'changeme',
+    'default',
+  ];
+
+  for (const [key, value] of Object.entries(requiredStrong)) {
+    if (!value) {
+      throw new Error(`[SECURITY] ${key} est requis en production`);
+    }
+    if (forbiddenValues.some((fv) => value.toLowerCase().includes(fv.toLowerCase()))) {
+      throw new Error(`[SECURITY] ${key} utilise une valeur faible/interdite`);
+    }
+    if (key === 'JWT_SECRET' && value.length < 32) {
+      throw new Error(`[SECURITY] JWT_SECRET doit faire au moins 32 caractères en production`);
+    }
+  }
+
+  // MFA_ENCRYPTION_KEY is required when MFA is not disabled
+  const mfaPolicy = process.env.MFA_POLICY || 'optional';
+  if (mfaPolicy !== 'disabled' && !process.env.MFA_ENCRYPTION_KEY) {
+    throw new Error('[SECURITY] MFA_ENCRYPTION_KEY est requis en production quand MFA est activée (MFA_POLICY != disabled)');
+  }
+  if (process.env.MFA_ENCRYPTION_KEY && process.env.MFA_ENCRYPTION_KEY.length !== 64) {
+    throw new Error('[SECURITY] MFA_ENCRYPTION_KEY doit être exactement 64 caractères hex (32 octets)');
+  }
+}
+
 async function bootstrap() {
+  validateProductionSecrets();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['log', 'warn', 'error'],
   });

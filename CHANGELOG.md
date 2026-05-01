@@ -3,6 +3,15 @@
 Toutes les modifications significatives du projet sont documentées ici. Format `AAAA-MM-DD`.
 
 ---
+## [2026-05-01b] Sécurité : validation des secrets en production + Vision interne uniquement
+
+### Fixed
+- **Vision exposé publiquement** : port 8001 changé de `ports` à `expose` dans docker-compose — le service n'est plus accessible en dehors du réseau Docker interne
+- **Secrets faibles en production** : l'API refuse de démarrer en production si JWT_SECRET, POSTGRES_PASSWORD ou S3_SECRET_KEY utilisent des valeurs par défaut ou faibles. JWT_SECRET doit faire au moins 32 caractères.
+- **MFA_ENCRYPTION_KEY obligatoire en production** : si MFA_POLICY n'est pas "disabled", l'API refuse de démarrer sans MFA_ENCRYPTION_KEY valide (64 hex chars). Vérification de la longueur aussi.
+- Contrôle explicite des variables sensibles (pas de scan global de process.env)
+
+
 ## [2026-05-01] Correction orientation coche checkbox en paysage (90/270)
 
 ### Fixed
