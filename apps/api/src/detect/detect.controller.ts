@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, ForbiddenException, Post, Reques
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { PrismaService } from '../prisma/prisma.service';
+import { PermissionsService } from '../permissions/permissions.service';
 import { DetectDto } from './dto/detect.dto';
 import { canUser } from '../config/permission-matrix';
 
@@ -41,7 +42,10 @@ function postJsonWithTimeout(urlString: string, payload: unknown, timeoutMs = 18
 
 @Controller('detect')
 export class DetectController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   @Post()
   async detect(@Body() body: DetectDto, @Request() req: any) {
@@ -52,6 +56,9 @@ export class DetectController {
     if (!body.documentId) {
       throw new BadRequestException('documentId est requis pour le moment');
     }
+
+    // Verify the user has at least editor access to this document
+    await this.permissions.requireDocRole(body.documentId, req.user, 'editor');
 
     const doc = await this.prisma.document.findUnique({ where: { id: body.documentId } });
     if (!doc) throw new BadRequestException('Document introuvable');
