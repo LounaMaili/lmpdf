@@ -26,6 +26,7 @@ import { screenToFieldDelta } from '../utils';
 import type { Rotation } from '../utils';
 import { useTranslation } from '../i18n';
 import RichTextEditor from './RichTextEditor';
+import { sanitizeRichTextHtml } from '../utils/sanitizeRichText';
 import SelectionToolbar from './SelectionToolbar';
 
 /** Shared checkbox geometry: same points used in SVG editor and PDF export. */
@@ -548,7 +549,7 @@ export default function FieldOverlay({
           <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%', userSelect: 'text' }}>
             <RichTextEditor
               key={`${field.id}-${fillMode}`}
-              value={valueOverride ?? field.value}
+              value={sanitizeRichTextHtml(valueOverride ?? field.value)}
               onChange={handleTextChange}
               style={textEditStyle}
               placeholder={field.label}
@@ -586,7 +587,7 @@ export default function FieldOverlay({
         className="field-input field-textarea"
         style={{ ...textEditStyle, overflow: 'hidden', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
         onClick={() => onSelect(false)}
-        dangerouslySetInnerHTML={{ __html: valueOverride ?? field.value }}
+        dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(valueOverride ?? field.value) }}
       />
     );
     } // isText

@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { FieldType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTemplateDto } from './dto/create-template.dto';
+import { sanitizeRichTextHtml } from '../utils/sanitizeRichText';
 
 type AuthUser = { id: string; role: Role };
 
@@ -85,9 +86,10 @@ export class TemplatesService {
               'counter-numeric': 'counter_numeric',
               date: 'date' as any,
             };
+            const isTextField = f.type === 'text';
             return {
               label: f.label,
-              value: f.value ?? '',
+              value: isTextField ? sanitizeRichTextHtml(f.value ?? '') : (f.value ?? ''),
               style: f.style ?? undefined,
               x: f.x,
               y: f.y,

@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { sanitizeRichTextHtml } from '../utils/sanitizeRichText';
 import type { CSSProperties } from 'react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -106,7 +107,7 @@ export default function RichTextEditor({
     }
 
     // Overwrite with the new HTML.
-    editorRef.current.innerHTML = value;
+    editorRef.current.innerHTML = sanitizeRichTextHtml(value);
 
     // Restore the cursor position after the DOM update.
     if (savedRange) {

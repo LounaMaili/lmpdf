@@ -1,0 +1,10 @@
+node_modules
+infra/postgres-data
+infra/garage-data
+infra/garage-meta
+.git
+*.bak
+*.bak2
+*.bak3
+dist
+tsconfig.tsbuildinfo

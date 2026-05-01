@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { sanitizeRichTextHtml } from '../utils/sanitizeRichText';
 
 export interface DraftPayload {
   name: string;
@@ -13,6 +14,23 @@ export interface DraftPayload {
 @Injectable()
 export class DraftsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Sanitize rich-text HTML values in draft fields before storage.
+   * Only fields with type === 'text' are sanitized.
+   */
+  private sanitizePayloadFields(payload: DraftPayload): DraftPayload {
+    if (!payload.fields || !Array.isArray(payload.fields)) return payload;
+    return {
+      ...payload,
+      fields: payload.fields.map((f: any) => {
+        if (f.type === 'text' && typeof f.value === 'string') {
+          return { ...f, value: sanitizeRichTextHtml(f.value) };
+        }
+        return f;
+      }),
+    };
+  }
 
   /**
    * Upsert a single draft per user + (templateId OR sourceFileId).
@@ -33,11 +51,11 @@ export class DraftsService {
           userId,
           templateId: key.templateId,
           sourceFileId: key.sourceFileId ?? null,
-          payload: payload as any,
+          payload: this.sanitizePayloadFields(payload) as any,
         },
         update: {
           sourceFileId: key.sourceFileId ?? null,
-          payload: payload as any,
+          payload: this.sanitizePayloadFields(payload) as any,
           // updatedAt handled by @updatedAt
         },
       });
@@ -51,10 +69,10 @@ export class DraftsService {
         create: {
           userId,
           sourceFileId: key.sourceFileId,
-          payload: payload as any,
+          payload: this.sanitizePayloadFields(payload) as any,
         },
         update: {
-          payload: payload as any,
+          payload: this.sanitizePayloadFields(payload) as any,
         },
       });
     }
