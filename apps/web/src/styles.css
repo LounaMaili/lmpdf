@@ -681,32 +681,78 @@ body { margin: 0; background: #f3f5f8; }
    14. EDITOR — Field Overlay
    ───────────────────────────────────────────────────────────────────────────── */
 .field {
-  position: absolute; border: 2px solid var(--color-blue-legacy);
+  position: absolute; border: none;
   border-radius: 4px; background: rgba(0,119,255,0.06);
   box-sizing: border-box; user-select: none;
-  cursor: move; z-index: 5; overflow: hidden;
+  cursor: move; z-index: 5; overflow: visible;
 }
-.field-selected { border-color: #ff5500; background: rgba(255,85,0,0.06); z-index: 6; }
+.field::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--color-blue-legacy);
+  border-radius: 4px;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 2;
+}
+.field-selected { background: rgba(255,85,0,0.06); z-index: 6; }
+.field-selected::before { border-color: #ff5500; }
 .field-dragging { opacity: 0.8; }
-.field-locked { border-style: dashed; border-color: #999; cursor: default; }
-.field-overlay-hidden { border-color: transparent; background: transparent; }
+.field-locked::before { border-style: dashed; border-color: #999; }
+.field-locked { cursor: default; }
+.field-overlay-hidden::before { border-color: transparent; }
+.field-overlay-hidden { background: transparent; }
 .field-overlay-hidden .field-label-tag,
 .field-overlay-hidden .resize-handle { display: none; }
 
 /* Fill mode */
-.field-fill-hidden { border-color: transparent; background: transparent; transition: border-color 0.15s ease, background 0.15s ease; }
+.field-fill-hidden::before { border-color: transparent; }
+.field-fill-hidden { background: transparent; transition: border-color 0.15s ease, background 0.15s ease; }
 .field-fill-hidden .field-label-tag,
 .field-fill-hidden .resize-handle { opacity: 0; transition: opacity 0.15s ease; }
-.field-fill-hover { border-color: rgba(0,119,255,0.4); background: rgba(0,119,255,0.03); transition: border-color 0.15s ease, background 0.15s ease; }
+.field-fill-hover::before { border-color: rgba(0,119,255,0.4); }
+.field-fill-hover { background: rgba(0,119,255,0.03); transition: border-color 0.15s ease, background 0.15s ease; }
 .field-fill-hover .field-label-tag { opacity: 0; transition: opacity 0.15s ease; }
 .field-fill-hover .resize-handle { opacity: 0.5; transition: opacity 0.15s ease; }
 
-.field-content { position: absolute; inset: 0; }
+.field-content { position: absolute; inset: 0; overflow: hidden; }
+
+.field-move-handle {
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: var(--color-blue-legacy);
+  color: white;
+  cursor: move;
+  z-index: 20;
+  pointer-events: auto;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* Liberation Sans — same font used in PDF export */
+@font-face {
+  font-family: 'LMPdfSans';
+  src: url('/fonts/LiberationSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'LMPdfSans';
+  src: url('/fonts/LiberationSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+}
 
 .field-input {
   width: 100%; height: 100%; border: none;
   background: transparent; outline: none;
   padding: 2px 6px; box-sizing: border-box; cursor: text;
+  font-family: 'LMPdfSans', Arial, sans-serif;
 }
 .field-textarea {
   resize: none; overflow: hidden;
@@ -732,7 +778,13 @@ body { margin: 0; background: #f3f5f8; }
 .field-selected .resize-handle { background: #ff5500; }
 
 /* Field date input */
-.field-date-input { letter-spacing: 0.5px; }
+.field-date-input {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  outline: none;
+  background: transparent;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    15. EDITOR — Field List (left panel)

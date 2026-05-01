@@ -27,7 +27,8 @@
  * - mapFieldToPdfBox() — unused after normalized approach
  */
 
-import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
+import { PDFDocument, rgb, degrees } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import type { FieldModel } from './types';
 
 // ---------------------------------------------------------------------------
@@ -69,13 +70,18 @@ function normalizeRotation(angle: number): Rotation {
   return 0;
 }
 
-// Proportional padding constants (module-level, shared by portrait & landscape)
-// Padding scales with field size to match CSS padding (which is in px at 96 DPI).
-// In PDF points (72 DPI), 1 CSS px ≈ 0.75 pt. CSS .field-input has padding 1px 2px.
-// padX ≈ 2 CSS px ≈ 1.5 pt, padTop ≈ 1 CSS px ≈ 0.75 pt. We use ratios so it scales.
-const PAD_RATIO_X = 0.02; // ~1.4pt for a 70pt-wide field
-const PAD_RATIO_Y = 0.02; // ~0.7pt for a 35pt-high field
-const MIN_PAD_PT = 0.75;   // minimum padding (≈1 CSS px)
+// ── Padding constants (matching CSS .field-input { padding: 2px 6px }) ──
+// Fields are stored in PDF points — no conversion needed.
+const CSS_PAD_TOP = 2;
+const CSS_PAD_LEFT = 6;
+const CSS_LINE_HEIGHT = 1.2;
+
+// Calibration nudges to compensate for irreducible CSS vs pdf-lib rendering differences
+const TEXT_X_NUDGE = -1;
+const TEXT_Y_NUDGE = -2.4;
+const DATE_EXTRA_Y_NUDGE = 0.8;
+const LANDSCAPE_TEXT_Y_NUDGE = -2.4;
+const LANDSCAPE_DATE_EXTRA_Y_NUDGE = 0.8;
 
 function buildContinuousIndex(
   overflowUiState?: Record<string, OverflowUiStateEntry>,
@@ -266,8 +272,14 @@ async function renderFieldsOnPages(
 
   const { width: pdfW, height: pdfH } = pages[0].getSize();
 
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  // Embed same font as editor (Liberation Sans) to eliminate baseline differences
+  pdfDoc.registerFontkit(fontkit);
+  const [regularBytes, boldBytes] = await Promise.all([
+    fetch('/fonts/LiberationSans-Regular.ttf').then(r => r.arrayBuffer()),
+    fetch('/fonts/LiberationSans-Bold.ttf').then(r => r.arrayBuffer()),
+  ]);
+  const font = await pdfDoc.embedFont(regularBytes);
+  const fontBold = await pdfDoc.embedFont(boldBytes);
 
   const continuousByPage = buildContinuousIndex(overflowUiState);
 
@@ -279,6 +291,7 @@ async function renderFieldsOnPages(
     // Combine existing /Rotate with editor rotation
     const existingRotation = normalizeRotation(page.getRotation().angle);
     const targetRotation = normalizeRotation(existingRotation + rotation);
+    console.log('[export rotation]', { pageIndex, existingRotation, editorRotation: rotation, targetRotation });
     if (targetRotation !== 0) {
       page.setRotation(degrees(targetRotation));
     }
@@ -349,9 +362,8 @@ async function renderFieldsOnPages(
       const boxW = pdf.w;
       const boxH = pdf.h;
 
-      // CSS px (96 DPI) → PDF points (72 pt/inch). Fields store fontSize in CSS px,
-      // but PDF coordinates are in points. This conversion aligns the two.
-      const fontSize = Math.min(f.style.fontSize * 72 / 96, boxH - 2);
+      // Fields are stored in PDF points — fontSize is already in the correct unit.
+      const fontSize = Math.min(f.style.fontSize, boxH - 2);
       const selectedFont =
         f.style.fontWeight === 'bold' ? fontBold : font;
 
@@ -360,27 +372,49 @@ async function renderFieldsOnPages(
       const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
       const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
 
-      // Proportional padding that scales with field dimensions.
-      // Matches the CSS padding (1px 2px) after the 72/96 conversion.
-      const padX = Math.max(MIN_PAD_PT, boxW * PAD_RATIO_X);
-      const padTop = Math.max(MIN_PAD_PT, boxH * PAD_RATIO_Y);
+      // 1:1 padding — direct CSS conversion, no ratios
+      const padX = CSS_PAD_LEFT;   // 6pt
+      const padTop = CSS_PAD_TOP;  // 2pt
 
       const isLandscape =
         targetRotation === 90 || targetRotation === 270;
 
       // ── Draw ───────────────────────────────────────────────────────────
 
-      if (isLandscape) {
-        drawFieldLandscape(
-          page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          pdfW, fontSize, selectedFont, cr, cg, cb, targetRotation,
-        );
-      } else {
-        drawFieldPortrait(
-          page, f, fieldValue, pdfX, pdfY, boxW, boxH,
-          padX, padTop, fontSize,
-          selectedFont, cr, cg, cb,
-        );
+      const DEBUG_FIELD_BOXES = false;
+
+      if (DEBUG_FIELD_BOXES) {
+        page.drawRectangle({
+          x: pdfX, y: pdfY, width: boxW, height: boxH,
+          borderColor: rgb(1, 0, 0), borderWidth: 1,
+        });
+      }
+
+      try {
+        if (isLandscape) {
+          drawFieldLandscape(
+            page, f, fieldValue, pdfX, pdfY, boxW, boxH,
+            pdfW, fontSize, selectedFont, cr, cg, cb, targetRotation, pdfH,
+          );
+        } else {
+          drawFieldPortrait(
+            page, f, fieldValue, pdfX, pdfY, boxW, boxH,
+            padX, padTop, fontSize,
+            selectedFont, cr, cg, cb,
+          );
+        }
+      } catch (err) {
+        console.error('[LMPDF] Export field failed', {
+          fieldId: f.id,
+          fieldType: f.type,
+          fieldValue,
+          targetRotation,
+          pdfX,
+          pdfY,
+          boxW,
+          boxH,
+        }, err);
+        throw err;
       }
     }
 
@@ -394,6 +428,143 @@ async function renderFieldsOnPages(
 // ---------------------------------------------------------------------------
 // Portrait drawing (rotation = 0 or 180)
 // ---------------------------------------------------------------------------
+
+/** Draw a checkbox check mark using the same geometry as the SVG editor.
+ * SVG points: 25,52  42,70  75,30  (origin top-left, Y down)
+ * PDF: origin bottom-left, Y up — so Y is inverted: y_pdf = boxH * (1 - y_svg/100)
+ */
+function drawCheckboxMark(
+  page: import('pdf-lib').PDFPage,
+  pdfX: number,
+  pdfY: number,
+  boxW: number,
+  boxH: number,
+  cr: number,
+  cg: number,
+  cb: number,
+): void {
+  if (
+    !Number.isFinite(pdfX) ||
+    !Number.isFinite(pdfY) ||
+    !Number.isFinite(boxW) ||
+    !Number.isFinite(boxH) ||
+    boxW <= 0 ||
+    boxH <= 0
+  ) {
+    console.warn('[LMPDF] Invalid checkbox box, skipped', {
+      pdfX,
+      pdfY,
+      boxW,
+      boxH,
+    });
+    return;
+  }
+
+  const toPdf = (x: number, y: number) => ({
+    x: pdfX + boxW * (x / 100),
+    y: pdfY + boxH * (1 - y / 100),
+  });
+
+  const p1 = toPdf(25, 52);
+  const p2 = toPdf(42, 70);
+  const p3 = toPdf(75, 30);
+
+  const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
+
+  page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
+  page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+}
+
+function drawCheckboxMarkLandscape(
+  page: import('pdf-lib').PDFPage,
+  pdfX: number,
+  pdfY: number,
+  boxW: number,
+  boxH: number,
+  _pdfW: number,
+  _pdfH: number,
+  targetRotation: number,
+  cr: number,
+  cg: number,
+  cb: number,
+): void {
+  if (
+    !Number.isFinite(pdfX) ||
+    !Number.isFinite(pdfY) ||
+    !Number.isFinite(boxW) ||
+    !Number.isFinite(boxH) ||
+    boxW <= 0 ||
+    boxH <= 0
+  ) {
+    console.warn('[LMPDF] Invalid rotated checkbox box, skipped', {
+      pdfX,
+      pdfY,
+      boxW,
+      boxH,
+      targetRotation,
+    });
+    return;
+  }
+
+  // Sécurité : si jamais appelé hors 90/270, on retombe sur le mode portrait.
+  if (targetRotation !== 90 && targetRotation !== 270) {
+    drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
+    return;
+  }
+
+  // Géométrie de base de la coche (même que le mode normal),
+  // en coordonnées locales avec origine en haut-gauche de la case.
+  const basePoints = [
+    { x: boxW * 0.25, y: boxH * 0.52 },
+    { x: boxW * 0.42, y: boxH * 0.70 },
+    { x: boxW * 0.75, y: boxH * 0.30 },
+  ];
+
+  const cx = boxW / 2;
+  const cy = boxH / 2;
+
+  // On contre-rotate la coche pour qu'elle apparaisse dans le bon sens
+  // une fois la page tournée.
+  const angle = targetRotation === 90 ? -Math.PI / 2 : Math.PI / 2;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+
+  const rotatePoint = (pt: { x: number; y: number }) => {
+    // Coordonnées locales, origine au centre, Y vers le bas
+    const dx = pt.x - cx;
+    const dy = pt.y - cy;
+
+    const rx = dx * cos - dy * sin;
+    const ry = dx * sin + dy * cos;
+
+    // Retour dans la boîte locale, puis conversion en coordonnées PDF
+    return {
+      x: pdfX + (cx + rx),
+      y: pdfY + boxH - (cy + ry),
+    };
+  };
+
+  const p1 = rotatePoint(basePoints[0]);
+  const p2 = rotatePoint(basePoints[1]);
+  const p3 = rotatePoint(basePoints[2]);
+
+  const lw = Math.max(0.8, Math.min(boxW, boxH) * 0.07);
+  const color = rgb(cr, cg, cb);
+
+  page.drawLine({
+    start: p1,
+    end: p2,
+    thickness: lw,
+    color,
+  });
+
+  page.drawLine({
+    start: p2,
+    end: p3,
+    thickness: lw,
+    color,
+  });
+}
 
 function drawFieldPortrait(
   page: import('pdf-lib').PDFPage,
@@ -413,13 +584,9 @@ function drawFieldPortrait(
 ): void {
   if (f.type === 'checkbox') {
     if (fieldValue === 'true') {
-      const p1 = { x: pdfX + boxW * 0.18, y: pdfY + boxH * 0.45 };
-      const p2 = { x: pdfX + boxW * 0.40, y: pdfY + boxH * 0.20 };
-      const p3 = { x: pdfX + boxW * 0.82, y: pdfY + boxH * 0.78 };
-      const lw = Math.max(1.4, Math.min(boxW, boxH) * 0.09);
-      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+      drawCheckboxMark(page, pdfX, pdfY, boxW, boxH, cr, cg, cb);
     }
+    return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
     page.drawText(fieldValue || '0', {
       x: pdfX + padX,
@@ -435,27 +602,38 @@ function drawFieldPortrait(
     const raw = fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
-    const lineHeight = Math.max(fontSize * 1.2, 10);
-    const ascent = fontSize * 0.718;
+    // 1:1: use the same line-height as CSS (.field-textarea has line-height: 1.2)
+    const lineHeight = fontSize * CSS_LINE_HEIGHT;
+    const ascent = selectedFont.heightAtSize(fontSize, { descender: false });
+    // 1:1: half-leading matches browser layout (line-height > fontSize → space split top/bottom)
+    const halfLeading = (lineHeight - fontSize) / 2;
     const maxLines = Math.max(1, Math.floor((boxH - padTop * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
-    // Date fields use <input> which centers text vertically in the box.
-    // Text fields use <div>/contentEditable which aligns text to the top.
-    // For date: y = center of box + optical center of glyph
-    // For text: y = top of box - padTop - ascent (standard top-alignment)
-    const isDateField = f.type === 'date';
+    // Respect textAlign from field style
+    const textAlign = f.style.textAlign || 'left';
 
     visible.forEach((line, idx) => {
-      const y = isDateField
-        // Vertical centering: baseline at box center + half ascent
-        // (ascent - descent)/2 ≈ 0.46 * fontSize for Helvetica
-        ? pdfY + boxH / 2 + fontSize * 0.46 - lineHeight * idx
-        // Top alignment: standard formula for div/contentEditable
-        : pdfY + boxH - padTop - ascent - lineHeight * idx;
+      // Horizontal position: match CSS textAlign
+      let x: number;
+      if (textAlign === 'center') {
+        const textWidth = selectedFont.widthOfTextAtSize(line, fontSize);
+        x = pdfX + (boxW - textWidth) / 2 + TEXT_X_NUDGE;
+      } else if (textAlign === 'right') {
+        const textWidth = selectedFont.widthOfTextAtSize(line, fontSize);
+        x = pdfX + boxW - padX - textWidth + TEXT_X_NUDGE;
+      } else {
+        x = pdfX + padX + TEXT_X_NUDGE;
+      }
+
+      // Vertical position: unified formula for all field types
+      // padding-top → half-leading → ascent → baseline
+      // Date fields get an extra nudge because they use a different HTML primitive (textarea)
+      const typeYNudge = f.type === 'date' ? DATE_EXTRA_Y_NUDGE : 0;
+      const y = pdfY + boxH - padTop - halfLeading - ascent - lineHeight * idx + TEXT_Y_NUDGE + typeYNudge;
 
       page.drawText(line, {
-        x: pdfX + padX,
+        x,
         y,
         size: fontSize,
         font: selectedFont,
@@ -477,9 +655,9 @@ function drawFieldPortrait(
  * Text with rotate=degrees(90) CCW extends **upward** in content space,
  * which appears as **rightward** in display.
  *
- * For line i the anchor is:
- *   cx = pdfX + padTop + lineHeight·(i+1)
- *   cy = pdfY + padX
+ * For line i the anchor is (1:1 matching browser layout):
+ *   cx = pdfX + padV + halfLeading + ascent + lineHeight·i
+ *   cy = pdfY + padH
  */
 /**
  * Draw a field when the page has /Rotate 90 (or 270).
@@ -518,6 +696,7 @@ function drawFieldLandscape(
   cg: number,
   cb: number,
   targetRotation: Rotation,
+  pdfH: number,
 ): void {
   const textRot =
     targetRotation === 90
@@ -531,35 +710,18 @@ function drawFieldLandscape(
   const dispW = boxH;
   const dispH = boxW;
 
-  // Small fixed padding in PDF points (resolution-independent)
-  const PAD = 2;
+  // 1:1 padding — same as portrait
+  const padH = CSS_PAD_LEFT;  // horizontal in display = 6pt
+  const padV = CSS_PAD_TOP;   // vertical in display = 2pt
 
   // Cap fontSize by display height
   fontSize = Math.min(fontSize, dispH - 2);
 
   if (f.type === 'checkbox') {
-    if (fieldValue !== 'true') return;
-    if (targetRotation === 90) {
-      // Display → content transform for checkbox points
-      const dx = pdfY;
-      const dy = pdfW - pdfX - boxW;
-      const dp1 = { x: dx + dispW * 0.18, y: dy + dispH * 0.45 };
-      const dp2 = { x: dx + dispW * 0.40, y: dy + dispH * 0.20 };
-      const dp3 = { x: dx + dispW * 0.82, y: dy + dispH * 0.78 };
-      const p1 = { x: pdfW - dp1.y, y: dp1.x };
-      const p2 = { x: pdfW - dp2.y, y: dp2.x };
-      const p3 = { x: pdfW - dp3.y, y: dp3.x };
-      const lw = Math.max(1.4, Math.min(dispW, dispH) * 0.09);
-      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
-    } else {
-      const p1 = { x: pdfX + boxW * 0.18, y: pdfY + boxH * 0.45 };
-      const p2 = { x: pdfX + boxW * 0.40, y: pdfY + boxH * 0.20 };
-      const p3 = { x: pdfX + boxW * 0.82, y: pdfY + boxH * 0.78 };
-      const lw = Math.max(1.4, Math.min(boxW, boxH) * 0.09);
-      page.drawLine({ start: p1, end: p2, thickness: lw, color: rgb(cr, cg, cb) });
-      page.drawLine({ start: p2, end: p3, thickness: lw, color: rgb(cr, cg, cb) });
+    if (fieldValue === 'true') {
+      drawCheckboxMarkLandscape(page, pdfX, pdfY, boxW, boxH, pdfW, pdfH, targetRotation, cr, cg, cb);
     }
+    return;
   } else if (f.type === 'counter-tally' || f.type === 'counter-numeric') {
     // Counter fields: CENTER the number in the display cell
     const val = fieldValue || '0';
@@ -590,26 +752,27 @@ function drawFieldLandscape(
     }
 
     const raw = fieldValue ?? '';
-    const maxTextWidth = Math.max(8, dispW - PAD * 2);
+    const maxTextWidth = Math.max(8, dispW - padH * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
-    const lineHeight = Math.max(fontSize * 1.2, 10);
-    // Helvetica ascent ratio (font units 718/1000) — baseline sits at this offset above the line origin.
-    const ascent = fontSize * 0.718;
-    const maxLines = Math.max(1, Math.floor((dispH - PAD * 2) / lineHeight));
+    const lineHeight = fontSize * CSS_LINE_HEIGHT;
+    const ascent = selectedFont.heightAtSize(fontSize, { descender: false });
+    const halfLeading = (lineHeight - fontSize) / 2;
+    const maxLines = Math.max(1, Math.floor((dispH - padV * 2) / lineHeight));
     const visible = wrapped.slice(0, maxLines);
 
     if (targetRotation === 90) {
       /*
        * Top-left in display = left-bottom in content:
-       *   cy = pdfY + PAD                        (display left edge)
-       *   cx = pdfX + PAD + ascent               (baseline = display top)
+       *   cy = pdfY + padH                       (display left edge)
+       *   cx = pdfX + padV + halfLeading + ascent (baseline = display top)
        *
        * Each subsequent line: cx += lineHeight   (display goes downward)
        */
+      const typeYNudge = f.type === 'date' ? LANDSCAPE_DATE_EXTRA_Y_NUDGE : 0;
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + PAD + ascent + lineHeight * idx,
-          y: pdfY + PAD,
+          x: pdfX + padV + halfLeading + ascent + lineHeight * idx - LANDSCAPE_TEXT_Y_NUDGE - typeYNudge,
+          y: pdfY + padH,
           size: fontSize,
           font: selectedFont,
           color: rgb(cr, cg, cb),
@@ -619,10 +782,11 @@ function drawFieldLandscape(
       });
     } else {
       // rotation 270: mirror the offsets
+      const typeYNudge270 = f.type === 'date' ? LANDSCAPE_DATE_EXTRA_Y_NUDGE : 0;
       visible.forEach((line, idx) => {
         page.drawText(line, {
-          x: pdfX + boxW - PAD - ascent - lineHeight * idx,
-          y: pdfY + boxH - PAD,
+          x: pdfX + boxW - padV - halfLeading - ascent - lineHeight * idx + LANDSCAPE_TEXT_Y_NUDGE + typeYNudge270,
+          y: pdfY + boxH - padH,
           size: fontSize,
           font: selectedFont,
           color: rgb(cr, cg, cb),

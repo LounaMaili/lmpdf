@@ -28,6 +28,9 @@ import { useTranslation } from '../i18n';
 import RichTextEditor from './RichTextEditor';
 import SelectionToolbar from './SelectionToolbar';
 
+/** Shared checkbox geometry: same points used in SVG editor and PDF export. */
+export const CHECK_POINTS = '25,52 42,70 75,30';
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Props = {
@@ -123,7 +126,7 @@ export default function FieldOverlay({
   // Plain textarea ref (used for non-rich text fields in edit mode).
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Date input ref — used to restore cursor position after controlled value updates.
-  const dateInputRef = useRef<HTMLInputElement>(null);
+  const dateInputRef = useRef<HTMLTextAreaElement>(null);
   const dateCursorRef = useRef<number>(-1);
   // Text caret position to restore after an overflow update.
   const textCursorRef = useRef<number>(-1);
@@ -159,7 +162,7 @@ export default function FieldOverlay({
     const tag = (e.target as HTMLElement).tagName;
     // Preserve native text editing when the field is already selected.
     if ((tag === 'INPUT' || tag === 'TEXTAREA') && selected) return;
-    if ((e.target as HTMLElement).closest('.checkbox-display, .counter-display')) return;
+    if (fillMode && (e.target as HTMLElement).closest('.checkbox-display, .counter-display')) return;
     // Preserve contentEditable editing in an already-selected rich text field.
     if ((e.target as HTMLElement).closest('[contentEditable]') && selected) return;
 
@@ -242,7 +245,12 @@ export default function FieldOverlay({
   const isChecked = field.value === 'true';
   const counterVal = Number(field.value || 0);
   const isDate = field.type === 'date';
+  const isText = field.type === 'text';
   const dateFormat = field.style.dateFormat || 'DD/MM/YYYY';
+
+  const contentBackground = field.style.maskBackground
+    ? (field.style.backgroundColor || '#ffffff')
+    : undefined;
 
   // ── Auto-set date to today ─────────────────────────────────────────────────
 
@@ -293,7 +301,7 @@ export default function FieldOverlay({
    * 4. Stores the new cursor in dateCursorRef; a useLayoutEffect below
    *    restores it after the controlled value update re-renders the input.
    */
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDateChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const input = e.target;
     const selStart = input.selectionStart ?? 0;
     const raw = input.value;
@@ -407,11 +415,26 @@ export default function FieldOverlay({
           tabIndex={-1}
           onClick={(e) => {
             e.stopPropagation();
+            if (!fillMode) {
+              onSelect(e.ctrlKey || e.metaKey);
+              return;
+            }
             onValueChange(isChecked ? 'false' : 'true');
           }}
-          style={{ fontSize: field.style.checkSize ?? Math.max(12, Math.min(field.w, field.h) * 0.75), color: field.style.color, lineHeight: 1 }}
+          style={{ width: '100%', height: '100%', color: field.style.color }}
         >
-          {isChecked ? '✓' : ''}
+          {isChecked && (
+            <svg viewBox="0 0 100 100" width="100%" height="100%">
+              <polyline
+                points={CHECK_POINTS}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
         </div>
       );
     }
@@ -423,6 +446,10 @@ export default function FieldOverlay({
           tabIndex={-1}
           onClick={(e) => {
             e.stopPropagation();
+            if (!fillMode) {
+              onSelect(e.ctrlKey || e.metaKey);
+              return;
+            }
             onValueChange(String(counterVal + 1));
           }}
           // Right-click → decrement
@@ -435,7 +462,7 @@ export default function FieldOverlay({
           style={{
             direction: 'ltr',
             unicodeBidi: 'plaintext',
-            fontFamily: field.style.fontFamily,
+            fontFamily: "LMPdfSans, " + (field.style.fontFamily || 'sans-serif'),
             fontSize: field.style.fontSize,
             fontWeight: field.style.fontWeight,
             fontStyle: field.style.fontStyle,
@@ -450,75 +477,93 @@ export default function FieldOverlay({
       );
     }
 
-    if (isDate) {
-      return (
-        <input
-          ref={dateInputRef}
-          type="text"
-          inputMode="numeric"
-          className="field-input field-date-input"
-          tabIndex={-1}
-          value={valueOverride ?? field.value}
-          onChange={handleDateChange}
-          placeholder={
-            field.style.datePlaceholder
-              || (dateFormat === 'MM/DD/YYYY' ? 'MM/JJ/AAAA'
-              : dateFormat === 'YYYY-MM-DD' ? 'AAAA-MM-JJ'
-              : 'JJ/MM/AAAA')
-          }
-          maxLength={10}
-          style={{
-            fontFamily: field.style.fontFamily,
-            fontSize: field.style.fontSize,
-            fontWeight: field.style.fontWeight,
-            fontStyle: field.style.fontStyle,
-            textDecoration: field.style.textDecoration,
-            textAlign: field.style.textAlign,
-            color: field.style.color,
-          }}
-        />
-      );
-    }
-
     const textEditStyle = {
-      fontFamily: field.style.fontFamily,
+      fontFamily: "LMPdfSans, " + (field.style.fontFamily || 'sans-serif'),
       fontSize: field.style.fontSize,
       fontWeight: field.style.fontWeight,
       fontStyle: field.style.fontStyle,
       textDecoration: field.style.textDecoration,
       textAlign: field.style.textAlign,
       color: field.style.color,
+      lineHeight: 1.2,
     };
 
-    // ── Rich text mode (fillMode or selected) ──────────────────────────────
+    // ── Date field: separate path, NO RichTextEditor ───────────────────────
+    if (isDate) {
+      const dateValue = valueOverride ?? field.value ?? '';
 
-    if (selected || fillMode) {
-      return (
-        <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%', userSelect: 'text' }}>
-          <RichTextEditor
-            // Key forces a remount when fillMode toggles so the editor re-initialises cleanly.
-            key={`${field.id}-${fillMode}`}
-            value={valueOverride ?? field.value}
-            onChange={(html) => onValueChange(html)}
-            style={textEditStyle}
-            placeholder={field.label}
-            onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
-            editorRef={textEditorRef}
-            onContainerRef={(el) => { textEditorRef.current = el; setRichTextEl(el); }}
+      const dateStyle: CSSProperties = {
+        ...textEditStyle,
+        padding: '2px 6px',
+        boxSizing: 'border-box',
+        lineHeight: 1.2,
+        resize: 'none',
+        overflow: 'hidden',
+        background: 'transparent',
+      };
+
+      if (selected || fillMode) {
+        return (
+          <textarea
+            ref={dateInputRef}
+            className="field-input field-textarea field-date-input"
+            value={dateValue}
+            placeholder={
+              dateFormat === 'MM/DD/YYYY'
+                ? 'MM/JJ/AAAA'
+                : dateFormat === 'YYYY-MM-DD'
+                ? 'AAAA-MM-JJ'
+                : 'JJ/MM/AAAA'
+            }
+            onChange={handleDateChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.preventDefault();
+              onFieldKeyDown?.(field.id, e);
+            }}
+            onClick={() => onSelect(false)}
+            style={dateStyle}
           />
-          {/* SelectionToolbar is only mounted when the field is selected —
-              preventing multiple toolbars from appearing across the document. */}
-          {selected && (
-            <SelectionToolbar
-              containerRef={richTextEl}
-              onFormat={(cmd, val) => {
-                const editor = textEditorRef.current;
-                if (!editor) return;
-                // Save the current selection range, refocus the editor (which
-                // can collapse the selection), restore the range, then apply
-                // the formatting command so it applies to the right text.
-                const sel = window.getSelection();
-                let savedRange: Range | null = null;
+        );
+      }
+
+      return (
+        <div
+          className="field-input field-textarea field-date-input"
+          style={dateStyle}
+          onClick={() => onSelect(false)}
+        >
+          {dateValue}
+        </div>
+      );
+    }
+
+    // ── Text field: RichTextEditor path ──────────────────────────────────
+    if (isText) {
+      const handleTextChange = (html: string) => {
+        onValueChange(html);
+      };
+
+      if (selected || fillMode) {
+        return (
+          <div onClick={() => onSelect(false)} style={{ width: '100%', height: '100%', userSelect: 'text' }}>
+            <RichTextEditor
+              key={`${field.id}-${fillMode}`}
+              value={valueOverride ?? field.value}
+              onChange={handleTextChange}
+              style={textEditStyle}
+              placeholder={field.label}
+              onKeyDown={(e) => onFieldKeyDown?.(field.id, e)}
+              editorRef={textEditorRef}
+              onContainerRef={(el) => { textEditorRef.current = el; setRichTextEl(el); }}
+            />
+            {selected && (
+              <SelectionToolbar
+                containerRef={richTextEl}
+                onFormat={(cmd, val) => {
+                  const editor = textEditorRef.current;
+                  if (!editor) return;
+                  const sel = window.getSelection();
+                  let savedRange: Range | null = null;
                 if (sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
                 editor.focus();
                 if (savedRange) {
@@ -529,10 +574,10 @@ export default function FieldOverlay({
                 onValueChange(editor.innerHTML);
               }}
             />
-          )}
-        </div>
-      );
-    }
+            )}
+          </div>
+        );
+      }
 
     // ── Read-only display ──────────────────────────────────────────────────
 
@@ -544,6 +589,8 @@ export default function FieldOverlay({
         dangerouslySetInnerHTML={{ __html: valueOverride ?? field.value }}
       />
     );
+    } // isText
+
   };
 
   // ── Computed styles ─────────────────────────────────────────────────────────
@@ -589,23 +636,21 @@ export default function FieldOverlay({
         className="field-content"
         style={{
           ...(contentStyle ?? {}),
-          background: field.style.maskBackground
-            ? (field.style.backgroundColor || '#ffffff')
-            : (field.style.highlightColor ? field.style.highlightColor : undefined),
+          background: contentBackground,
         }}
       >
         {renderContent()}
       </div>
 
       {/* Field label tag — hidden in fillMode. */}
-      {!fillMode && (
+      {(selected || hovered) && !fillMode && (
         <div className="field-label-tag">
           {field.locked ? '🔒 ' : ''}{field.label}
         </div>
       )}
 
       {/* Debug field index marker. */}
-      {debugOrder != null && (
+      {debugOrder != null && selected && (
         <div style={{
           position: 'absolute', top: -2, right: -2, background: '#ff6600', color: '#fff',
           borderRadius: '50%', width: 18, height: 18, fontSize: 10, fontWeight: 'bold',
@@ -649,6 +694,18 @@ export default function FieldOverlay({
       {/* Resize handle — bottom-right corner grip; hidden when structureLocked. */}
       {!structureLocked && (
         <div className="resize-handle" onMouseDown={handleResizeDown} />
+      )}
+
+      {/* Move handle — dedicated drag grip so editing text stays possible. */}
+      {!structureLocked && (selected || hovered) && (
+        <button
+          type="button"
+          className="field-move-handle"
+          onMouseDown={handleMouseDown}
+          title="Déplacer le champ"
+        >
+          ⋮⋮
+        </button>
       )}
     </div>
   );
