@@ -29,6 +29,7 @@
 
 import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
+import { richTextToPlainText } from './utils/richTextToPlainText';
 import type { FieldModel } from './types';
 
 // ---------------------------------------------------------------------------
@@ -599,7 +600,9 @@ function drawFieldPortrait(
     if (f.style.maskBackground) {
       drawMaskRect(page, pdfX, pdfY, boxW, boxH, f.style.backgroundColor);
     }
-    const raw = fieldValue ?? '';
+    const raw = f.type === 'text'
+      ? richTextToPlainText(fieldValue ?? '')
+      : fieldValue ?? '';
     const maxWidth = Math.max(8, boxW - padX * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxWidth);
     // 1:1: use the same line-height as CSS (.field-textarea has line-height: 1.2)
@@ -751,7 +754,9 @@ function drawFieldLandscape(
       drawMaskRect(page, pdfX, pdfY, boxW, boxH, f.style.backgroundColor);
     }
 
-    const raw = fieldValue ?? '';
+    const raw = f.type === 'text'
+      ? richTextToPlainText(fieldValue ?? '')
+      : fieldValue ?? '';
     const maxTextWidth = Math.max(8, dispW - padH * 2);
     const wrapped = wrapText(raw, selectedFont, fontSize, maxTextWidth);
     const lineHeight = fontSize * CSS_LINE_HEIGHT;
