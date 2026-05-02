@@ -17,13 +17,13 @@ const ALLOWED_ATTRIBUTES: Record<string, string[]> = {
   '*': ['style'],
 };
 
-const ALLOWED_CSS_PROPERTIES: Record<string, boolean> = {
-  color: true,
-  'font-weight': true,
-  'font-style': true,
-  'text-decoration': true,
-  'text-decoration-line': true,
-  'background-color': true,
+const ALLOWED_CSS_PROPERTIES: Record<string, RegExp[]> = {
+  color: [/^#[0-9a-fA-F]{3,8}$/, /^(rgb|hsl)a?\(/],
+  'font-weight': [/^(normal|bold|[1-9]00)$/],
+  'font-style': [/^(normal|italic)$/],
+  'text-decoration': [/^(none|underline|line-through)$/],
+  'text-decoration-line': [/^(none|underline|line-through)$/],
+  'background-color': [/^#[0-9a-fA-F]{3,8}$/, /^(rgb|hsl)a?\(/],
 };
 
 /**
