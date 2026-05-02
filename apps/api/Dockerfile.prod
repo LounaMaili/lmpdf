@@ -30,7 +30,9 @@ RUN corepack enable && corepack prepare pnpm@9.0.0 --activate \
 # Copy built artifacts
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
-COPY --from=build /app/apps/api/node_modules/.prisma ./node_modules/.prisma
+# Copy Prisma client from monorepo root node_modules (pnpm workspace layout)
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 
 # Ensure uploads directory exists with correct permissions
 RUN mkdir -p /app/apps/api/uploads && chown -R appuser:appgroup /app/apps/api/uploads
