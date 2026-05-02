@@ -2,8 +2,6 @@ import { IsObject, IsOptional, IsString, IsArray, IsNumber, ValidateNested } fro
 import { Type } from 'class-transformer';
 
 class FieldStyleDto {
-  @IsOptional()
-  @IsObject()
   [key: string]: any;
 }
 

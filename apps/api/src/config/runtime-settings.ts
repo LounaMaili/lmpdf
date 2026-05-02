@@ -53,6 +53,11 @@ export type RuntimeAdminSettings = {
     allowUserGroups: boolean;
     allowSharedFolders: boolean;
   };
+  governance: {
+    adminGroupName: string;
+    retentionDays: number;
+    allowExternalSharing: boolean;
+  };
   permissions: {
     admin: Partial<RolePermissions>;
     editor: Partial<RolePermissions>;
@@ -101,6 +106,11 @@ export function defaultRuntimeSettings(): RuntimeAdminSettings {
       allowUserGroups: (process.env.ORGANIZATION_ALLOW_USER_GROUPS || 'true') === 'true',
       allowSharedFolders: (process.env.ORGANIZATION_ALLOW_SHARED_FOLDERS || 'true') === 'true',
     },
+    governance: {
+      adminGroupName: 'LMPdf-Admins',
+      retentionDays: 365,
+      allowExternalSharing: false,
+    },
     permissions: {
       admin: {},
       editor: {},
@@ -121,6 +131,7 @@ export async function loadRuntimeSettings(): Promise<RuntimeAdminSettings> {
       mfa: { ...base.mfa, ...(json.mfa || {}) },
       ldap: { ...base.ldap, ...(json.ldap || {}) },
       organization: { ...base.organization, ...(json.organization || {}) },
+      governance: { ...base.governance, ...(json.governance || {}) },
       permissions: {
         admin: { ...base.permissions.admin, ...(json.permissions?.admin || {}) },
         editor: { ...base.permissions.editor, ...(json.permissions?.editor || {}) },
