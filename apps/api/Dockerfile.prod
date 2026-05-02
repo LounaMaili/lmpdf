@@ -1,40 +1,35 @@
 # --- LMPdf API — Production Dockerfile ---
-# Multi-stage build. Strategy: build everything in stage 1, then install
-# only prod deps in stage 2 and regenerate Prisma client with a temporary
-# copy of the prisma binary from the build stage.
+# Strategy: single build stage, prune dev deps at the end.
+# This avoids the pnpm symlink / Prisma generated client copy issues.
 
-# Stage 1: Install all dependencies + build
 FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+# Install all dependencies
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/
 RUN pnpm install --frozen-lockfile --filter @lmpdf/api...
+
+# Copy source and build
 COPY apps/api/ ./apps/api/
 RUN pnpm --filter @lmpdf/api exec prisma generate \
     && pnpm --filter @lmpdf/api run build
 
-# Stage 2: Production runtime
+# Prune dev dependencies (prisma CLI stays as devDep but @prisma/client stays)
+RUN pnpm prune --prod
+
+# --- Production runtime ---
 FROM node:22-alpine AS runtime
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Install production dependencies only
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY apps/api/package.json ./apps/api/
-RUN corepack enable && corepack prepare pnpm@9.0.0 --activate \
-    && pnpm install --frozen-lockfile --prod --filter @lmpdf/api...
-
-# Copy Prisma schema, then regenerate client in the prod node_modules
-# We copy the prisma CLI binary from the build stage (it's a devDep, not in prod install)
-COPY apps/api/prisma ./apps/api/prisma/
-COPY --from=build /app/node_modules/.pnpm/prisma@6.3.1/node_modules/prisma /tmp/prisma-bin/
-RUN cd /app/apps/api \
-    && node /tmp/prisma-bin/build/index.js generate \
-    && rm -rf /tmp/prisma-bin
-
-# Copy built TypeScript output
+# Copy everything needed from build stage
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/prisma ./apps/api/prisma
+COPY --from=build /app/apps/api/package.json ./apps/api/
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 
 # Ensure uploads directory exists with correct permissions
 RUN mkdir -p /app/apps/api/uploads && chown -R appuser:appgroup /app/apps/api/uploads
