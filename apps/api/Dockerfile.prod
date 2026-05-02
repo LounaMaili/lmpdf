@@ -9,7 +9,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/
 RUN pnpm install --frozen-lockfile --filter @lmpdf/api...
 
-# Stage 2: Build TypeScript
+# Stage 2: Build TypeScript + generate Prisma client
 FROM deps AS build
 COPY apps/api/ ./apps/api/
 RUN pnpm --filter @lmpdf/api exec prisma generate \
@@ -26,16 +26,14 @@ COPY apps/api/package.json ./apps/api/
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate \
     && pnpm install --frozen-lockfile --prod --filter @lmpdf/api...
 
-# Copy Prisma schema and generate client in runtime stage
-# prisma is a devDep but @prisma/client is a prod dep — we need prisma CLI temporarily
-# for `prisma generate`, so install it as a one-off
+# Copy Prisma schema + generated client from build stage
+# pnpm stores the generated client in node_modules/.pnpm/... — we need both the
+# symlink in apps/api/node_modules and the real content in the .pnpm store
 COPY apps/api/prisma ./apps/api/prisma/
-RUN cd /app/apps/api \
-    && npm install --no-save prisma@^6.3.1 \
-    && npx prisma generate \
-    && npm uninstall prisma
+COPY --from=build /app/apps/api/node_modules/.prisma ./apps/api/node_modules/.prisma
+COPY --from=build /app/apps/api/node_modules/@prisma ./apps/api/node_modules/@prisma
 
-# Copy built artifacts from build stage
+# Copy built TypeScript output
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 
 # Ensure uploads directory exists with correct permissions
