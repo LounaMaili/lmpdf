@@ -96,33 +96,79 @@ pnpm dev
 
 ---
 
-## Déploiement sur une VM distante
+## Déploiement en production
 
-Le déploiement se fait via **git** :
+Le déploiement prod utilise un compose standalone (`docker-compose.prod.yml`) avec des Dockerfiles multi-stage optimisés et nginx comme reverse proxy interne.
 
 ```bash
-# 1. Installer les dépendances système (Docker, Compose)
-bash scripts/install-host-deps-linux.sh
-
-# 2. Cloner le dépôt sur la VM
-git clone https://github.com/winpoks/lmpdf.git
+# 1. Cloner le dépôt sur le serveur
+git clone https://github.com/LounaMaili/lmpdf.git
 cd lmpdf
+git checkout fix/docker-prod
 
-# 3. Configurer l'environnement
-cp .env.example .env
-# Éditer .env avec les secrets de production
+# 2. Configurer l'environnement de production
+cp .env.prod.example .env.prod
+# Éditer .env.prod : générer des secrets uniques
+#   openssl rand -hex 32  # pour JWT_SECRET, MFA_ENCRYPTION_KEY
+#   openssl rand -hex 16  # pour POSTGRES_PASSWORD
 
-# 4. Lancer les conteneurs
-docker compose up -d --build
+# 3. Lancer les services
+#    --env-file .env.prod est requis car .env contient les valeurs dev
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+
+# 4. Appliquer les migrations Prisma
+docker exec lmpdf-backend npx prisma migrate deploy
+
+# 5. Configurer Garage S3 (première fois uniquement)
+docker exec lmpdf-garage /garage layout assign <NODE_ID> -z dc1 -c 1G
+docker exec lmpdf-garage /garage layout apply --version 1
+docker exec lmpdf-garage /garage bucket create lmpdf
+docker exec lmpdf-garage /garage key create lmpdf-s3
+docker exec lmpdf-garage /garage bucket allow lmpdf --key <KEY_ID> --read --write
+
+# 6. Créer un compte admin
+docker exec lmpdf-backend node -e "const bcrypt = require('bcryptjs'); bcrypt.hash('VOTRE_MOT_DE_PASSE', 10).then(h => console.log(h))"
+# Puis insérer en base :
+docker exec lmpdf-postgres psql -U lmpdf -c "INSERT INTO ..."
 ```
+
+### Architecture prod
+
+```
+Internet → Traefik (reverse proxy, TLS)
+              ↓
+         lmpdf-frontend (nginx:80)
+              ├── /           → SPA React
+              └── /api/       → proxy_pass vers backend:3000
+              └── /uploads/   → proxy_pass vers backend:3000
+
+lmpdf-backend  (node, NestJS)
+lmpdf-postgres (PostgreSQL 16)
+lmpdf-redis    (Redis 7)
+lmpdf-garage   (S3-compatible storage)
+lmpdf-vision   (FastAPI, OCR)
+```
+
+### Différences dev vs prod
+
+| Aspect | Dev | Prod |
+|--------|-----|------|
+| Dockerfile | `Dockerfile` | `Dockerfile.prod` |
+| Compose | `docker-compose.yml` | `docker-compose.prod.yml` + `--env-file .env.prod` |
+| Ports | publiés sur `127.0.0.1` | `expose` uniquement (8080 pour Traefik) |
+| Frontend | Vite dev server | nginx + build Vite |
+| Backend | `NODE_ENV=development` | `NODE_ENV=production` |
+| Secrets | `.env` avec valeurs par défaut | `.env.prod` avec `${VAR:?}` validation |
+| CORS | `localhost:*` | `https://lmpdf.gueguen.org` |
+| Base de données | bind mount `./infra/postgres-data` | volume Docker nommé |
+| User Docker | root | `appuser:appgroup` |
 
 Pour mettre à jour :
 ```bash
-git pull origin main
-docker compose up -d --build
+git pull origin fix/docker-prod
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+docker exec lmpdf-backend npx prisma migrate deploy
 ```
-
-> Les anciens scripts (`install-vm.sh`, `make-release.sh`) et `DEPLOY_VM.md` sont obsolètes depuis la migration git.
 
 ---
 

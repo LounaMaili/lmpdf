@@ -3,6 +3,30 @@
 Toutes les modifications significatives du projet sont documentées ici. Format `AAAA-MM-DD`.
 
 ---
+## [2026-05-02] Déploiement Docker production
+
+### Added
+- **Dockerfile.prod (backend)** : build multi-stage (deps → Prisma generate + TypeScript → runtime), user non-root `appuser`, `NODE_ENV=production`
+- **Dockerfile.prod (frontend)** : build Vite avec `ARG VITE_API_URL=/api`, servi par `nginx:alpine` avec SPA fallback + proxy `/api/` et `/uploads/`
+- **nginx.prod.conf** : configuration nginx production — `try_files` pour SPA, proxy pass vers backend
+- **docker-compose.prod.yml** : compose standalone (pas d'overlay dev/prod), `expose` uniquement (pas de ports publiés), healthcheck Postgres, validation des secrets `${VAR:?}`
+- **.env.prod** : variables de production avec secrets générés (`openssl rand`), CORS strict, self-register désactivé
+- **Validation des secrets prod** : `POSTGRES_PASSWORD` et `S3_SECRET_KEY` ajoutés aux checks obligatoires dans `main.ts`
+- **MFA_ENCRYPTION_KEY** : générée aléatoirement en prod (64 hex chars)
+
+### Fixed
+- **React 19 TypeScript** : `useRef<HTMLDivElement>(null)` → `useRef<HTMLDivElement | null>(null)` (ref readonly en TS 5.x)
+- **React 19 TypeScript** : `createPortal()` retourne `ReactPortal`, cast en `React.ReactNode` pour compat JSX
+- **Prisma client en prod** : copie complète de `node_modules` + `apps/api/node_modules` (symlinks pnpm) au lieu de `pnpm prune` qui cassait la résolution
+- **docker.draft.dto.ts** : retrait `@IsOptional()`/`@IsObject()` sur l'index signature (TS1206)
+- **runtime-settings.ts** : ajout `governance` au type `RuntimeAdminSettings`
+
+### Changed
+- **Port frontend** : `0.0.0.0:8080:80` pour accès Traefik externe (au lieu de `127.0.0.1`)
+- **Garage** : layout cluster configuré, bucket `lmpdf` créé, clé S3 dédiée
+- **Traefik** : config simplifiée — un seul router+service vers `10.0.1.201:8080` (nginx gère `/api/` en interne)
+
+---
 ## [2026-05-01c] Sécurité : contrôle d'accès /detect + protection path traversal
 
 ### Fixed
