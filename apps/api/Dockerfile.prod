@@ -1,0 +1,44 @@
+# --- LMPdf API — Production Dockerfile ---
+# Multi-stage build: install deps, build TypeScript, run as non-root user
+
+# Stage 1: Install dependencies
+FROM node:22-alpine AS deps
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/api/package.json ./apps/api/
+RUN pnpm install --frozen-lockfile --filter @lmpdf/api...
+
+# Stage 2: Build
+FROM deps AS build
+COPY apps/api/ ./apps/api/
+COPY apps/api/prisma ./apps/api/prisma/
+RUN pnpm --filter @lmpdf/api exec prisma generate \
+    && pnpm --filter @lmpdf/api run build
+
+# Stage 3: Production runtime
+FROM node:22-alpine AS runtime
+WORKDIR /app
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Install only production dependencies
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/api/package.json ./apps/api/
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate \
+    && pnpm install --frozen-lockfile --prod --filter @lmpdf/api...
+
+# Copy built artifacts
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/prisma ./apps/api/prisma
+COPY --from=build /app/apps/api/node_modules/.prisma ./node_modules/.prisma
+
+# Ensure uploads directory exists with correct permissions
+RUN mkdir -p /app/apps/api/uploads && chown -R appuser:appgroup /app/apps/api/uploads
+
+ENV NODE_ENV=production
+WORKDIR /app/apps/api
+
+EXPOSE 3000
+
+USER appuser
+CMD ["node", "dist/main.js"]

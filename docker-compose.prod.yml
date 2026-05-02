@@ -1,0 +1,121 @@
+# --- LMPdf — Production Docker Compose ---
+# Standalone compose for production. Does NOT overlay docker-compose.yml (dev).
+# Usage: docker compose -f docker-compose.prod.yml up -d
+#
+# Key differences from dev:
+#   - No published ports on backend/frontend (Traefik routes traffic)
+#   - Multi-stage Dockerfile.prod for both API and frontend
+#   - NODE_ENV=production, strict CORS, secret validation
+#   - Frontend served by nginx with /api proxy pass
+#   - Vision stays internal (expose only)
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: lmpdf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lmpdf
+      POSTGRES_USER: lmpdf
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lmpdf"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: lmpdf-redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+
+  garage:
+    image: dxflrs/garage:v1.0.1
+    container_name: lmpdf-garage
+    restart: unless-stopped
+    expose:
+      - "3900"
+      - "3902"
+      - "3903"
+    volumes:
+      - ./infra/garage-data:/var/lib/garage/data
+      - ./infra/garage-meta:/var/lib/garage/meta
+      - ./infra/garage.toml:/etc/garage.toml:ro
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    container_name: lmpdf-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://lmpdf:${POSTGRES_PASSWORD}@postgres:5432/lmpdf
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      VISION_URL: http://vision:8001
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://lmpdf.gueguen.org}
+      STRICT_CORS: "true"
+      ALLOW_SELF_REGISTER: ${ALLOW_SELF_REGISTER:-false}
+      S3_ENDPOINT: http://garage:3900
+      S3_ACCESS_KEY: ${GARAGE_ACCESS_KEY:?GARAGE_ACCESS_KEY is required}
+      S3_SECRET_KEY: ${GARAGE_SECRET_KEY:?GARAGE_SECRET_KEY is required}
+      S3_BUCKET: lmpdf
+      S3_REGION: garage
+      S3_FORCE_PATH_STYLE: "true"
+      LDAP_ENABLED: ${LDAP_ENABLED:-false}
+      LDAP_URL: ${LDAP_URL:-}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-}
+      LDAP_SEARCH_BASE: ${LDAP_SEARCH_BASE:-}
+      LDAP_SEARCH_FILTER: ${LDAP_SEARCH_FILTER:-(sAMAccountName={{username}})}
+      LDAP_ADMIN_GROUP: ${LDAP_ADMIN_GROUP:-}
+      LDAP_EDITOR_GROUP: ${LDAP_EDITOR_GROUP:-}
+      LDAP_INSECURE_TLS: ${LDAP_INSECURE_TLS:-false}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
+      MFA_POLICY: ${MFA_POLICY:-optional}
+    volumes:
+      - uploads-data:/app/apps/api/uploads
+    expose:
+      - "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.prod
+      args:
+        VITE_API_URL: /api
+    container_name: lmpdf-frontend
+    restart: unless-stopped
+    expose:
+      - "80"
+    depends_on:
+      - backend
+
+  vision:
+    build: ./apps/vision
+    container_name: lmpdf-vision
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+      UPLOADS_DIR: /uploads
+    expose:
+      - "8001"
+    volumes:
+      - uploads-data:/uploads
+
+volumes:
+  postgres-data:
+  uploads-data:
