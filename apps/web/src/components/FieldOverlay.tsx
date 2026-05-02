@@ -131,7 +131,7 @@ export default function FieldOverlay({
   // Text caret position to restore after an overflow update.
   const textCursorRef = useRef<number>(-1);
   // Ref passed to RichTextEditor so we can focus it before formatting commands.
-  const textEditorRef = useRef<HTMLDivElement>(null);
+  const textEditorRef = useRef<HTMLDivElement | null>(null);
   // The actual DOM element of the RichTextEditor, used as containerRef for SelectionToolbar.
   const [richTextEl, setRichTextEl] = useState<HTMLDivElement | null>(null);
 

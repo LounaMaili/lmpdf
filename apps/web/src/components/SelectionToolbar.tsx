@@ -38,6 +38,8 @@ const TEXT_COLORS = ['#000000', '#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#e6
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SelectionToolbar({ containerRef, onFormat }: Props) {
+  // React 19: createPortal returns ReactPortal which is not assignable to ReactNode.
+  // Wrap in a fragment so the component's return type is valid JSX.
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   /** Plain text of the current selection — used to show/hide the toolbar. */
@@ -164,6 +166,8 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
    * When selText is empty the toolbar is moved offscreen and hidden via opacity
    * and pointer-events rather than unmounting, avoiding layout thrashing.
    */
+  // React 19: createPortal returns ReactPortal which is not assignable to ReactNode in @types/react 19.
+  // Cast to satisfy TypeScript JSX return type checking.
   return createPortal(
     <div
       ref={toolbarRef}
@@ -248,5 +252,5 @@ export default function SelectionToolbar({ containerRef, onFormat }: Props) {
       </div>
     </div>,
     document.body
-  );
+  ) as React.ReactNode;
 }
