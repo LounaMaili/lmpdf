@@ -29,10 +29,15 @@ COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml
 # Ensure uploads directory exists with correct permissions
 RUN mkdir -p /app/apps/api/uploads && chown -R appuser:appgroup /app/apps/api/uploads
 
+# Install su-exec for privilege dropping in entrypoint
+RUN apk add --no-cache su-exec
+
+COPY apps/api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 ENV NODE_ENV=production
 WORKDIR /app/apps/api
 
 EXPOSE 3000
 
-USER appuser
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["docker-entrypoint.sh"]
