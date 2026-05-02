@@ -14,17 +14,26 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 - **Validation des secrets prod** : `POSTGRES_PASSWORD` et `S3_SECRET_KEY` ajoutés aux checks obligatoires dans `main.ts`
 - **MFA_ENCRYPTION_KEY** : générée aléatoirement en prod (64 hex chars)
 
+### Added
+- **XSS sanitization (frontend)** : DOMPurify avec whitelist stricte (b, strong, i, em, u, s, span, br, div, mark + style filtré) — tout HTML riche passe par `sanitizeRichTextHtml()` avant rendu
+- **XSS sanitization (backend)** : `sanitize-html` avec même whitelist + validation stricte des valeurs CSS (hex/rgb pour couleurs, normal/bold/100-900 pour font-weight, etc.)
+- **richTextToPlainText()** : strip HTML avant export PDF pour les champs texte — plus de balises résiduelles dans le PDF
+- **docker-entrypoint.sh** : `chown` du volume uploads + `su-exec` pour privilège dropping
+
 ### Fixed
 - **React 19 TypeScript** : `useRef<HTMLDivElement>(null)` → `useRef<HTMLDivElement | null>(null)` (ref readonly en TS 5.x)
 - **React 19 TypeScript** : `createPortal()` retourne `ReactPortal`, cast en `React.ReactNode` pour compat JSX
 - **Prisma client en prod** : copie complète de `node_modules` + `apps/api/node_modules` (symlinks pnpm) au lieu de `pnpm prune` qui cassait la résolution
 - **docker.draft.dto.ts** : retrait `@IsOptional()`/`@IsObject()` sur l'index signature (TS1206)
 - **runtime-settings.ts** : ajout `governance` au type `RuntimeAdminSettings`
+- **nginx client_max_body_size** : 30M au lieu du défaut 1M (bloquait les uploads)
+- **Volume uploads** : permissions fixées via entrypoint (root chown → appuser)
 
 ### Changed
 - **Port frontend** : `0.0.0.0:8080:80` pour accès Traefik externe (au lieu de `127.0.0.1`)
 - **Garage** : layout cluster configuré, bucket `lmpdf` créé, clé S3 dédiée
 - **Traefik** : config simplifiée — un seul router+service vers `10.0.1.201:8080` (nginx gère `/api/` en interne)
+- **Branches nettoyées** : tout mergé dans `main`, branches `fix/docker-prod` et `fix/security-audit` supprimées
 
 ---
 ## [2026-05-01c] Sécurité : contrôle d'accès /detect + protection path traversal
