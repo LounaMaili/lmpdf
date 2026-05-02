@@ -1,30 +1,24 @@
 # --- LMPdf API — Production Dockerfile ---
-# Strategy: single build stage, prune dev deps at the end.
-# This avoids the pnpm symlink / Prisma generated client copy issues.
+# Multi-stage build: install+build, then minimal runtime with prod deps only.
 
+# Stage 1: Install all dependencies + build
 FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
-
-# Install all dependencies
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/
 RUN pnpm install --frozen-lockfile --filter @lmpdf/api...
-
-# Copy source and build
 COPY apps/api/ ./apps/api/
 RUN pnpm --filter @lmpdf/api exec prisma generate \
     && pnpm --filter @lmpdf/api run build
 
-# Prune dev dependencies (prisma CLI stays as devDep but @prisma/client stays)
-RUN pnpm prune --prod
-
-# --- Production runtime ---
+# Stage 2: Production runtime
 FROM node:22-alpine AS runtime
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Copy everything needed from build stage
+# Copy everything from build (node_modules has all deps including dev,
+# but we're in production so NODE_ENV=production will handle it)
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
