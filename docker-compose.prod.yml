@@ -57,6 +57,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       DATABASE_URL: postgresql://lmpdf:${POSTGRES_PASSWORD}@postgres:5432/lmpdf
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
