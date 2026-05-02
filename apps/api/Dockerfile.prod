@@ -26,11 +26,16 @@ COPY apps/api/package.json ./apps/api/
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate \
     && pnpm install --frozen-lockfile --prod --filter @lmpdf/api...
 
-# Copy Prisma schema and generate client in runtime image (using installed prisma)
+# Copy Prisma schema and generate client in runtime stage
+# prisma is a devDep but @prisma/client is a prod dep — we need prisma CLI temporarily
+# for `prisma generate`, so install it as a one-off
 COPY apps/api/prisma ./apps/api/prisma/
-RUN cd /app/apps/api && pnpm exec prisma generate
+RUN cd /app/apps/api \
+    && npm install --no-save prisma@^6.3.1 \
+    && npx prisma generate \
+    && npm uninstall prisma
 
-# Copy built artifacts
+# Copy built artifacts from build stage
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 
 # Ensure uploads directory exists with correct permissions
