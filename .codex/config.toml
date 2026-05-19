@@ -1,0 +1,5 @@
+# Project-level defaults for Codex CLI on LMPdf.
+model = "gpt-5.5"
+model_reasoning_effort = "xhigh"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
