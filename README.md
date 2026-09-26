@@ -17,7 +17,8 @@
 - **Exporter** un PDF rempli avec les valeurs saisies
 - **Partager** des documents avec contrôle d'accès par utilisateur ou groupe
 
-L'objectif : fournir un outil local, léger et autonome pour générer des documentsPDF sans dependre d'un service cloud.
+L'objectif : fournir un outil local, léger et autonome pour générer des documents
+PDF sans dépendre d'un service cloud.
 
 ---
 
@@ -34,8 +35,9 @@ L'objectif : fournir un outil local, léger et autonome pour générer des docum
 | Authentification JWT + MFA | ✅ |
 | Gestion d'utilisateurs et groupes | ✅ |
 | Permissions par document (owner/editor/filler) | ✅ |
-| Détection automatique de zones (OCR/Vision) | 🔜 |
-| LDAP / SSO | 🔜 |
+| Détection automatique de zones (OCR/Vision) | Implémentée, à revalider |
+| Authentification LDAP | Implémentée, à revalider |
+| SSO | 🔜 |
 
 ---
 
@@ -44,10 +46,13 @@ L'objectif : fournir un outil local, léger et autonome pour générer des docum
 ```
 apps/web        →  React + Vite + TypeScript  (frontend)
 apps/api        →  NestJS + Prisma            (backend)
-apps/vision     →  FastAPI + OpenCV           (service OCR/vision)
-packages/shared →  Types partagés
-infra           →  Docker (Postgres, Garage S3)
+apps/vision     →  FastAPI + OpenCV/Tesseract (service OCR/vision)
+docker-compose* →  Postgres, Redis, Garage et applications
+infra           →  Configuration Garage et données runtime locales
 ```
+
+Les uploads actuels utilisent un volume local partagé entre API et Vision.
+Garage est configuré dans Compose mais n'est pas utilisé par ce flux.
 
 Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour les détails.
 
@@ -55,32 +60,37 @@ Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour les détails.
 
 ## Prérequis
 
-- **Node.js** 22+
-- **pnpm** 8+
-- **Docker** + **Docker Compose**
+- **Docker** + **Docker Compose** pour l'exécution conteneurisée
+- **Node.js** 22+ et **pnpm** 9.0.0 pour les commandes applicatives hors conteneur
+
+Le développement du code se fait sur Fedora ; installations, builds et
+validations applicatives se font uniquement sur la VM Debian `lmpdf-dev`.
+Voir [AGENTS.md](./AGENTS.md). La VM actuelle exécute LMPdf dans Docker et ne
+dispose pas de Node/pnpm sur l'hôte.
 
 ---
 
 ## Démarrage rapide
 
 ```bash
-# 1. Cloner le dépôt (si pas déjà fait)
-git clone https://github.com/winpoks/lmpdf.git
+# Sur un nouvel environnement Debian dédié, pas sur Fedora :
+git clone https://github.com/LounaMaili/lmpdf.git
 cd lmpdf
 
-# 2. Configurer l'environnement
+# Configurer l'environnement de développement
 cp .env.example .env
-# Éditer .env : ajuster les secrets et URLs si nécessaire
+# Adapter .env sans y laisser de secrets par défaut
 
-# 3. Installer les dépendances
-pnpm install
-
-# 4. Lancer les services (Postgres + Garage)
-docker compose up -d
-
-# 5. Démarrer en développement
-pnpm dev
+# Démarrer l'ensemble des services conteneurisés
+docker compose up -d --build
 ```
+
+Cette procédure concerne une nouvelle installation. Ne l'exécutez pas sur
+l'instance `lmpdf-dev` déjà active dans le cadre d'une simple validation.
+Le Compose de développement démarre déjà les conteneurs frontend et backend ;
+ne lancez pas `pnpm dev` sur les mêmes ports en parallèle. Son Dockerfile API
+utilise encore `npm install` sans lockfile npm : ce mode reste à rendre
+reproductible et n'est pas utilisé pour la validation de cette baseline.
 
 ---
 
@@ -90,7 +100,7 @@ pnpm dev
 |---|---|
 | Web (frontend) | http://localhost:4173 |
 | API (backend) | http://localhost:3000/api/health |
-| Vision (OCR) | http://localhost:8001/health |
+| Vision (OCR) | Service interne Docker sur le port 8001, non publié sur l'hôte |
 | Garage S3 API | http://localhost:3900 (local uniquement) |
 | Garage Admin | http://localhost:3903 (local uniquement) |
 
@@ -98,54 +108,61 @@ pnpm dev
 
 ## Déploiement en production
 
-Le déploiement prod utilise un compose standalone (`docker-compose.prod.yml`) avec des Dockerfiles multi-stage optimisés et nginx comme reverse proxy interne.
+Le déploiement utilise un Compose autonome (`docker-compose.prod.yml`) avec des
+Dockerfiles multi-stage et nginx comme proxy interne. Choisir un SHA de commit
+déjà poussé et validé sur GitHub ; ne pas revenir à l'ancienne branche
+`fix/docker-prod`, supprimée.
 
 ```bash
-# 1. Cloner le dépôt sur le serveur
+# Sur une nouvelle installation uniquement :
 git clone https://github.com/LounaMaili/lmpdf.git
 cd lmpdf
-git checkout fix/docker-prod
 
-# 2. Configurer l'environnement de production
-cp .env.prod.example .env.prod
-# Éditer .env.prod : générer des secrets uniques
-#   openssl rand -hex 32  # pour JWT_SECRET, MFA_ENCRYPTION_KEY
-#   openssl rand -hex 16  # pour POSTGRES_PASSWORD
+# Sur une copie déjà installée, se placer dans son dossier et vérifier Git :
+git status --short --branch
+# Arrêter ici si un fichier suivi est modifié.
 
-# 3. Lancer les services
-#    --env-file .env.prod est requis car .env contient les valeurs dev
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
-
-# 4. Appliquer les migrations Prisma
-docker exec lmpdf-backend npx prisma migrate deploy
-
-# 5. Configurer Garage S3 (première fois uniquement)
-docker exec lmpdf-garage /garage layout assign <NODE_ID> -z dc1 -c 1G
-docker exec lmpdf-garage /garage layout apply --version 1
-docker exec lmpdf-garage /garage bucket create lmpdf
-docker exec lmpdf-garage /garage key create lmpdf-s3
-docker exec lmpdf-garage /garage bucket allow lmpdf --key <KEY_ID> --read --write
-
-# 6. Créer un compte admin
-docker exec lmpdf-backend node -e "const bcrypt = require('bcryptjs'); bcrypt.hash('VOTRE_MOT_DE_PASSE', 10).then(h => console.log(h))"
-# Puis insérer en base :
-docker exec lmpdf-postgres psql -U lmpdf -c "INSERT INTO ..."
+# Dans les deux cas, utiliser le SHA validé sur GitHub :
+git fetch origin --prune
+git switch --detach SHA_DU_COMMIT_VALIDE
 ```
+
+Pour une **nouvelle installation seulement**, créer `.env.prod` puis renseigner
+ses valeurs obligatoires. Sur une mise à jour, conserver le fichier existant.
+
+```bash
+cp .env.prod.example .env.prod
+```
+
+Après configuration de `.env.prod` :
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet
+
+# Déployer seulement après validation de la révision et planification du changement
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+```
+
+Sur la VM existante, conserver `.env` et `.env.prod` : vérifier d'abord l'état
+Git, puis faire `git fetch origin --prune` et `git switch --detach` vers le SHA
+exact poussé. Les migrations, l'initialisation Garage et la création de comptes
+sont des opérations distinctes, à planifier explicitement. Le conteneur API de
+production **n'applique pas** automatiquement les migrations au démarrage.
 
 ### Architecture prod
 
 ```
 Internet → Traefik (reverse proxy, TLS)
               ↓
-         lmpdf-frontend (nginx:80)
+         lmpdf-frontend (nginx:80, port hôte 8080)
               ├── /           → SPA React
               └── /api/       → proxy_pass vers backend:3000
-              └── /uploads/   → proxy_pass vers backend:3000
+                  └── /api/uploads/ → fichiers servis par l'API après contrôle d'accès
 
 lmpdf-backend  (node, NestJS)
 lmpdf-postgres (PostgreSQL 16)
 lmpdf-redis    (Redis 7)
-lmpdf-garage   (S3-compatible storage)
+lmpdf-garage   (service S3 configuré, hors flux actuel des uploads)
 lmpdf-vision   (FastAPI, OCR)
 ```
 
@@ -155,20 +172,17 @@ lmpdf-vision   (FastAPI, OCR)
 |--------|-----|------|
 | Dockerfile | `Dockerfile` | `Dockerfile.prod` |
 | Compose | `docker-compose.yml` | `docker-compose.prod.yml` + `--env-file .env.prod` |
-| Ports | publiés sur `127.0.0.1` | `expose` uniquement (8080 pour Traefik) |
+| Ports | Web/API publiés ; Postgres/Redis/Garage sur `127.0.0.1` ; Vision interne | Frontend publié sur `8080`, API et Vision internes |
 | Frontend | Vite dev server | nginx + build Vite |
 | Backend | `NODE_ENV=development` | `NODE_ENV=production` |
 | Secrets | `.env` avec valeurs par défaut | `.env.prod` avec `${VAR:?}` validation |
-| CORS | `localhost:*` | `https://lmpdf.gueguen.org` |
+| CORS | Origines localhost configurées dans Compose | `https://lmpdf.gueguen.org` par défaut |
 | Base de données | bind mount `./infra/postgres-data` | volume Docker nommé |
-| User Docker | root | `appuser:appgroup` |
+| User Docker API | root | `appuser:appgroup` |
 
-Pour mettre à jour :
-```bash
-git pull origin fix/docker-prod
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
-docker exec lmpdf-backend npx prisma migrate deploy
-```
+Pour une mise à jour, reprendre la procédure au SHA approuvé après vérification
+de l'arbre Git. Ne pas utiliser `git pull` ni déployer directement `main` sur la
+VM de validation.
 
 ---
 
@@ -186,15 +200,20 @@ npx prisma migrate dev --name ma_migration
 npx prisma migrate deploy
 ```
 
-En environnement Docker, les migrations sont appliquées automatiquement au démarrage du conteneur API.
+Le Dockerfile de développement lance `prisma migrate deploy` au démarrage de
+l'API. Le conteneur de production ne le fait pas ; une migration de production
+exige une décision et une commande explicites.
 
 ---
 
 ## Gestion des secrets
 
-> ⚠️ **Jamais commiter le fichier `.env`.** Il contient des secrets (JWT, credentials S3, clés API).
+> ⚠️ **Ne jamais committer `.env` ni `.env.prod`.** Ils peuvent contenir des
+> secrets JWT, S3/Garage, LDAP ou MFA.
 
-Utiliser `.env.example` comme modèle — toutes les variables obligatoires y sont documentées.
+Utiliser `.env.example` pour le développement et `.env.prod.example` pour la
+production. Les exemples ne contiennent aucun secret utilisable ; leurs champs
+vides doivent être renseignés avant un déploiement.
 
 ---
 

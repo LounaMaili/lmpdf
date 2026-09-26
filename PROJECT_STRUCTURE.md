@@ -5,14 +5,18 @@ Guide rapide des dossiers/fichiers du projet **LMPdf**.
 ## Racine
 
 - `apps/` — applications principales
-- `packages/` — code partagé entre apps
-- `infra/` — données/infrastructure locale (volumes Docker)
-- `scripts/` — scripts utilitaires projet
-- `docker-compose.yml` — orchestration locale (backend/frontend/postgres/redis/garage/vision)
+- `infra/` — configuration Garage et données runtime Docker
+- `scripts/` — scripts d'installation des outils hôtes Linux
+- `docker-compose.yml` — orchestration de développement
+- `docker-compose.prod.yml` — orchestration de production autonome
+- `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` — monorepo pnpm
+- `.env.example`, `.env.prod.example` — modèles de configuration sans secrets
+- `AGENTS.md` — règles projet et workflow Fedora → GitHub → VM Debian
 - `CHANGELOG.md` — historique des changements importants
 - `README.md` — démarrage et usage global
 - `ARCHITECTURE.md` — vue d’ensemble architecture
-- `TODO.md` — backlog court
+
+Le dépôt ne contient actuellement ni dossier `packages/` ni `TODO.md`.
 
 ## apps/
 
@@ -22,7 +26,7 @@ Guide rapide des dossiers/fichiers du projet **LMPdf**.
 - `src/components/PdfViewer.tsx` — rendu PDF via `react-pdf`
 - `src/components/FieldOverlay.tsx` — overlays champs (drag/resize/saisie)
 - `src/components/PropertiesPanel.tsx` — panneau propriétés/liste champs
-- `src/exportPdf.ts` — export PDF rempli (`pdf-lib`)
+- `src/exportPdf.ts` — génération du PDF rempli dans le navigateur (`pdf-lib`)
 - `src/api.ts` — appels API backend
 - `src/styles.css` — styles globaux
 
@@ -30,10 +34,12 @@ Guide rapide des dossiers/fichiers du projet **LMPdf**.
 
 - `src/main.ts` — bootstrap API (CORS, sécurité, validation)
 - `src/app.module.ts` — modules/guards globaux
-- `src/auth/` — auth JWT + guards/roles
-- `src/upload/upload.controller.ts` — upload/serve documents
+- `src/auth/` — authentification JWT, MFA, WebAuthn et LDAP
+- `src/upload/upload.controller.ts` — upload et lecture des fichiers depuis `uploads/`
 - `src/templates/` — CRUD templates/champs
 - `src/detect/` — endpoint vers service vision
+- `src/export/` — export serveur optionnel vers un chemin de fichiers configuré
+- `src/drafts/`, `src/permissions/` — brouillons et droits documentaires
 - `src/users/`, `src/groups/` — gestion comptes/groupes
 - `prisma/schema.prisma` — schéma DB
 - `prisma/migrations/` — migrations SQL versionnées
@@ -44,23 +50,20 @@ Guide rapide des dossiers/fichiers du projet **LMPdf**.
 - `detector.py` — détection de zones (OpenCV/Tesseract)
 - `requirements.txt` — dépendances Python
 
-## packages/
-
-### `packages/shared/`
-
-- utilitaires/types partagés (base pour code commun)
-
 ## infra/
 
-- `infra/postgres-data/` — données PostgreSQL locales (volume)
-- `infra/garage-data/` — données Garage (objets)
-- `infra/garage-meta/` — métadonnées Garage
+- `infra/garage.toml`, `infra/garage-init.sh` — configuration et initialisation Garage
+- `infra/postgres-data/` — données PostgreSQL du Compose de développement
+- `infra/garage-data/`, `infra/garage-meta/` — données Garage créées à l'exécution
+- `infra/minio-data/` — anciennes données MinIO encore partiellement suivies par Git
 
-> Ces dossiers sont des données runtime. À ne pas nettoyer à la légère.
+Ces dossiers de données runtime ne sont pas à nettoyer dans une tâche de
+maintenance documentaire. Le retrait des anciens fichiers MinIO suivis par Git
+fera l'objet d'une tâche distincte.
 
 ## Notes maintenance
 
-- Les dossiers `dist/` sont des artefacts de build (recréés automatiquement).
-- `__pycache__/` est un cache Python (recréé automatiquement).
-- `node_modules/` est réinstallable (`pnpm install`).
-- Avant gros changement: faire une sauvegarde horodatée dans `/home/openclaw/save_LMPdf/`.
+- `dist/`, `*.tsbuildinfo` et `__pycache__/` sont des artefacts régénérables,
+  ignorés par Git.
+- Les dépendances et les builds applicatifs sont gérés sur la VM `lmpdf-dev`,
+  jamais sur le poste Fedora. Voir `AGENTS.md`.
