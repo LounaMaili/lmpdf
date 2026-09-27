@@ -21,13 +21,6 @@ export type MfaSettings = {
 };
 
 export type RuntimeAdminSettings = {
-  storage: {
-    provider: 'garage' | 's3';
-    endpoint: string;
-    bucket: string;
-    region?: string;
-    forcePathStyle?: boolean;
-  };
   auth: {
     mode: 'local' | 'ldap' | 'hybrid';
     allowLocalAdminFallback: boolean;
@@ -72,13 +65,6 @@ export function defaultRuntimeSettings(): RuntimeAdminSettings {
   const ldapEnabled = (process.env.LDAP_ENABLED || 'false') === 'true';
 
   return {
-    storage: {
-      provider: 'garage',
-      endpoint: process.env.S3_ENDPOINT || 'http://garage:3900',
-      bucket: process.env.S3_BUCKET || 'lmpdf',
-      region: process.env.S3_REGION || 'garage',
-      forcePathStyle: (process.env.S3_FORCE_PATH_STYLE || 'true') === 'true',
-    },
     auth: {
       mode: (process.env.AUTH_MODE as 'local' | 'ldap' | 'hybrid' | undefined) || (ldapEnabled ? 'hybrid' : 'local'),
       allowLocalAdminFallback: (process.env.AUTH_ALLOW_LOCAL_ADMIN_FALLBACK || 'true') === 'true',
@@ -126,7 +112,6 @@ export async function loadRuntimeSettings(): Promise<RuntimeAdminSettings> {
     const raw = await fs.readFile(SETTINGS_PATH, 'utf8');
     const json = JSON.parse(raw) as Partial<RuntimeAdminSettings>;
     return {
-      storage: { ...base.storage, ...(json.storage || {}) },
       auth: { ...base.auth, ...(json.auth || {}) },
       mfa: { ...base.mfa, ...(json.mfa || {}) },
       ldap: { ...base.ldap, ...(json.ldap || {}) },

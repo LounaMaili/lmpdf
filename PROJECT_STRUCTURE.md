@@ -5,7 +5,7 @@ Guide rapide des dossiers/fichiers du projet **LMPdf**.
 ## Racine
 
 - `apps/` — applications principales
-- `infra/` — configuration Garage et données runtime Docker
+- `infra/` — données PostgreSQL locales du Compose de développement
 - `scripts/` — scripts d'installation des outils hôtes Linux
 - `docker-compose.yml` — orchestration de développement
 - `docker-compose.prod.yml` — orchestration de production autonome
@@ -52,14 +52,13 @@ Le dépôt ne contient actuellement ni dossier `packages/` ni `TODO.md`.
 
 ## infra/
 
-- `infra/garage.toml`, `infra/garage-init.sh` — configuration et initialisation Garage
 - `infra/postgres-data/` — données PostgreSQL du Compose de développement
-- `infra/garage-data/`, `infra/garage-meta/` — données Garage créées à l'exécution
-- `infra/minio-data/` — anciennes données MinIO encore partiellement suivies par Git
 
-Ces dossiers de données runtime ne sont pas à nettoyer dans une tâche de
-maintenance documentaire. Le retrait des anciens fichiers MinIO suivis par Git
-fera l'objet d'une tâche distincte.
+Les deux persistances critiques de l'application conteneurisée sont PostgreSQL
+(`infra/postgres-data/` en développement, volume `postgres-data` en production)
+et le volume Docker nommé `uploads-data`, partagé par l'API et Vision pour les
+PDF et images. Elles ne doivent pas être supprimées ou recréées pendant une
+mise à jour applicative.
 
 ## Notes maintenance
 

@@ -14,13 +14,10 @@ LMPdf is a web application for filling PDF forms. A scanned or born-digital PDF 
 | Backend API | NestJS + Prisma + PostgreSQL | `apps/api/` |
 | Vision service | Python (FastAPI / OpenCV / Tesseract) | `apps/vision/` |
 | Uploaded files | Local `uploads/` directory, shared Docker volume | `apps/api/src/upload/`, Compose files at repository root |
-| Configured services | Garage (S3-compatible), Redis | `docker-compose.yml`, `docker-compose.prod.yml`, `infra/` |
 | Runtime | Docker Compose | Repository root |
 
-Garage and Redis are defined as services. The current API upload and export
-paths do not use Garage as binary storage, and no Redis client appears in the
-current application sources. Do not infer an active S3 or job-queue data flow
-from the Compose services alone.
+The active infrastructure contains PostgreSQL plus the web, API and vision
+services. Uploaded binaries stay on the local shared `uploads-data` volume.
 
 ## Frontend (`apps/web/`)
 
@@ -63,8 +60,7 @@ NestJS REST API. All endpoints are under `/api/`.
 PDFs/images to the API's local `uploads/` directory. In Docker, `uploads-data`
 mounts that directory in the API container and `/uploads` in the vision
 container. Browser exports are generated client-side; the optional server
-export writes to a configured filesystem path. Garage is configured but not
-used for these file operations.
+export writes to a configured filesystem path.
 
 ## Vision Service (`apps/vision/`)
 
@@ -83,12 +79,7 @@ rendered to images before analysis.
 docker-compose.yml             ← development services
 docker-compose.prod.yml        ← standalone production services
 infra/
-├── garage.toml                ← Garage configuration
-├── garage-init.sh             ← Garage initialization helper
-├── postgres-data/            ← development PostgreSQL bind mount (runtime)
-├── garage-data/              ← Garage data bind mount (runtime)
-├── garage-meta/              ← Garage metadata bind mount (runtime)
-└── minio-data/               ← historical runtime data, partly Git-tracked
+└── postgres-data/             ← development PostgreSQL bind mount (runtime)
 ```
 
 **Containers:**
@@ -96,12 +87,20 @@ infra/
 - `lmpdf-frontend` — Vite development server or nginx in production
 - `lmpdf-vision` — Python vision service
 - `lmpdf-postgres` — PostgreSQL
-- `lmpdf-redis` — Redis service configured in Compose
-- `lmpdf-garage` — Garage S3-compatible service configured in Compose
 
 The production Compose file publishes the frontend on port 8080 and keeps the
 API and vision service internal. The development Compose file publishes the
 frontend and API; vision remains internal.
+
+The two critical persistent stores are PostgreSQL and `uploads-data`:
+
+- development PostgreSQL uses the `./infra/postgres-data` bind mount;
+- production PostgreSQL uses the named `postgres-data` volume;
+- both Compose configurations use the named `uploads-data` volume for source
+  PDFs and images shared by the API and vision service.
+
+These stores must be preserved during deployments. Removing application
+containers does not require deleting or recreating either volume.
 
 ## Data Flow
 

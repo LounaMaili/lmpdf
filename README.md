@@ -47,12 +47,13 @@ PDF sans dépendre d'un service cloud.
 apps/web        →  React + Vite + TypeScript  (frontend)
 apps/api        →  NestJS + Prisma            (backend)
 apps/vision     →  FastAPI + OpenCV/Tesseract (service OCR/vision)
-docker-compose* →  Postgres, Redis, Garage et applications
-infra           →  Configuration Garage et données runtime locales
+docker-compose* →  PostgreSQL et applications
+infra           →  Données PostgreSQL locales du Compose de développement
 ```
 
-Les uploads actuels utilisent un volume local partagé entre API et Vision.
-Garage est configuré dans Compose mais n'est pas utilisé par ce flux.
+Les deux persistances critiques sont PostgreSQL pour les métadonnées et le
+volume Docker `uploads-data` pour les PDF et images. Ce volume est partagé entre
+l'API et le service Vision.
 
 Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour les détails.
 
@@ -101,8 +102,6 @@ reproductible et n'est pas utilisé pour la validation de cette baseline.
 | Web (frontend) | http://localhost:4173 |
 | API (backend) | http://localhost:3000/api/health |
 | Vision (OCR) | Service interne Docker sur le port 8001, non publié sur l'hôte |
-| Garage S3 API | http://localhost:3900 (local uniquement) |
-| Garage Admin | http://localhost:3903 (local uniquement) |
 
 ---
 
@@ -145,9 +144,9 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 
 Sur la VM existante, conserver `.env` et `.env.prod` : vérifier d'abord l'état
 Git, puis faire `git fetch origin --prune` et `git switch --detach` vers le SHA
-exact poussé. Les migrations, l'initialisation Garage et la création de comptes
-sont des opérations distinctes, à planifier explicitement. Le conteneur API de
-production **n'applique pas** automatiquement les migrations au démarrage.
+exact poussé. Les migrations et la création de comptes sont des opérations
+distinctes, à planifier explicitement. Le conteneur API de production
+**n'applique pas** automatiquement les migrations au démarrage.
 
 ### Architecture prod
 
@@ -161,8 +160,6 @@ Internet → Traefik (reverse proxy, TLS)
 
 lmpdf-backend  (node, NestJS)
 lmpdf-postgres (PostgreSQL 16)
-lmpdf-redis    (Redis 7)
-lmpdf-garage   (service S3 configuré, hors flux actuel des uploads)
 lmpdf-vision   (FastAPI, OCR)
 ```
 
@@ -172,12 +169,13 @@ lmpdf-vision   (FastAPI, OCR)
 |--------|-----|------|
 | Dockerfile | `Dockerfile` | `Dockerfile.prod` |
 | Compose | `docker-compose.yml` | `docker-compose.prod.yml` + `--env-file .env.prod` |
-| Ports | Web/API publiés ; Postgres/Redis/Garage sur `127.0.0.1` ; Vision interne | Frontend publié sur `8080`, API et Vision internes |
+| Ports | Web/API publiés ; PostgreSQL sur `127.0.0.1` ; Vision interne | Frontend publié sur `8080`, API, PostgreSQL et Vision internes |
 | Frontend | Vite dev server | nginx + build Vite |
 | Backend | `NODE_ENV=development` | `NODE_ENV=production` |
 | Secrets | `.env` avec valeurs par défaut | `.env.prod` avec `${VAR:?}` validation |
 | CORS | Origines localhost configurées dans Compose | `https://lmpdf.gueguen.org` par défaut |
-| Base de données | bind mount `./infra/postgres-data` | volume Docker nommé |
+| PostgreSQL | bind mount `./infra/postgres-data` | volume Docker nommé `postgres-data` |
+| PDF et images | volume Docker nommé `uploads-data` | volume Docker nommé `uploads-data` |
 | User Docker API | root | `appuser:appgroup` |
 
 Pour une mise à jour, reprendre la procédure au SHA approuvé après vérification
@@ -209,7 +207,7 @@ exige une décision et une commande explicites.
 ## Gestion des secrets
 
 > ⚠️ **Ne jamais committer `.env` ni `.env.prod`.** Ils peuvent contenir des
-> secrets JWT, S3/Garage, LDAP ou MFA.
+> secrets JWT, LDAP ou MFA.
 
 Utiliser `.env.example` pour le développement et `.env.prod.example` pour la
 production. Les exemples ne contiennent aucun secret utilisable ; leurs champs

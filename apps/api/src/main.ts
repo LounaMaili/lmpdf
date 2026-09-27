@@ -15,7 +15,6 @@ function validateProductionSecrets(): void {
   const requiredStrong: Record<string, string> = {
     JWT_SECRET: process.env.JWT_SECRET || '',
     POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD || '',
-    S3_SECRET_KEY: process.env.S3_SECRET_KEY || '',
   };
 
   const forbiddenValues = [
