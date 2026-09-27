@@ -367,3 +367,28 @@ test('a key switch during an in-flight save serializes the A and B writes', asyn
     { key: keyB, name: 'B first' },
   ]);
 });
+
+test('a failed A flush does not block B and remains visible until A retries', async () => {
+  const writes: AutosaveSnapshot<TestPayload>[] = [];
+  let failA = true;
+  const { scheduler, states, timers } = createHarness(async (snapshot) => {
+    writes.push(snapshot);
+    if (snapshot.key.templateId === keyA.templateId && failA) throw new Error('A unavailable');
+  });
+
+  observeEdit(scheduler, 1, keyA, 'A payload');
+  observeEdit(scheduler, 2, keyB, 'B payload');
+  await flushAsyncWork();
+  assert.equal(states.at(-1)?.status, 'error');
+
+  timers.advanceBy(100);
+  await flushAsyncWork();
+  assert.deepEqual(writes.map(({ key }) => key), [keyA, keyB]);
+  assert.equal(states.at(-1)?.status, 'error', 'A failure must remain visible after B saves');
+
+  failA = false;
+  timers.advanceBy(900);
+  await flushAsyncWork();
+  assert.deepEqual(writes.map(({ key }) => key), [keyA, keyB, keyA]);
+  assert.equal(states.at(-1)?.status, 'saved');
+});

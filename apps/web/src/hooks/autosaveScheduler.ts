@@ -67,6 +67,8 @@ export class AutosaveScheduler<T> {
   #activeKey: DraftKey | null = null;
   #pending: AutosaveSnapshot<T> | null = null;
   #previousDocuments: AutosaveSnapshot<T>[] = [];
+  #failedPreviousDocuments: AutosaveSnapshot<T>[] = [];
+  #previousDocumentError: string | null = null;
   #lastSavedAt: Date | null = null;
   #debounceTimer: TimerHandle | null = null;
   #intervalTimer: TimerHandle | null = null;
@@ -127,7 +129,7 @@ export class AutosaveScheduler<T> {
     }
     this.#activeKey = key ? { ...key } : null;
     this.#lastSavedAt = null;
-    this.#emit('idle', null);
+    this.#emit(this.#previousDocumentError ? 'error' : 'idle', this.#previousDocumentError);
     if (this.#previousDocuments.length > 0) void this.saveNow();
   }
 
@@ -150,15 +152,18 @@ export class AutosaveScheduler<T> {
   }
 
   hasPendingChanges(): boolean {
-    return this.#previousDocuments.length > 0 || this.#pending !== null;
+    return this.#previousDocuments.length > 0 || this.#pending !== null
+      || this.#failedPreviousDocuments.length > 0;
   }
 
   async saveNow(): Promise<boolean> {
     if (this.#stopped || this.#isSaving || !this.hasPendingChanges()) return false;
 
     const fromPreviousDocument = this.#previousDocuments.length > 0;
-    const snapshot = fromPreviousDocument ? this.#previousDocuments.shift()! : this.#pending!;
-    if (!fromPreviousDocument) {
+    const fromActiveDocument = !fromPreviousDocument && this.#pending !== null;
+    const snapshot = fromPreviousDocument ? this.#previousDocuments.shift()!
+      : fromActiveDocument ? this.#pending! : this.#failedPreviousDocuments.shift()!;
+    if (fromActiveDocument) {
       this.#pending = null;
       this.#clearDebounce();
     }
@@ -169,23 +174,27 @@ export class AutosaveScheduler<T> {
     try {
       await this.#save(snapshot);
       succeeded = true;
+      if (this.#failedPreviousDocuments.length === 0) this.#previousDocumentError = null;
       if (sameKey(snapshot.key, this.#activeKey)) {
         this.#lastSavedAt = this.#now();
-        this.#emit('saved', null);
+        this.#emit(this.#previousDocumentError ? 'error' : 'saved', this.#previousDocumentError);
+      } else if (!this.#previousDocumentError && !this.#pending && !this.#previousDocuments.length) {
+        this.#emit(this.#lastSavedAt ? 'saved' : 'idle', null);
       }
     } catch (error) {
       if (sameKey(snapshot.key, this.#activeKey)) {
         if (!this.#pending || this.#pending.revision < snapshot.revision) this.#pending = snapshot;
       } else {
-        this.#previousDocuments.unshift(snapshot);
+        this.#failedPreviousDocuments.push(snapshot);
       }
       const message = error instanceof Error ? error.message : 'Erreur autosave';
-      this.#emit('error', sameKey(snapshot.key, this.#activeKey)
-        ? message
-        : `Document précédent : ${message}`);
+      if (!sameKey(snapshot.key, this.#activeKey)) {
+        this.#previousDocumentError = `Document précédent : ${message}`;
+      }
+      this.#emit('error', this.#previousDocumentError ?? message);
     } finally {
       this.#isSaving = false;
-      if (succeeded && this.#previousDocuments.length > 0) void this.saveNow();
+      if (this.#previousDocuments.length > 0) void this.saveNow();
       else if (this.#pending && !this.#debounceTimer
         && (succeeded || this.#pending.revision > snapshot.revision)) this.#scheduleDebounce();
     }
