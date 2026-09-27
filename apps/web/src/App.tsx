@@ -212,7 +212,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Status bar message (ephemeral feedback). */
   const [status, setStatus] = useState('');
   /** Whether unsaved edits exist (warns before destructive resets). */
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirtyState] = useState(false);
+  /** Monotonic signal consumed by autosave so repeated edits remain observable. */
+  const [autosaveChangeVersion, setAutosaveChangeVersion] = useState(0);
+  const setDirty = useCallback((nextDirty: boolean) => {
+    setDirtyState(nextDirty);
+    if (nextDirty) setAutosaveChangeVersion((version) => version + 1);
+  }, []);
   /** Whether the share-collaboration modal is open. */
   const [showShareModal, setShowShareModal] = useState(false);
   /** The current user's role on the active document (owner/editor/filler). */
@@ -284,6 +290,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   const autosaveState = useAutosave(
     dirty,
+    autosaveChangeVersion,
     draftKey,
     buildDraftPayload,
     { enabled: !!currentUser && !!draftKey },
@@ -2283,6 +2290,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    */
   const rotateBy = (deg: 90 | -90) => {
     setRotation((prev) => (((prev + deg) % 360 + 360) % 360) as Rotation);
+    setDirty(true);
   };
 
   /** Whether the current source document is a PDF (as opposed to an image). */
@@ -2419,7 +2427,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           <input
             className="toolbar-name-input"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              setDirty(true);
+            }}
             placeholder={t('toolbar.templateNamePlaceholder')}
           />
           {/* Save draft icon button */}
@@ -2496,6 +2507,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             <span>{rotation}°</span>
             <button onClick={() => rotateBy(90)} title={t('toolbar.rotateRight')}> <RotateRightIcon size={16} /></button>
           </div>
+        </div>
+
+        <div className="toolbar-autosave" aria-live="polite">
+          <AutosaveIndicator
+            status={autosaveState.status}
+            lastSavedAt={autosaveState.lastSavedAt}
+            errorMessage={autosaveState.errorMessage}
+          />
         </div>
 
         {/* ── Right: User menu ── */}
@@ -2692,7 +2711,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               <label>
                 {t('panel.font')}
                 <select value={preset.fontFamily}
-                  onChange={(e) => setPreset((p) => ({ ...p, fontFamily: e.target.value }))}>
+                  onChange={(e) => {
+                    setPreset((p) => ({ ...p, fontFamily: e.target.value }));
+                    setDirty(true);
+                  }}>
                   {['Arial, sans-serif', 'Helvetica, sans-serif', 'Times New Roman, serif', 'Courier New, monospace', 'Georgia, serif', 'Verdana, sans-serif'].map((f) => (
                     <option key={f} value={f}>{f.split(',')[0]}</option>
                   ))}
@@ -2701,7 +2723,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               <label>
                 {t('panel.fontSize')}
                 <select value={preset.fontSize}
-                  onChange={(e) => setPreset((p) => ({ ...p, fontSize: Number(e.target.value) }))}>
+                  onChange={(e) => {
+                    setPreset((p) => ({ ...p, fontSize: Number(e.target.value) }));
+                    setDirty(true);
+                  }}>
                   {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32].map((s) => (
                     <option key={s} value={s}>{s}px</option>
                   ))}
@@ -2710,7 +2735,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               <label>
                 {t('panel.fontWeight')}
                 <select value={preset.fontWeight}
-                  onChange={(e) => setPreset((p) => ({ ...p, fontWeight: e.target.value as 'normal' | 'bold' }))}>
+                  onChange={(e) => {
+                    setPreset((p) => ({ ...p, fontWeight: e.target.value as 'normal' | 'bold' }));
+                    setDirty(true);
+                  }}>
                   <option value="normal">{t('panel.fontWeightNormal')}</option>
                   <option value="bold">{t('panel.fontWeightBold')}</option>
                 </select>
@@ -2718,12 +2746,16 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
               <label>
                 {t('panel.color')}
                 <input type="color" value={preset.color}
-                  onChange={(e) => setPreset((p) => ({ ...p, color: e.target.value }))} />
+                  onChange={(e) => {
+                    setPreset((p) => ({ ...p, color: e.target.value }));
+                    setDirty(true);
+                  }} />
               </label>
               <button className="panel-action-btn" onClick={() => {
                 setFields((prev) => prev.map((f) => ({
                   ...f, style: { ...f.style, fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, color: preset.color }
                 })));
+                setDirty(true);
                 setStatus(t('status.presetApplied'));
               }}>{t('panel.applyToAllFields')}</button>
             </details>
@@ -2945,14 +2977,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             </div>
           ))}
 
-          {/* ── Status bar: autosave + status, below all pages ── */}
+          {/* ── Status bar: general status, below all pages ── */}
           <div className="editor-status-bar">
             <span className="toolbar-status-text">{status || t('status.ready')}</span>
-            <AutosaveIndicator
-              status={autosaveState.status}
-              lastSavedAt={autosaveState.lastSavedAt}
-              errorMessage={autosaveState.errorMessage}
-            />
           </div>
         </div>
       </section>
@@ -3019,4 +3046,3 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     </main>
   );
 }
-

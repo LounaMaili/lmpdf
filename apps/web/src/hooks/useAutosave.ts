@@ -1,18 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { upsertDraft, type DraftPayload } from '../api';
-import type { FieldModel } from '../types';
+import { AutosaveScheduler, type AutosaveState } from './autosaveScheduler';
 
-export type AutosaveStatus =
-  | 'idle'
-  | 'saving'
-  | 'saved'
-  | 'error';
-
-interface AutosaveState {
-  status: AutosaveStatus;
-  lastSavedAt: Date | null;
-  errorMessage: string | null;
-}
+export type { AutosaveStatus } from './autosaveScheduler';
 
 interface AutosaveOptions {
   /** Debounce delay after last change (ms). Default 2000. */
@@ -35,6 +25,7 @@ interface AutosaveOptions {
  */
 export function useAutosave(
   dirty: boolean,
+  changeVersion: number,
   draftKey: { templateId?: string; sourceFileId?: string } | null,
   getData: () => DraftPayload,
   options: AutosaveOptions = {},
@@ -51,11 +42,7 @@ export function useAutosave(
     errorMessage: null,
   });
 
-  // Track whether there are unsaved changes since last autosave
-  const hasPendingChanges = useRef(false);
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const intervalTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isSaving = useRef(false);
+  const schedulerRef = useRef<AutosaveScheduler | null>(null);
   const getDataRef = useRef(getData);
   const draftKeyRef = useRef(draftKey);
 
@@ -63,62 +50,39 @@ export function useAutosave(
   getDataRef.current = getData;
   draftKeyRef.current = draftKey;
 
-  // Mark pending when dirty changes
-  useEffect(() => {
-    if (dirty) {
-      hasPendingChanges.current = true;
-    }
-  }, [dirty]);
-
-  const performSave = useCallback(async () => {
-    const key = draftKeyRef.current;
-    if (!key || (!key.templateId && !key.sourceFileId)) return;
-    if (!hasPendingChanges.current) return;
-    if (isSaving.current) return;
-
-    isSaving.current = true;
-    setState((s) => ({ ...s, status: 'saving', errorMessage: null }));
-
-    try {
-      const data = getDataRef.current();
-      await upsertDraft(key, data);
-      hasPendingChanges.current = false;
-      const now = new Date();
-      setState({ status: 'saved', lastSavedAt: now, errorMessage: null });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erreur autosave';
-      setState((s) => ({ ...s, status: 'error', errorMessage: msg }));
-    } finally {
-      isSaving.current = false;
-    }
-  }, []);
-
-  // Debounce: reset timer on each dirty change
-  useEffect(() => {
-    if (!enabled || !dirty) return;
-
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      performSave();
-    }, debounceMs);
-
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, [dirty, enabled, debounceMs, performSave]);
-
-  // Periodic interval
+  // Create one scheduler for the current timing configuration.
   useEffect(() => {
     if (!enabled) return;
 
-    intervalTimer.current = setInterval(() => {
-      performSave();
-    }, intervalMs);
+    const initialRevision = dirty ? Math.max(0, changeVersion - 1) : changeVersion;
+    const scheduler = new AutosaveScheduler({
+      debounceMs,
+      intervalMs,
+      save: async () => {
+        const key = draftKeyRef.current;
+        if (!key || (!key.templateId && !key.sourceFileId)) return;
+        await upsertDraft(key, getDataRef.current());
+      },
+      onStateChange: setState,
+    }, initialRevision);
+
+    schedulerRef.current = scheduler;
+    scheduler.start();
+    if (dirty) scheduler.notifyChange(changeVersion);
 
     return () => {
-      if (intervalTimer.current) clearInterval(intervalTimer.current);
+      scheduler.stop();
+      if (schedulerRef.current === scheduler) schedulerRef.current = null;
     };
-  }, [enabled, intervalMs, performSave]);
+  }, [enabled, debounceMs, intervalMs]);
+
+  // A monotonically increasing version signals every edit, even while dirty stays true.
+  useEffect(() => {
+    const scheduler = schedulerRef.current;
+    if (!enabled || !scheduler) return;
+    if (dirty) scheduler.notifyChange(changeVersion);
+    else scheduler.resetPending(changeVersion);
+  }, [dirty, changeVersion, enabled]);
 
   // visibilitychange + pagehide: save when user switches tab or navigates away
   useEffect(() => {
@@ -126,13 +90,13 @@ export function useAutosave(
 
     const handleVisibility = () => {
       if (document.visibilityState === 'hidden') {
-        performSave();
+        void schedulerRef.current?.saveNow();
       }
     };
 
     const handlePageHide = () => {
       // Use sendBeacon-style sync save for pagehide
-      performSave();
+      void schedulerRef.current?.saveNow();
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
@@ -142,7 +106,7 @@ export function useAutosave(
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('pagehide', handlePageHide);
     };
-  }, [enabled, performSave]);
+  }, [enabled]);
 
   // beforeunload warning when dirty
   useEffect(() => {
@@ -166,12 +130,12 @@ export function useAutosave(
     prevKeyRef.current = draftKey;
     if (prev && (prev.templateId !== draftKey?.templateId || prev.sourceFileId !== draftKey?.sourceFileId)) {
       // Key changed: save previous if pending
-      if (hasPendingChanges.current) {
-        performSave();
+      if (schedulerRef.current?.hasPendingChanges()) {
+        void schedulerRef.current.saveNow();
       }
       setState({ status: 'idle', lastSavedAt: null, errorMessage: null });
     }
-  }, [draftKey, performSave]);
+  }, [draftKey]);
 
   return state;
 }
