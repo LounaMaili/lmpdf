@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { getAdminOverview, getAdminSettings, saveAdminSettings, testLdapConnection, testStorageConnection, validateExportConfig, previewExportResolve, getExportLogs, getExportStats, purgeExportLogs } from '../api';
+import { getAdminOverview, getAdminSettings, saveAdminSettings, testLdapConnection, validateExportConfig, previewExportResolve, getExportLogs, getExportStats, purgeExportLogs } from '../api';
 import type { ExportLogEntry, ExportStatsResponse } from '../api';
 import { useTranslation } from '../i18n';
 
@@ -278,25 +278,6 @@ export default function AdminSettingsPanel({ onClose }: Props) {
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          </details>
-
-          {/* Storage */}
-          <details className="admin-section">
-            <summary className="admin-section-summary">💾 {t('admin.storageTitle')}</summary>
-            <div className="admin-section-content">
-              <div className="admin-grid">
-                <label>{t('admin.storageEndpoint')}<input value={settings.storage.endpoint || ''} onChange={(e) => update('storage.endpoint', e.target.value)} placeholder="https://s3.example.com" /></label>
-                <label>{t('admin.storageBucket')}<input value={settings.storage.bucket || ''} onChange={(e) => update('storage.bucket', e.target.value)} /></label>
-                <label>{t('admin.storageRegion')}<input value={settings.storage.region || ''} onChange={(e) => update('storage.region', e.target.value)} /></label>
-              </div>
-              <div className="admin-actions">
-                <button onClick={async () => {
-                  setStatus(t('admin.testingStorage'));
-                  const r = await testStorageConnection().catch((e) => ({ ok: false, error: e.message }));
-                  setStatus(r.ok ? t('admin.storageOk', { status: r.status }) : t('admin.storageKo', { error: r.error }));
-                }}>{t('admin.testStorage')}</button>
               </div>
             </div>
           </details>

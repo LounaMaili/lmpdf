@@ -299,16 +299,6 @@ export async function getAdminOverview() {
   return res.json();
 }
 
-export async function testStorageConnection() {
-  const res = await fetch(`${API_URL}/admin/settings/test-storage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({}),
-  });
-  if (!res.ok) throw new Error('Test stockage impossible');
-  return res.json();
-}
-
 export async function testLdapConnection(username: string, password: string) {
   const res = await fetch(`${API_URL}/admin/settings/test-ldap`, {
     method: 'POST',

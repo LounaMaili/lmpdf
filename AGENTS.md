@@ -38,8 +38,8 @@ la structure actuels : certaines descriptions sont historiques.
 - Ne pas contourner JWT, MFA, WebAuthn ou LDAP. Maintenir la sanitation du
   contenu rich-text côté web et API, y compris avant l'export PDF.
 - Garder `react-pdf` et `pdfjs-dist` compatibles ; ne pas modifier leurs
-  versions séparément. Garage est configuré comme service S3 compatible, mais
-  les uploads actuels utilisent un volume local partagé entre API et vision.
+  versions séparément. Les uploads utilisent le volume local `uploads-data`,
+  partagé entre API et vision ; PostgreSQL conserve leurs métadonnées.
 
 ## GitHub est la source de vérité
 
@@ -110,13 +110,15 @@ explicite.
 
 Ne jamais afficher, copier ou committer de secrets, ni le contenu des fichiers
 `.env`. Ne pas inclure de jeton d'accès dans l'URL d'un remote Git. Ne pas
-committer `.env`, `.env.*`, clés JWT/MFA/S3/Garage, identifiants LDAP, mots de
-passe, uploads, exports utilisateur, dumps ou volumes Docker. Les dossiers
-`infra/postgres-data/`, `infra/minio-data/`, `infra/garage-data/`,
-`infra/garage-meta/` et `uploads/` sont des données runtime, même si certains
-fichiers historiques sont déjà suivis par Git. Documenter toute nouvelle
-variable dans `.env.example` avec une valeur d'exemple non sensible. Ne pas
-exposer de données personnelles de PDF réels dans les logs, captures ou tests.
+committer `.env`, `.env.*`, clés JWT/MFA, identifiants LDAP, mots de passe,
+uploads, exports utilisateur, dumps ou volumes Docker. `infra/postgres-data/`,
+`uploads/` et le volume Docker `uploads-data` sont des données runtime ;
+PostgreSQL et `uploads-data` sont les deux persistances critiques à préserver.
+Les anciens répertoires locaux `infra/minio-data/`, `infra/garage-data/`,
+`infra/garage-meta/` et `infra/redis-data/` restent ignorés et ne font pas partie
+de l'infrastructure active. Documenter toute nouvelle variable dans
+`.env.example` avec une valeur d'exemple non sensible. Ne pas exposer de données
+personnelles de PDF réels dans les logs, captures ou tests.
 
 ## Rapport de chaque itération
 

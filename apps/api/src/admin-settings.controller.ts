@@ -26,13 +26,6 @@ function defaults(): AdminSettings {
   const ldapEnabled = (process.env.LDAP_ENABLED || 'false') === 'true';
 
   return {
-    storage: {
-      provider: 'garage',
-      endpoint: process.env.S3_ENDPOINT || 'http://garage:3900',
-      bucket: process.env.S3_BUCKET || 'lmpdf',
-      region: process.env.S3_REGION || 'garage',
-      forcePathStyle: (process.env.S3_FORCE_PATH_STYLE || 'true') === 'true',
-    },
     auth: {
       mode: (process.env.AUTH_MODE as 'local' | 'ldap' | 'hybrid' | undefined) || (ldapEnabled ? 'hybrid' : 'local'),
       allowLocalAdminFallback: (process.env.AUTH_ALLOW_LOCAL_ADMIN_FALLBACK || 'true') === 'true',
@@ -98,7 +91,6 @@ export class AdminSettingsController {
       const json = JSON.parse(raw) as Partial<AdminSettings>;
       const d = defaults();
       return {
-        storage: { ...d.storage, ...(json.storage || {}) },
         auth: { ...d.auth, ...(json.auth || {}) },
         mfa: { ...d.mfa, ...(json.mfa || {}) },
         ldap: { ...d.ldap, ...(json.ldap || {}) },
@@ -139,7 +131,6 @@ export class AdminSettingsController {
     }
 
     const merged: AdminSettings = {
-      storage: { ...current.storage, ...(body.storage || {}) },
       auth: { ...current.auth, ...(body.auth || {}) },
       mfa: { ...current.mfa, ...(body.mfa || {}) },
       ldap: {
@@ -185,27 +176,9 @@ export class AdminSettingsController {
       authMode: settings.auth.mode,
       organizationMode: settings.organization.mode,
       ldapEnabled: settings.ldap.enabled,
-      storageEndpoint: settings.storage.endpoint,
-      bucket: settings.storage.bucket,
       defaultPermissions: DEFAULT_ROLE_PERMISSIONS,
       configuredPermissions: settings.permissions,
     };
-  }
-
-  @Post('test-storage')
-  async testStorage() {
-    const settings = await loadRuntimeSettings();
-    const endpoint = settings.storage.endpoint;
-
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(endpoint, { method: 'GET', signal: controller.signal as any });
-      clearTimeout(timeout);
-      return { ok: true, endpoint, status: res.status };
-    } catch (e: any) {
-      return { ok: false, endpoint, error: e?.message || 'Storage unreachable' };
-    }
   }
 
   @Post('test-ldap')
