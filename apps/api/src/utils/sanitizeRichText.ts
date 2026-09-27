@@ -7,7 +7,7 @@
  * Uses sanitize-html with a strict whitelist matching the editor's formatting.
  */
 
-import sanitizeHtml from 'sanitize-html';
+import * as sanitizeHtml from 'sanitize-html';
 
 const ALLOWED_TAGS = [
   'b', 'strong', 'i', 'em', 'u', 's', 'span', 'br', 'div', 'mark',
