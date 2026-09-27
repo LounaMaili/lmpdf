@@ -293,7 +293,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     autosaveChangeVersion,
     draftKey,
     buildDraftPayload,
-    { enabled: !!currentUser && !!draftKey },
+    { enabled: !!currentUser },
   );
 
   /**
@@ -2058,7 +2058,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     setActivePage(1);
     handleSelectField(null);
     setFusedUiState({});
-    setDirty(isBlank ? false : true);
+    // Opening a template or document is a clean load; only later edits create a draft.
+    setDirty(false);
 
     if (tpl.sourceFileId) {
       setStatus(t('status.loadingDocument'));

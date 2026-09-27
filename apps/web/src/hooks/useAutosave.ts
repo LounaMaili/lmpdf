@@ -42,33 +42,24 @@ export function useAutosave(
     errorMessage: null,
   });
 
-  const schedulerRef = useRef<AutosaveScheduler | null>(null);
-  const getDataRef = useRef(getData);
-  const draftKeyRef = useRef(draftKey);
-
-  // Keep refs in sync
-  getDataRef.current = getData;
-  draftKeyRef.current = draftKey;
+  const schedulerRef = useRef<AutosaveScheduler<DraftPayload> | null>(null);
 
   // Create one scheduler for the current timing configuration.
   useEffect(() => {
     if (!enabled) return;
 
     const initialRevision = dirty ? Math.max(0, changeVersion - 1) : changeVersion;
-    const scheduler = new AutosaveScheduler({
+    const scheduler = new AutosaveScheduler<DraftPayload>({
       debounceMs,
       intervalMs,
-      save: async () => {
-        const key = draftKeyRef.current;
-        if (!key || (!key.templateId && !key.sourceFileId)) return;
-        await upsertDraft(key, getDataRef.current());
+      save: async (snapshot) => {
+        await upsertDraft(snapshot.key, snapshot.data);
       },
       onStateChange: setState,
     }, initialRevision);
 
     schedulerRef.current = scheduler;
     scheduler.start();
-    if (dirty) scheduler.notifyChange(changeVersion);
 
     return () => {
       scheduler.stop();
@@ -76,13 +67,12 @@ export function useAutosave(
     };
   }, [enabled, debounceMs, intervalMs]);
 
-  // A monotonically increasing version signals every edit, even while dirty stays true.
+  // The scheduler captures the key and payload with each new edit revision.
   useEffect(() => {
     const scheduler = schedulerRef.current;
     if (!enabled || !scheduler) return;
-    if (dirty) scheduler.notifyChange(changeVersion);
-    else scheduler.resetPending(changeVersion);
-  }, [dirty, changeVersion, enabled]);
+    scheduler.observe({ dirty, revision: changeVersion, key: draftKey, getData });
+  }, [dirty, changeVersion, draftKey, getData, enabled]);
 
   // visibilitychange + pagehide: save when user switches tab or navigates away
   useEffect(() => {
@@ -122,20 +112,6 @@ export function useAutosave(
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [dirty]);
-
-  // Force save when fields change to a new key (template/doc change)
-  const prevKeyRef = useRef(draftKey);
-  useEffect(() => {
-    const prev = prevKeyRef.current;
-    prevKeyRef.current = draftKey;
-    if (prev && (prev.templateId !== draftKey?.templateId || prev.sourceFileId !== draftKey?.sourceFileId)) {
-      // Key changed: save previous if pending
-      if (schedulerRef.current?.hasPendingChanges()) {
-        void schedulerRef.current.saveNow();
-      }
-      setState({ status: 'idle', lastSavedAt: null, errorMessage: null });
-    }
-  }, [draftKey]);
 
   return state;
 }
