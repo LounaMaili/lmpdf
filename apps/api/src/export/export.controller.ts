@@ -26,6 +26,7 @@ import { writeExportFile } from './export-writer';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { ExportRequestDto } from './dto/export-request.dto';
+import { ExportCapacityInterceptor, MAX_EXPORT_BYTES } from './export-capacity.interceptor';
 
 // ── Helper: build ExportContext from JWT user + optional overrides ──
 async function buildExportContext(
@@ -215,7 +216,7 @@ export class ExportController {
       templateId: documentContext.templateId,
     });
 
-    const result = resolveExport(exportCfg, ctx);
+    const result = resolveExport(exportCfg, ctx, body.outputFileName);
     return { ...result, enabled: true };
   }
 
@@ -235,10 +236,12 @@ export class ExportController {
    */
   @Post('run')
   @UseInterceptors(
+    ExportCapacityInterceptor,
     FileInterceptor('file', {
       // Parse multipart without writing untrusted uploads to disk.
       storage: memoryStorage(),
-      limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+      // Busboy emits its limit event when reaching this value (exclusive bound).
+      limits: { fileSize: MAX_EXPORT_BYTES + 1, files: 1, fields: 4, parts: 5, fieldSize: 1024, fieldNameSize: 100 },
     }),
   )
   async runExport(
@@ -268,7 +271,7 @@ export class ExportController {
         templateId: documentContext.templateId,
       });
 
-      const resolved = resolveExport(exportCfg, ctx);
+      const resolved = resolveExport(exportCfg, ctx, body.outputFileName);
 
       if (!resolved.matched || resolved.errors.length > 0) {
         // Log the error

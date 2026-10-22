@@ -4,6 +4,7 @@
 
 import { promises as fs } from 'fs';
 import { dirname, join, basename, extname } from 'path';
+import { randomUUID } from 'crypto';
 import type { ConflictStrategy } from './export-types';
 
 export interface WriteResult {
@@ -15,34 +16,6 @@ export interface WriteResult {
   skipped?: boolean;
   /** True when conflict strategy was 'rename' and a suffix was added */
   renamed?: boolean;
-}
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await fs.access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Find the next available path by appending _1, _2, … before the extension.
- * e.g. report.pdf → report_1.pdf → report_2.pdf
- */
-async function findRenamedPath(fullPath: string): Promise<string> {
-  const dir = dirname(fullPath);
-  const ext = extname(fullPath);
-  const base = basename(fullPath, ext);
-
-  for (let i = 1; i < 10000; i++) {
-    const candidate = join(dir, `${base}_${i}${ext}`);
-    if (!(await fileExists(candidate))) return candidate;
-  }
-
-  // Fallback: timestamp suffix
-  const ts = Date.now();
-  return join(dir, `${base}_${ts}${ext}`);
 }
 
 /**
@@ -60,31 +33,24 @@ export async function writeExportFile(
   // Ensure parent directories exist
   await fs.mkdir(dirname(fullPath), { recursive: true });
 
-  const exists = await fileExists(fullPath);
-
-  if (exists) {
-    switch (conflictStrategy) {
-      case 'skip':
-        return { written: false, finalPath: fullPath, skipped: true };
-
-      case 'overwrite':
-        await fs.writeFile(fullPath, data);
-        return { written: true, finalPath: fullPath };
-
-      case 'rename': {
-        const renamed = await findRenamedPath(fullPath);
-        await fs.writeFile(renamed, data);
-        return { written: true, finalPath: renamed, renamed: true };
-      }
-
-      default:
-        // Fallback to overwrite for unknown strategies
-        await fs.writeFile(fullPath, data);
-        return { written: true, finalPath: fullPath };
-    }
+  if (conflictStrategy === 'overwrite') {
+    await fs.writeFile(fullPath, data);
+    return { written: true, finalPath: fullPath };
   }
 
-  // No conflict: write directly
-  await fs.writeFile(fullPath, data);
-  return { written: true, finalPath: fullPath };
+  const directory = dirname(fullPath), extension = extname(fullPath);
+  const stem = basename(fullPath, extension);
+  for (let index = 0; index <= 10000; index++) {
+    const candidate = index === 0 ? fullPath : join(directory,
+      `${stem}_${index === 10000 ? randomUUID() : index}${extension}`);
+    try {
+      // Exclusive creation prevents concurrent rename/skip requests overwriting each other.
+      await fs.writeFile(candidate, data, { flag: 'wx' });
+      return { written: true, finalPath: candidate, renamed: index > 0 };
+    } catch (error: any) {
+      if (error.code !== 'EEXIST') throw error;
+      if (conflictStrategy === 'skip') return { written: false, finalPath: fullPath, skipped: true };
+    }
+  }
+  throw new Error('Impossible de trouver un nom libre pour cet export');
 }

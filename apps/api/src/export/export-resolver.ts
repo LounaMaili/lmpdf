@@ -7,6 +7,7 @@ import type {
   ExportSettings,
 } from './export-types';
 import { sanitiseSegment, validateExportPath } from './export-security';
+import { documentNameStem, pdfOutputFileName } from './export-filename';
 
 // ── Placeholder resolution ──────────────────────────────────────
 
@@ -73,6 +74,7 @@ function ruleMatches(rule: ExportRule, ctx: ExportContext): boolean {
 export function resolveExport(
   settings: ExportSettings,
   ctx: ExportContext,
+  outputFileName?: string,
 ): ExportResolveResult {
   const errors: string[] = [];
 
@@ -111,7 +113,9 @@ export function resolveExport(
 
   // Resolve placeholders
   const resolvedPath = resolvePlaceholders(dest.pathTemplate, ctx);
-  const resolvedFileName = resolvePlaceholders(dest.fileNameTemplate, ctx) + '.pdf';
+  const resolvedFileName = pdfOutputFileName(outputFileName ?? resolvePlaceholders(dest.fileNameTemplate, {
+    ...ctx, templateName: documentNameStem(ctx.templateName || 'document'),
+  }));
 
   const fullPath = join(dest.rootPath, resolvedPath, resolvedFileName);
 

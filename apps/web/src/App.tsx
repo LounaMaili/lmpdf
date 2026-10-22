@@ -2247,7 +2247,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    */
   useEffect(() => {
     if (!canExport || !sourceUrl) { setServerExportAvailable(false); return; }
-    resolveExportDestination({ sourceFileId, templateId: loadedTemplateId || undefined })
+    resolveExportDestination({ sourceFileId, templateId: loadedTemplateId || undefined, outputFileName: name })
       .then((r) => setServerExportAvailable(r.enabled === true && r.matched === true && r.errors.length === 0))
       .catch(() => setServerExportAvailable(false));
   }, [canExport, sourceUrl, sourceFileId, name, loadedTemplateId]);
@@ -2271,6 +2271,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       const result = await runServerExport(pdfBlob, {
         sourceFileId,
         templateId: loadedTemplateId || undefined,
+        outputFileName: name,
       });
 
       if (result.skipped) {

@@ -14,4 +14,10 @@ export class ExportRequestDto {
   @IsString()
   @MaxLength(200)
   templateName?: string;
+
+  // Presentation only: never used for permission checks, directories or rule matching.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  outputFileName?: string;
 }

@@ -388,6 +388,7 @@ export type ExportRunResult = {
 export async function resolveExportDestination(context: {
   sourceFileId?: string;
   templateId?: string;
+  outputFileName?: string;
 }): Promise<ExportResolveResult> {
   const res = await fetch(`${API_URL}/export/resolve`, {
     method: 'POST',
@@ -406,12 +407,13 @@ export async function resolveExportDestination(context: {
  */
 export async function runServerExport(
   pdfBlob: Blob,
-  context: { sourceFileId?: string; templateId?: string },
+  context: { sourceFileId?: string; templateId?: string; outputFileName?: string },
 ): Promise<ExportRunResult> {
   const formData = new FormData();
   formData.append('file', pdfBlob, 'export.pdf');
   if (context.sourceFileId) formData.append('sourceFileId', context.sourceFileId);
   if (context.templateId) formData.append('templateId', context.templateId);
+  if (context.outputFileName) formData.append('outputFileName', context.outputFileName);
 
   const res = await fetch(`${API_URL}/export/run`, {
     method: 'POST',
