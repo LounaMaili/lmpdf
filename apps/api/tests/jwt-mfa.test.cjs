@@ -111,6 +111,7 @@ before(async () => {
   jwt = app.get(JwtService);
 });
 beforeEach(() => {
+  fs.rmSync(path.join(directory, 'config'), { recursive: true, force: true });
   lookupCount = 0;
   businessCalls = 0; lockCalls = 0; transactions = Promise.resolve();
   backupCodes = [];
@@ -528,4 +529,19 @@ test('policy optional: registration still issues ordinary access', async () => {
   process.env.ALLOW_SELF_REGISTER = 'true';
   const result = await request('auth/register', { body: { email: 'new@synthetic.invalid', password, displayName: 'Synthetic' } });
   await expectAccess(result, result.body.user.id);
+});
+
+test('admin settings file: required policy overrides optional environment and restricts access', async () => {
+  const { writeAdminSettingsFile } = require('../dist/config/settings-file');
+  await writeAdminSettingsFile({ auth: { mode: 'local' }, mfa: { policy: 'required' } });
+  assert.equal(process.env.MFA_POLICY, 'optional');
+  const result = await login('ordinary');
+  assert.equal(result.body.token, undefined); assert.equal(typeof result.body.mfaEnrollmentToken, 'string');
+  assert.equal((await request('drafts', { bearer: result.body.mfaEnrollmentToken })).status, 403);
+});
+test('admin settings corrupt file: authentication fails closed and preserves the file', async () => {
+  fs.mkdirSync('config'); fs.writeFileSync('config/admin-settings.json', '{ invalid synthetic JSON');
+  const result = await login('ordinary'); assert.equal(result.status, 500); assert.equal(result.body.token, undefined);
+  assert.equal((await request('drafts', { bearer: token('ordinary') })).status, 500); assert.equal(businessCalls, 0);
+  assert.equal(fs.readFileSync('config/admin-settings.json', 'utf8'), '{ invalid synthetic JSON');
 });

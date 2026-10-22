@@ -95,3 +95,24 @@ uploads-data et les sauvegardes historiques. Aucun déploiement n'est effectué
 pendant cette tâche. Les utilisateurs concernés par la politique locale obligatoire
 devront se reconnecter, et les non enrôlés devront activer leur facteur avant
 l'accès aux documents.
+
+## Validation combinée avec la persistance administrateur
+
+Le main contenant #8 est intégré sans réécriture. La suite HTTP ajoute la lecture
+réelle d'un admin-settings.json synthétique : la politique required du fichier
+prime sur l'environnement optional, et un JSON corrompu bloque l'authentification
+sans être écrasé. Les suites auth/settings et frontend sont rejouées ensemble.
+
+`sh apps/api/tests/isolated-postgres.sh <image-build>` démarre PostgreSQL 16 sur
+un réseau interne dédié, sans port publié, avec PGDATA en tmpfs. Les migrations
+existantes sont appliquées uniquement à cette base jetable puis un diff vérifie
+l'absence d'écart avec schema.prisma. Aucun fichier de migration n'est modifié.
+Le script n'utilise aucun .env ni volume applicatif ; il supprime uniquement son
+conteneur et son réseau temporaires. Les clients Prisma refusent toute URL qui
+ne désigne pas le serveur et la base synthétiques explicitement attendus.
+
+Les sept tests PostgreSQL couvrent les activations initiales réelles TOTP et
+WebAuthn, la concurrence TOTP/TOTP et TOTP/WebAuthn, l'attente FOR UPDATE observée
+dans pg_stat_activity avec des clients indépendants, le refus d'un second facteur
+initial, le rollback après écritures et la désactivation pendant une attente de
+verrou. Les secrets/facteurs et comptes sont exclusivement synthétiques.
