@@ -15,7 +15,8 @@
     "lint": "echo 'todo lint api'",
     "format": "echo 'todo format api'",
     "test:permissions": "node --test tests/document-permissions.test.cjs",
-    "test:exports": "node --test tests/export-boundaries.test.cjs"
+    "test:exports": "node --test tests/export-boundaries.test.cjs",
+    "test:export-paths": "node --test tests/export-paths.test.cjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.13",
