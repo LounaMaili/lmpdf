@@ -9,6 +9,11 @@ export function documentNameStem(name: string): string {
 export function pdfOutputFileName(name: string): string {
   const cleaned = sanitiseSegment((name.trim() || 'document').normalize('NFC').replace(/[\\/]/g, '_'))
     .replace(/[. ]+$/g, '');
-  const stem = documentNameStem(cleaned).slice(0, 180).replace(/[. ]+$/g, '');
-  return `${stem || 'document'}.pdf`;
+  let stem = '', bytes = 0;
+  for (const character of documentNameStem(cleaned)) {
+    const length = Buffer.byteLength(character, 'utf8');
+    if (bytes + length > 180) break;
+    stem += character; bytes += length;
+  }
+  return `${stem.replace(/[. ]+$/g, '') || 'document'}.pdf`;
 }

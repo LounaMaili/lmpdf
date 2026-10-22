@@ -413,7 +413,7 @@ export async function runServerExport(
   formData.append('file', pdfBlob, 'export.pdf');
   if (context.sourceFileId) formData.append('sourceFileId', context.sourceFileId);
   if (context.templateId) formData.append('templateId', context.templateId);
-  if (context.outputFileName) formData.append('outputFileName', context.outputFileName);
+  if (context.outputFileName !== undefined) formData.append('outputFileName', context.outputFileName);
 
   const res = await fetch(`${API_URL}/export/run`, {
     method: 'POST',

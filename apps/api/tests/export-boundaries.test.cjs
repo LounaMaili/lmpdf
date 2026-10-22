@@ -84,6 +84,13 @@ for (const [input, expected] of [
   ['..', '_.pdf'], ['', 'document.pdf'],
 ]) test(`nom de sortie : ${JSON.stringify(input)}`, () => assert.equal(pdfOutputFileName(input), expected));
 
+test('nom UTF-8 borné en octets, sans couper un caractère', () => {
+  const result = pdfOutputFileName('é漢😀'.repeat(100) + '.pdf');
+  assert.ok(Buffer.byteLength(result, 'utf8') <= 184);
+  assert.equal(result.includes('\uFFFD'), false);
+  assert.equal(result.endsWith('.pdf'), true);
+});
+
 test('HTTP : plafond fichier 25 Mio, sous enveloppe proxy 30 Mio', async () => {
   assert.equal(MAX_EXPORT_BYTES, 25 * 1024 * 1024);
   const nginx = fs.readFileSync(process.env.LMPDF_TEST_NGINX_CONFIG ?? path.resolve(__dirname, '../../web/nginx.prod.conf'), 'utf8');
@@ -176,6 +183,17 @@ test('HTTP : nom de sortie ne constitue ni autorisation ni règle de destination
 test('HTTP : nom de sortie trop long refusé', async () => {
   fakeWrite(); assert.equal((await run(form({ fields: { sourceFileId: docId, outputFileName: 'x'.repeat(201) } }))).status, 400);
   noDiskOutput();
+});
+test('HTTP : nom vide normalisé pareil dans resolve et run', async () => {
+  fakeWrite();
+  const body = { sourceFileId: docId, outputFileName: '' };
+  const resolved = await fetch(`${base}/api/export/resolve`, { method: 'POST',
+    headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal(resolved.status, 201);
+  const executed = await run(form({ fields: body }));
+  assert.equal(executed.status, 201);
+  assert.equal((await resolved.json()).resolvedFileName, 'document.pdf');
+  assert.equal(path.basename(executed.body.finalPath), 'document.pdf');
 });
 test('HTTP : fallback document et template ne doublent plus les extensions', async () => {
   fakeWrite();
