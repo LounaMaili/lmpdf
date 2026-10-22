@@ -11,6 +11,7 @@ import { LoginDto } from './dto/login.dto';
 import { Public } from './public.decorator';
 import { resolveRolePermissions } from '../config/permission-matrix';
 import { loadRuntimeSettings } from '../config/runtime-settings';
+import { ACCESS_TOKEN_PURPOSE, MFA_CHALLENGE_PURPOSE, isMfaChallengePayload } from './jwt-purpose';
 
 // Messages d'erreur normalisés — anti-enumération
 const AUTH_FAIL = 'Identifiants invalides';
@@ -95,7 +96,7 @@ export class AuthController {
     if ((user.mfaEnabled && user.mfaSecret) || hasWebauthn) {
       // Retourner un challenge MFA au lieu du token
       const mfaChallengeToken = this.jwtService.sign(
-        { sub: user.id, email: user.email, role: user.role, mfaChallenge: true },
+        { sub: user.id, email: user.email, role: user.role, purpose: MFA_CHALLENGE_PURPOSE, mfaChallenge: true },
         { expiresIn: '2m' },
       );
       
@@ -136,14 +137,14 @@ export class AuthController {
     }
 
     // Vérifier le challenge token
-    let payload: { sub: string; email: string; role: string; mfaChallenge?: boolean };
+    let payload: unknown;
     try {
       payload = this.jwtService.verify(body.mfaChallengeToken);
     } catch {
       throw new UnauthorizedException(MFA_FAIL);
     }
 
-    if (!payload.mfaChallenge) {
+    if (!isMfaChallengePayload(payload)) {
       throw new UnauthorizedException(MFA_FAIL);
     }
 
@@ -180,14 +181,14 @@ export class AuthController {
       throw new UnauthorizedException(WEBAUTHN_FAIL);
     }
 
-    let payload: { sub: string; email: string; role: string; mfaChallenge?: boolean };
+    let payload: unknown;
     try {
       payload = this.jwtService.verify(body.mfaChallengeToken);
     } catch {
       throw new UnauthorizedException(WEBAUTHN_FAIL);
     }
 
-    if (!payload.mfaChallenge) {
+    if (!isMfaChallengePayload(payload)) {
       throw new UnauthorizedException(WEBAUTHN_FAIL);
     }
 
@@ -442,6 +443,6 @@ export class AuthController {
   }
 
   private signToken(user: { id: string; email: string; role: string }) {
-    return this.jwtService.sign({ sub: user.id, email: user.email, role: user.role });
+    return this.jwtService.sign({ sub: user.id, email: user.email, role: user.role, purpose: ACCESS_TOKEN_PURPOSE });
   }
 }
