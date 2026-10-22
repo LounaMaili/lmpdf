@@ -16,6 +16,7 @@ services:
     container_name: lmpdf-backend
     volumes:
       - uploads-data:/app/uploads
+      - admin-config:/app/config
     environment:
       NODE_ENV: development
       PORT: 3000
@@ -68,3 +69,4 @@ services:
 
 volumes:
   uploads-data:
+  admin-config:

@@ -3,6 +3,10 @@ infra/postgres-data
 infra/garage-data
 infra/garage-meta
 .git
+.env
+.env.*
+config/**
+apps/api/config/**
 *.bak
 *.bak2
 *.bak3

@@ -177,7 +177,18 @@ Sources : [`exportPdf.ts`](../apps/web/src/exportPdf.ts),
 | Permissions configurables | À revalider | C : overrides chargés à chaque contrôle de rôle | Pas de test de propagation et de garde serveur après modification. | P1 |
 | Paramètres LDAP | Bug confirmé | C : formulaire et test LDAP existent ; bibliothèque runtime absente (voir Authentification) | Le test de connexion LDAP ne peut pas réussir dans l'image actuelle si activé. | P1 |
 | Configuration export | À revalider | C : validation/preview admin et paramètres chargés de `admin-settings.json` | Pas de test de destination réelle ; dépend de la persistance suivante. | P2 |
-| Persistance `config/admin-settings.json` | Bug confirmé | C : fichier écrit sous le filesystem du backend ; [`docker-compose.prod.yml`](../docker-compose.prod.yml) ne monte que `uploads-data` dans l'API ; V : fichier absent actuellement | Les réglages enregistrés par l'UI seraient perdus lors d'une recréation du backend. Dette déjà prévue pour une tâche distincte. | P1 |
+| Persistance `config/admin-settings.json` | OK | Correction du 22/10 sur branche dédiée : 12 tests Node isolés, 2 conteneurs runtime successifs comme appuser, modes privés et refus réel d’écriture validés | Volume `admin-config` proposé ; non déployé. Préserver/importer un éventuel fichier existant avant toute bascule. | P1 |
+
+## Suivi du 22 octobre 2026 — persistance admin (non déployée)
+
+La branche indépendante `fix/admin-settings-persistence`, issue du main documentaire,
+ajoute le volume `admin-config` et une écriture atomique privée. Sur Debian : build
+API et runtime réussis, 12/12 tests Node, test de relecture dans deux conteneurs
+éphémères et validations des deux Compose. Ces preuves couvrent le stockage ; la
+recette UI et le déploiement restent à faire. Voir
+[ADMIN_SETTINGS_PERSISTENCE.md](ADMIN_SETTINGS_PERSISTENCE.md).
+Les corrections de permissions sont proposées dans une autre branche non fusionnée ;
+leurs résultats ne sont pas incorporés dans cette branche indépendante.
 
 ## Infrastructure
 
