@@ -38,7 +38,7 @@ const { isAccessTokenPayload, isMfaChallengePayload } = require('../dist/auth/jw
 const password = 'synthetic-password-only';
 const passwordHash = hashSync(password, 4);
 const totpSecret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
-let users, credential, privateKey, lookupCount, app, jwt, base;
+let users, credential, backupCodes, privateKey, lookupCount, app, jwt, base;
 const ldap = { enabled: false };
 const prisma = {
   user: {
@@ -48,7 +48,13 @@ const prisma = {
     },
     async findMany() { return users.map(u => ({ ...u, _count: { backupCodes: 0, webauthnCredentials: 0 } })); },
   },
-  userBackupCode: { async findMany() { return []; } },
+  userBackupCode: {
+    async findMany({ where }) { return backupCodes.filter(c => c.userId === where.userId && !c.usedAt); },
+    async update({ where, data }) {
+      const code = backupCodes.find(c => c.id === where.id);
+      Object.assign(code, data); return code;
+    },
+  },
   userWebAuthnCredential: {
     async count({ where }) { return Number(where.userId === 'passkey'); },
     async findMany({ where }) { return where.userId === 'passkey' ? [credential] : []; },
@@ -82,6 +88,7 @@ before(async () => {
 });
 beforeEach(() => {
   lookupCount = 0;
+  backupCodes = [];
   process.env.AUTH_MODE = 'local';
   users = ['ordinary', 'totp', 'admin', 'disabled', 'passkey'].map(id => ({
     id, email: `${id}@synthetic.invalid`, displayName: 'Synthetic user',
@@ -244,6 +251,22 @@ for (const legacy of [false, true]) {
 test('HTTP: invalid TOTP/backup factor cannot issue access', async () => {
   const result = await request('auth/login/mfa-verify', { body: { mfaChallengeToken: challenge(), code: 'invalid-factor' } });
   assert.equal(result.status, 401); assert.equal(result.body.token, undefined);
+});
+test('HTTP: valid backup code still issues access and is consumed', async () => {
+  backupCodes = [{ id: 'backup', userId: 'totp', codeHash: hashSync('synthetic-backup', 4), usedAt: null }];
+  const body = { mfaChallengeToken: challenge(), code: 'synthetic-backup' };
+  await expectAccess(await request('auth/login/mfa-verify', { body }), 'totp');
+  assert.ok(backupCodes[0].usedAt instanceof Date);
+  const replay = await request('auth/login/mfa-verify', { body });
+  assert.equal(replay.status, 401); assert.equal(replay.body.token, undefined);
+});
+test('HTTP: admin only gets admin access after valid TOTP', async () => {
+  const pending = challenge('admin');
+  assert.equal((await request('users', { bearer: pending })).status, 401);
+  const access = await expectAccess(await request('auth/login/mfa-verify', { body: {
+    mfaChallengeToken: pending, code: generateSync({ secret: totpSecret }),
+  } }), 'admin');
+  assert.equal((await request('users', { bearer: access })).status, 200);
 });
 test('HTTP: disabling an account after challenge prevents TOTP completion', async () => {
   const pending = challenge(); users.find(u => u.id === 'totp').isActive = false;
