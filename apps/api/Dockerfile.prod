@@ -26,8 +26,10 @@ COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 
-# Ensure uploads directory exists with correct permissions
-RUN mkdir -p /app/apps/api/uploads && chown -R appuser:appgroup /app/apps/api/uploads
+# Prepare uploads and private administrative settings directories
+RUN mkdir -p /app/apps/api/uploads /app/apps/api/config \
+    && chown -R appuser:appgroup /app/apps/api/uploads /app/apps/api/config \
+    && chmod 700 /app/apps/api/config
 
 # Install su-exec for privilege dropping in entrypoint
 RUN apk add --no-cache su-exec
@@ -41,3 +43,4 @@ WORKDIR /app/apps/api
 EXPOSE 3000
 
 ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["node", "dist/main.js"]

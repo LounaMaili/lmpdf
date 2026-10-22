@@ -17,15 +17,17 @@ import { startRegistration } from '@simplewebauthn/browser';
 
 type Props = {
   onMfaChanged?: () => void;
+  enrollmentOnly?: boolean;
 };
 
-export default function MfaSettingsPanel({ onMfaChanged }: Props) {
+export default function MfaSettingsPanel({ onMfaChanged, enrollmentOnly = false }: Props) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [webauthnKeys, setWebauthnKeys] = useState<WebAuthnCredential[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [enrollmentComplete, setEnrollmentComplete] = useState(false);
 
   // TOTP Setup flow
   const [setupData, setSetupData] = useState<MfaSetupResult | null>(null);
@@ -85,7 +87,8 @@ export default function MfaSettingsPanel({ onMfaChanged }: Props) {
         setSetupData(null);
         setTotpCode('');
         setMessage(t('mfa.setupSuccess'));
-        await loadData();
+        if (enrollmentOnly) setEnrollmentComplete(true);
+        else await loadData();
         onMfaChanged?.();
       }
     } catch (err) {
@@ -143,7 +146,8 @@ export default function MfaSettingsPanel({ onMfaChanged }: Props) {
         setShowAddKey(false);
         setKeyPassword('');
         setKeyLabel('');
-        await loadData();
+        if (enrollmentOnly) setEnrollmentComplete(true);
+        else await loadData();
         onMfaChanged?.();
       }
     } catch (err) {
@@ -167,6 +171,12 @@ export default function MfaSettingsPanel({ onMfaChanged }: Props) {
   };
 
   if (loading) return <div className="mfa-panel">{t('common.loading')}</div>;
+
+  if (enrollmentComplete) return <div className="mfa-panel">
+    <p>{message}</p>
+    {backupCodes && <><p>Codes de secours à conserver :</p>
+      <ul>{backupCodes.map(code => <li key={code}><code>{code}</code></li>)}</ul></>}
+  </div>;
 
   if (status?.policy === 'disabled') {
     return (
@@ -332,7 +342,7 @@ export default function MfaSettingsPanel({ onMfaChanged }: Props) {
         )}
 
         {/* Actions TOTP */}
-        {status?.mfaEnabled && !backupCodes && (
+        {!enrollmentOnly && status?.mfaEnabled && !backupCodes && (
           <div className="mfa-actions">
             <div className="mfa-status-detail">
               <span>🔑 {t('mfa.backupCodesRemaining')}: </span>

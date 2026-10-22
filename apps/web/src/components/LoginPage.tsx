@@ -26,6 +26,12 @@ export default function LoginPage({ onLogin }: Props) {
   const [passwordlessEmail, setPasswordlessEmail] = useState('');
 
   const handleLoginResult = (result: LoginResult) => {
+    if (result.mfaSetupRequired && result.mfaEnrollmentToken && result.user) {
+      const pendingUser = { ...result.user, mfaSetupRequired: true };
+      setAuth(result.mfaEnrollmentToken, pendingUser);
+      onLogin(pendingUser);
+      return;
+    }
     if (result.mfaRequired && result.mfaChallengeToken) {
       // Passer en mode MFA
       setMfaChallengeToken(result.mfaChallengeToken);
@@ -49,8 +55,7 @@ export default function LoginPage({ onLogin }: Props) {
     try {
       if (mode === 'register') {
         const result = await register(email, password, displayName);
-        setAuth(result.token, result.user);
-        onLogin(result.user);
+        handleLoginResult(result);
       } else {
         const result = await login(email, password);
         handleLoginResult(result);

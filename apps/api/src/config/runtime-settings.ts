@@ -1,5 +1,4 @@
-import { promises as fs } from 'fs';
-import { join } from 'path';
+import { readAdminSettingsFile } from './settings-file';
 import type { RolePermissions } from './permission-matrix';
 import type { ExportSettings } from '../export/export-types';
 import { defaultExportSettings } from '../export/export-types';
@@ -59,8 +58,6 @@ export type RuntimeAdminSettings = {
   export: ExportSettings;
 };
 
-const SETTINGS_PATH = join(process.cwd(), 'config', 'admin-settings.json');
-
 export function defaultRuntimeSettings(): RuntimeAdminSettings {
   const ldapEnabled = (process.env.LDAP_ENABLED || 'false') === 'true';
 
@@ -108,29 +105,25 @@ export function defaultRuntimeSettings(): RuntimeAdminSettings {
 
 export async function loadRuntimeSettings(): Promise<RuntimeAdminSettings> {
   const base = defaultRuntimeSettings();
-  try {
-    const raw = await fs.readFile(SETTINGS_PATH, 'utf8');
-    const json = JSON.parse(raw) as Partial<RuntimeAdminSettings>;
-    return {
-      auth: { ...base.auth, ...(json.auth || {}) },
-      mfa: { ...base.mfa, ...(json.mfa || {}) },
-      ldap: { ...base.ldap, ...(json.ldap || {}) },
-      organization: { ...base.organization, ...(json.organization || {}) },
-      governance: { ...base.governance, ...(json.governance || {}) },
-      permissions: {
-        admin: { ...base.permissions.admin, ...(json.permissions?.admin || {}) },
-        editor: { ...base.permissions.editor, ...(json.permissions?.editor || {}) },
-        viewer: { ...base.permissions.viewer, ...(json.permissions?.viewer || {}) },
-      },
-      export: {
-        ...base.export,
-        ...(json.export || {}),
-        allowedRoots: json.export?.allowedRoots ?? base.export.allowedRoots,
-        destinations: json.export?.destinations ?? base.export.destinations,
-        rules: json.export?.rules ?? base.export.rules,
-      },
-    };
-  } catch {
-    return base;
-  }
+  const json = await readAdminSettingsFile() as Partial<RuntimeAdminSettings> | null;
+  if (!json) return base;
+  return {
+    auth: { ...base.auth, ...(json.auth || {}) },
+    mfa: { ...base.mfa, ...(json.mfa || {}) },
+    ldap: { ...base.ldap, ...(json.ldap || {}) },
+    organization: { ...base.organization, ...(json.organization || {}) },
+    governance: { ...base.governance, ...(json.governance || {}) },
+    permissions: {
+      admin: { ...base.permissions.admin, ...(json.permissions?.admin || {}) },
+      editor: { ...base.permissions.editor, ...(json.permissions?.editor || {}) },
+      viewer: { ...base.permissions.viewer, ...(json.permissions?.viewer || {}) },
+    },
+    export: {
+      ...base.export,
+      ...(json.export || {}),
+      allowedRoots: json.export?.allowedRoots ?? base.export.allowedRoots,
+      destinations: json.export?.destinations ?? base.export.destinations,
+      rules: json.export?.rules ?? base.export.rules,
+    },
+  };
 }

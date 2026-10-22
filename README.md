@@ -176,6 +176,7 @@ lmpdf-vision   (FastAPI, OCR)
 | CORS | Origines localhost configurées dans Compose | `https://lmpdf.gueguen.org` par défaut |
 | PostgreSQL | bind mount `./infra/postgres-data` | volume Docker nommé `postgres-data` |
 | PDF et images | volume Docker nommé `uploads-data` | volume Docker nommé `uploads-data` |
+| Réglages administrateur | volume Docker nommé `admin-config` | volume Docker nommé `admin-config` |
 | User Docker API | root | `appuser:appgroup` |
 
 Pour une mise à jour, reprendre la procédure au SHA approuvé après vérification
@@ -183,6 +184,11 @@ de l'arbre Git. Ne pas utiliser `git pull` ni déployer directement `main` sur l
 VM de validation.
 
 ---
+
+Les réglages administrateur sont conservés dans `admin-config`. Avant le premier
+ajout de ce montage sur une instance existante, sauvegarder puis importer tout
+`config/admin-settings.json` encore présent dans le filesystem du backend.
+Voir [la procédure sans perte de configuration](docs/ADMIN_SETTINGS_PERSISTENCE.md).
 
 ## Base de données (Prisma)
 

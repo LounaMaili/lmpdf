@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
-import { promises as fs } from 'fs';
-import { join } from 'path';
+import { readAdminSettingsFile, writeAdminSettingsFile } from './config/settings-file';
 import { PrismaService } from './prisma/prisma.service';
 import { LdapService } from './auth/ldap.service';
 import { Roles } from './auth/roles.decorator';
@@ -12,8 +11,6 @@ import type { ExportSettings } from './export/export-types';
 import { defaultExportSettings } from './export/export-types';
 
 type AdminSettings = RuntimeAdminSettings;
-
-const SETTINGS_PATH = join(process.cwd(), 'config', 'admin-settings.json');
 
 function normalizeSearchFilter(value: string | undefined): string {
   const v = (value || '').trim();
@@ -86,32 +83,28 @@ export class AdminSettingsController {
   ) {}
 
   private async readSettingsInternal(): Promise<AdminSettings> {
-    try {
-      const raw = await fs.readFile(SETTINGS_PATH, 'utf8');
-      const json = JSON.parse(raw) as Partial<AdminSettings>;
-      const d = defaults();
-      return {
-        auth: { ...d.auth, ...(json.auth || {}) },
-        mfa: { ...d.mfa, ...(json.mfa || {}) },
-        ldap: { ...d.ldap, ...(json.ldap || {}) },
-        organization: { ...d.organization, ...(json.organization || {}) },
-        governance: { ...d.governance, ...(json.governance || {}) },
-        permissions: {
-          admin: { ...d.permissions.admin, ...(json.permissions?.admin || {}) },
-          editor: { ...d.permissions.editor, ...(json.permissions?.editor || {}) },
-          viewer: { ...d.permissions.viewer, ...(json.permissions?.viewer || {}) },
-        },
-        export: {
-          ...d.export,
-          ...(json.export || {}),
-          allowedRoots: json.export?.allowedRoots ?? d.export.allowedRoots,
-          destinations: json.export?.destinations ?? d.export.destinations,
-          rules: json.export?.rules ?? d.export.rules,
-        },
-      };
-    } catch {
-      return defaults();
-    }
+    const json = await readAdminSettingsFile() as Partial<AdminSettings> | null;
+    if (!json) return defaults();
+    const d = defaults();
+    return {
+      auth: { ...d.auth, ...(json.auth || {}) },
+      mfa: { ...d.mfa, ...(json.mfa || {}) },
+      ldap: { ...d.ldap, ...(json.ldap || {}) },
+      organization: { ...d.organization, ...(json.organization || {}) },
+      governance: { ...d.governance, ...(json.governance || {}) },
+      permissions: {
+        admin: { ...d.permissions.admin, ...(json.permissions?.admin || {}) },
+        editor: { ...d.permissions.editor, ...(json.permissions?.editor || {}) },
+        viewer: { ...d.permissions.viewer, ...(json.permissions?.viewer || {}) },
+      },
+      export: {
+        ...d.export,
+        ...(json.export || {}),
+        allowedRoots: json.export?.allowedRoots ?? d.export.allowedRoots,
+        destinations: json.export?.destinations ?? d.export.destinations,
+        rules: json.export?.rules ?? d.export.rules,
+      },
+    };
   }
 
   @Get()
@@ -155,8 +148,7 @@ export class AdminSettingsController {
       },
     };
 
-    await fs.mkdir(join(process.cwd(), 'config'), { recursive: true });
-    await fs.writeFile(SETTINGS_PATH, JSON.stringify(merged, null, 2), 'utf8');
+    await writeAdminSettingsFile(merged);
 
     return { ok: true, settings: sanitizeSettingsForClient(merged) };
   }

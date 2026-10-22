@@ -6,6 +6,7 @@ import { useTranslation } from './i18n';
 
 const AdminSettingsPanel = lazy(() => import('./components/AdminSettingsPanel'));
 const MfaSettingsPanel = lazy(() => import('./components/MfaSettingsPanel'));
+const MfaEnrollmentPage = lazy(() => import('./components/MfaEnrollmentPage'));
 
 export default function AppShell() {
   const { t } = useTranslation();
@@ -58,6 +59,12 @@ export default function AppShell() {
 
   if (!user) {
     return <LoginPage onLogin={(u) => setUser(u)} />;
+  }
+
+  if (user.mfaSetupRequired) {
+    return <Suspense fallback={<div>{t('common.loading')}</div>}>
+      <MfaEnrollmentPage onLogout={handleLogout} />
+    </Suspense>;
   }
 
   return (

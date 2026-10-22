@@ -11,6 +11,7 @@ import {
   type AuthenticatorTransportFuture,
 } from '@simplewebauthn/server';
 import { PrismaService } from '../prisma/prisma.service';
+import { completeFirstEnrollment } from './mfa-enrollment';
 
 /**
  * RP (Relying Party) config.
@@ -140,6 +141,7 @@ export class WebAuthnService {
     userId: string,
     response: RegistrationResponseJSON,
     label?: string,
+    firstEnrollmentOnly = false,
   ): Promise<{ success: boolean; credentialId?: string; error?: string }> {
     const { rpID, rpOrigin } = getRpConfig();
     const expectedChallenge = getChallenge(userId);
@@ -167,16 +169,17 @@ export class WebAuthnService {
     const { credential } = verification.registrationInfo;
 
     // Sauvegarder en DB
-    const cred = await this.prisma.userWebAuthnCredential.create({
-      data: {
+    const data = {
         userId,
         credentialId: credential.id,
         publicKey: Buffer.from(credential.publicKey),
         counter: BigInt(credential.counter),
         transports: (credential.transports || []) as string[],
         label: label || 'Clé de sécurité',
-      },
-    });
+    };
+    const cred = firstEnrollmentOnly
+      ? await completeFirstEnrollment(this.prisma, userId, tx => tx.userWebAuthnCredential.create({ data }))
+      : await this.prisma.userWebAuthnCredential.create({ data });
 
     return { success: true, credentialId: cred.id };
   }

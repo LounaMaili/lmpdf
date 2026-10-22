@@ -135,3 +135,12 @@ Roles per document:
 The permission matrix (`apps/api/src/config/permission-matrix.ts`) is used by
 relevant API operations. Document access checks also exist in their respective
 controllers and services.
+
+## Administrative settings persistence
+
+`admin-config` stores the sensitive runtime `config/admin-settings.json` separately
+from PostgreSQL and uploads. It mounts at `/app/config` in development and
+`/app/apps/api/config` in production. Writes use a private temporary file and an
+atomic rename; corrupt or unreadable settings are preserved and reported, rather
+than silently replaced with defaults. See
+[deployment and validation](docs/ADMIN_SETTINGS_PERSISTENCE.md).
