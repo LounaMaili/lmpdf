@@ -2441,7 +2441,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           <input
             className="toolbar-name-input"
             value={name}
+            disabled={!canSaveTemplate}
             onChange={(e) => {
+              if (!canSaveTemplate) return;
               setName(e.target.value);
               setDirty(true);
             }}
@@ -2517,9 +2519,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
           {/* Rotation controls: rotate 90° left/right */}
           <div className="rotation-controls compact">
-            <button onClick={() => rotateBy(-90)} title={t('toolbar.rotateLeft')}> <RotateLeftIcon size={16} /></button>
+            <button disabled={!canEditStructure} onClick={() => rotateBy(-90)} title={t('toolbar.rotateLeft')}> <RotateLeftIcon size={16} /></button>
             <span>{rotation}°</span>
-            <button onClick={() => rotateBy(90)} title={t('toolbar.rotateRight')}> <RotateRightIcon size={16} /></button>
+            <button disabled={!canEditStructure} onClick={() => rotateBy(90)} title={t('toolbar.rotateRight')}> <RotateRightIcon size={16} /></button>
           </div>
         </div>
 
@@ -2721,7 +2723,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             )}
 
             {/* ── Default style section: font family, size, weight, color ── */}
-            <details className="panel-section">
+            {canEditStructure && <details className="panel-section">
               <summary>{t('panel.defaultStyle')}</summary>
               <label>
                 {t('panel.font')}
@@ -2774,7 +2776,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 setDirty(true);
                 setStatus(t('status.presetApplied'));
               }}>{t('panel.applyToAllFields')}</button>
-            </details>
+            </details>}
 
           </aside>
 

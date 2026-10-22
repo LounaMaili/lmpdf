@@ -1,8 +1,12 @@
-const { test, before, after, beforeEach, mock } = require('node:test');
+const { test, after, beforeEach, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lmpdf-permissions-'));
+const originalCwd = process.cwd();
+process.chdir(root);
+fs.mkdirSync('config');
 require('reflect-metadata');
 const { Module, ValidationPipe } = require('@nestjs/common');
 const { NestFactory, APP_GUARD } = require('@nestjs/core');
@@ -22,10 +26,6 @@ const docId = '11111111-1111-4111-8111-111111111111';
 const templateId = '22222222-2222-4222-8222-222222222222';
 const otherId = '33333333-3333-4333-8333-333333333333';
 const user = { id: 'test-user', role: 'editor', email: 'test@example.invalid', displayName: 'Test' };
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lmpdf-permissions-'));
-const originalCwd = process.cwd();
-process.chdir(root);
-fs.mkdirSync('config');
 
 function settings(overrides = {}) {
   fs.writeFileSync('config/admin-settings.json', JSON.stringify({
@@ -73,8 +73,11 @@ for (const [name, options, allowed] of [
     const controller = new TemplatesController(f.templates);
     const create = () => controller.create({ name: 'Test', sourceFileId: docId, fields: [] }, { user: f.actor });
     const resolve = () => f.export.resolve({ sourceFileId: docId }, { user: f.actor });
-    if (allowed) { await create(); assert.equal((await resolve()).matched, true); }
-    else { await rejectsStatus(create, 403); await rejectsStatus(resolve, 403); }
+    const write = mock.method(writer, 'writeExportFile', async finalPath => ({ written: true, finalPath }));
+    const run = () => f.export.runExport({ buffer: Buffer.from('%PDF-test') }, { sourceFileId: docId }, { user: f.actor });
+    if (allowed) { await create(); assert.equal((await resolve()).matched, true); assert.equal((await run()).ok, true); }
+    else { await rejectsStatus(create, 403); await rejectsStatus(resolve, 403); await rejectsStatus(run, 403); }
+    assert.equal(write.mock.callCount(), allowed ? 1 : 0);
     assert.equal(f.calls.creates, allowed ? 1 : 0);
   });
 }
@@ -83,6 +86,7 @@ test('permission globale refusée malgré owner documentaire', async () => {
   const f = fixture({ role: 'viewer', owner: true });
   await rejectsStatus(() => new TemplatesController(f.templates).create({ name: 'Test', sourceFileId: docId, fields: [] }, { user: f.actor }), 403);
   await rejectsStatus(() => f.export.resolve({ sourceFileId: docId }, { user: f.actor }), 403);
+  await rejectsStatus(() => f.export.runExport({ buffer: Buffer.from('%PDF-test') }, { sourceFileId: docId }, { user: f.actor }), 403);
   assert.equal(f.calls.creates, 0);
 });
 test('override global refusé même pour admin', async () => {
@@ -186,6 +190,16 @@ test('déplacement préserve le contrôle du propriétaire source', async () => 
   const f = fixture({ direct: 'editor' });
   await rejectsStatus(() => f.folders.moveDocument('personal', { documentId: docId }, { user: f.actor }), 403);
   await rejectsStatus(() => f.folders.moveTemplate('personal', { templateId: otherId }, { user: f.actor }), 404);
+});
+test('déplacement document inconnu refusé et admin autorisé sur source existante', async () => {
+  const f = fixture({ role: 'admin' });
+  await rejectsStatus(() => f.folders.moveDocument('shared', { documentId: otherId }, { user: f.actor }), 404);
+  await f.folders.moveDocument('private', { documentId: docId }, { user: f.actor });
+  assert.equal(f.calls.moves, 1);
+});
+test('admin : parent/groupe incohérent refusé même si les deux sont accessibles', async () => {
+  const f = fixture({ role: 'admin' });
+  await rejectsStatus(() => f.folders.create({ name: 'test', ownerScope: 'group', groupId: 'other-group', parentId: 'shared' }, { user: f.actor }), 400);
 });
 test('admin peut viser un groupe non membre mais pas un ID inexistant', async () => {
   const f = fixture({ role: 'admin' });
