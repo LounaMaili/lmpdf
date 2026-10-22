@@ -1,10 +1,65 @@
 # Checklist de régression — reprise LMPdf
 
-Audit documentaire du 27 septembre 2026. Base examinée : `main` au commit
+Audit initial du 27 septembre 2026, complété par la validation combinée du
+22 octobre 2026 ci-dessous. Base de l’audit initial : `main` au commit
 `d945ca1b390e33dae3760d84080e0c978907250b` (PR autosave #5, merge commit).
 Au début des contrôles, la VM `lmpdf-dev` exécutait encore
 `d8b41f189e3218c4144baadc071b790feb62efb9` : ces deux commits ont **le
-même arbre Git**. Aucun code ni donnée applicative n'a été modifié pour cet audit.
+même arbre Git**. Aucun code ni donnée applicative n’avait été modifié pour
+cet audit initial ; les corrections ultérieures sont distinguées ci-dessous.
+
+## Validation combinée des PR #8, #10 et #7 — 22 octobre 2026
+
+**Aucun déploiement sur les services actifs.** Les preuves nouvelles viennent de
+conteneurs jetables sur `lmpdf-dev`, sans fichiers `.env`, données réelles ni
+volumes applicatifs montés. La recette navigateur authentifiée reste à faire.
+Les observations `V` et les comptages de l’audit initial restent historiques.
+
+| Étape | Révision / résultat |
+|---|---|
+| PR #8, persistance | SHA vérifié `bd7d711e84b5bb9e76dea121249bc02cfcd790fd` : 35 JWT/MFA, 12 paramètres, 17 autosave, Compose dev/prod et deux conteneurs runtime successifs réussis. Merge commit `1bdcf8be88b6e0c4be795acfa793cdf187e3b38d`. |
+| PR #10 après intégration de #8 | SHA `6aaf03a9fbd737cbbff9bd8b7ea3002a96863591` : 56 JWT/MFA/configuration, 12 paramètres, 7 PostgreSQL réels, 4 MFA frontend et 17 autosave réussis ; builds et Compose réussis. Merge commit `ef1524e8d444c8117c13ceacfaf32b2750b8d9bc`. |
+| PR #7 après intégration de #10 | Code corrigé au SHA `9a94db540e71a8ceb27dc983e9dd1e3c894b382c` : toutes les suites ci-dessous réussies. Recette Docker complète ajoutée et exécutée au SHA `93043886e019af98e1bbf1773f33067819bf0c86` : 7/7 succès. La checklist est documentaire ; le SHA exact de fusion et sa revalidation sont consignés dans le rapport d’intégration. |
+
+### Suites et portée des preuves nouvelles (`I` = validation isolée Debian)
+
+| Suite / commande | Résultat | Ce qui est réellement couvert |
+|---|---|---|
+| API `test:auth` | 56/56 | JWT accès/challenge/enrôlement, ancien accès compatible, refus HTTP métier/admin avant MFA, TOTP/WebAuthn synthétiques, comptes désactivés et lecture des réglages required/corrompus. Les 35 tests JWT/MFA initiaux sont conservés. |
+| API `test:settings` | 12/12 | Écriture atomique, lecture, erreurs et permissions privées du fichier de réglages. |
+| API `test:permissions` | 43/43 | Matrice documentaire, templates, dossiers, IDs et contexte d’export ; Nest HTTP et Prisma simulé. |
+| API `test:exports` | 25/25 | Fichier 25 Mio, deux exports simultanés, surplus 429 et reprise, interruption, refus sans temporaire, noms libres/canoniques, extensions et collisions. |
+| API `test:export-paths` | 18/18 | Vraies opérations disque dans un bac temporaire : racine, traversée, symlinks répertoire/fichier, hardlinks, remplacements entre validation/ouverture/écriture, overwrite/rename/skip, nettoyage I/O. |
+| `isolated-postgres.sh` / `test:enrollment:postgres` | 7/7 | PostgreSQL 16 temporaire en tmpfs : premières activations TOTP et WebAuthn réelles, deux TOTP concurrents, TOTP/WebAuthn concurrents, attente du verrou observée dans PostgreSQL, refus d’une seconde activation, rollback complet et désactivation pendant l’attente. |
+| Web `test:permissions`, `test:auth`, `test:autosave` | 13/13, 4/4, 17/17 | Décisions/handlers de permissions, session d’enrôlement frontend et scheduler autosave ; pas une recette navigateur. |
+| `isolated-stack.sh` | 7/7 | Quatre services isolés : connexion mot de passe + TOTP, enrôlement initial, refus métier/admin, upload/lecture PNG, droits owner/editor/filler, API → Vision, export effectif et nom canonique, plafond nginx 30 Mio, réglage admin appliqué aux droits. |
+| Builds et Compose | OK | API build + runtime, web build + runtime, image Vision ; configurations dev/prod valides. |
+| `admin-settings-container.sh` | OK | Deux conteneurs non root successifs : relecture conservée, répertoire 0700, fichier 0600 appartenant à appuser, refus réel d’écriture sans altérer le précédent fichier. |
+
+Les tests PostgreSQL et de démarrage n’appliquent les migrations **existantes**
+qu’à leurs bases temporaires. `prisma migrate diff` y constate un schéma sans
+écart ; ni schéma ni migration Prisma n’est modifié par ces PR. Aucun besoin de
+nouvelle migration identifié pour leur déploiement.
+
+Le volume `admin-config` est déclaré au chemin `/app/apps/api/config` dans les
+deux Compose ; les tests de persistance et de démarrage emploient un bind mount
+temporaire à ce même chemin. Aucun volume nommé actif n’a été créé, supprimé ou
+reconfiguré pour ces tests. Sauvegarder/importer un éventuel réglage non monté
+avant la première bascule, en conservant ownership et modes privés.
+
+L’audit a reproduit puis corrigé les écritures via symlinks/hardlinks et les
+remplacements de chemins ; voir [EXPORT_PATH_SECURITY.md](EXPORT_PATH_SECURITY.md).
+Il a aussi révélé une réservation d’export conservée après interruption d’une
+requête : la libération et la reprise immédiate sont désormais testées. Le writer
+exige Linux avec `/proc/self/fd`, des racines sans symlink et des droits POSIX
+maîtrisés. L’overwrite d’un fichier existant n’est pas transactionnel en cas
+d’erreur I/O ; aucune garantie de rollback de ses octets n’est annoncée.
+
+La mémoire des exports reste bornée par **25 Mio de fichier et deux requêtes par
+processus** : environ 100 Mio de buffers transitoires au plafond, en plus de la
+baseline et du GC ; ce n’est pas une limite de RSS. nginx accepte une enveloppe
+multipart de 30 Mio. Les PDF du test d’export sont synthétiques : fidélité visuelle,
+rich-text, impression et parcours navigateur multi-utilisateur restent à recetter.
 
 ## Lecture de la checklist
 
@@ -22,12 +77,13 @@ même arbre Git**. Aucun code ni donnée applicative n'a été modifié pour cet
 **Méthodes** : `C` = lecture du code ; `V` = vérification en lecture seule sur
 `lmpdf-dev` ; `T17` = les 17 tests dans
 [`apps/web/tests/autosaveScheduler.test.ts`](../apps/web/tests/autosaveScheduler.test.ts)
-(validés avant cet audit, pas relancés ici). `P1` = risque d'accès ou de perte
+(relancés lors de la validation combinée). `I` = nouvelles preuves isolées
+détaillées ci-dessus. `P1` = risque d'accès ou de perte
 fonctionnelle élevé ; `P2` = fonction importante ; `P3` = qualité/ergonomie.
 « Aucun test » signifie aucun test automatisé suivi dans le dépôt pour ce
 parcours. Une preuve `C` seule ne valide pas le comportement en production.
 
-Les contrôles `V` ont observé : frontend `200`, `/api/health` `200`, Vision
+Les contrôles historiques `V` de septembre ont observé : frontend `200`, `/api/health` `200`, Vision
 `/health` appelé depuis l'API `200`, PostgreSQL accessible depuis l'API (3
 utilisateurs comptés), et routes templates/drafts/admin sans JWT `401`.
 PostgreSQL est sain ; ses données comprennent 6 documents, 1 template, 3
@@ -44,11 +100,12 @@ effectué.
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Login local | À revalider | C : [`auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) (bcrypt, throttling) ; aucun test de connexion dans cet audit | Flux réel avec compte local et MFA éventuel non testé. | P2 |
+| Login local | OK | I : 56 tests auth et connexions mot de passe + TOTP dans le stack isolé | Recette navigateur et paramètres de l’instance réelle encore à vérifier. | P2 |
 | Garde JWT et accès anonyme | OK | C : [`jwt.strategy.ts`](../apps/api/src/auth/jwt.strategy.ts), garde global ; V : trois routes protégées répondent `401` sans jeton | Ne prouve pas les droits après authentification. | P1 |
-| Expiration JWT | À revalider | C : durée de 7 jours, `ignoreExpiration: false` ; aucun test d'un jeton expiré | Vérifier refus et retour à l'écran de connexion. | P2 |
+| Expiration et isolation JWT | OK | I : accès valide/ancien compatible, challenge MFA, enrollment, type inattendu, signature invalide et expiration testés en HTTP | Retour à la connexion dans le navigateur à revalider. | P1 |
 | Logout / révocation | Dette technique | C : [`auth.ts`](../apps/web/src/auth.ts) efface le jeton du stockage local | Pas de révocation serveur ; un JWT copié reste valable jusqu'à expiration ou désactivation du compte. | P2 |
-| MFA TOTP et codes de secours | À revalider | C : [`mfa.service.ts`](../apps/api/src/auth/mfa.service.ts) chiffre le secret et hache les codes ; aucun test d'enrôlement/connexion | Parcours complet et récupération non éprouvés sur VM. | P1 |
+| MFA TOTP et codes de secours | OK | I : enrôlement/connexion réels synthétiques, erreurs, génération des codes et transactions PostgreSQL | Recette utilisateur et récupération sur navigateur restent à faire. | P1 |
+| Enrôlement MFA obligatoire | OK | I : session restreinte, aucune route métier/admin avant activation, TOTP/WebAuthn, concurrence et désactivation testés ; config admin required prioritaire | Politique LDAP/hybride conservée ; configuration réelle à recetter. | P1 |
 | WebAuthn et passkeys | Bug confirmé | C : [`webauthn.service.ts`](../apps/api/src/auth/webauthn.service.ts) a pour défaut RP `localhost` / origin `http://localhost:4173` ; [`docker-compose.prod.yml`](../docker-compose.prod.yml) ne transmet aucun `WEBAUTHN_RP_ID`/`WEBAUTHN_RP_ORIGIN` | Le domaine/origin de l'instance de test ne correspond pas à ces défauts ; l'enrôlement/vérification WebAuthn ne peut pas aboutir dans cette configuration. Aucun test avec authentificateur réel. | P1 |
 | LDAP / Active Directory | Bug confirmé | C : [`ldap.service.ts`](../apps/api/src/auth/ldap.service.ts) fait `require('ldapjs')` ; absent de [`apps/api/package.json`](../apps/api/package.json) et du lockfile ; V : `ldapjs_resolvable=false` dans le backend | Si LDAP est activé, `authenticate()` retourne `null` avant de contacter l'annuaire. Aucun annuaire de test sollicité. | P1 |
 | Fallback admin local en mode hybride | Bug confirmé | C : [`auth.controller.ts`](../apps/api/src/auth/auth.controller.ts), condition `allowLocal` | Le drapeau nommé `allowLocalAdminFallback` permet la connexion de **tout** compte local valide en mode hybride ; aucun filtre `role === 'admin'`. À clarifier et tester selon la politique voulue. | P1 |
@@ -58,10 +115,10 @@ effectué.
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
 | Upload PDF | À revalider | C : [`upload.controller.ts`](../apps/api/src/upload/upload.controller.ts), limite 25 Mo, nom UUID ; V : PDF historiques présents | Aucun nouvel upload de test ni vérification rendu/métadonnées ; aucun test automatisé. | P2 |
-| Upload image | À revalider | C : PNG/JPEG/GIF/WebP/BMP/TIFF acceptés ; V : une image historique dans `uploads-data` | Décodage/affichage par type non testé ; aucun test automatisé. | P2 |
+| Upload image | À revalider | I : PNG synthétique valide uploadé, relu et traité par Vision dans le stack | Autres formats et affichage navigateur non validés. | P2 |
 | MIME / magic bytes | À revalider | C : détection par signature, extension dérivée, SVG exclu | Signatures courtes : la validité interne d'un PDF ou d'une image n'est pas prouvée. Ajouter des fixtures valides, tronquées et malformées. | P1 |
 | Lecture d'un document existant | À revalider | C : [`api.ts`](../apps/web/src/api.ts) récupère le fichier protégé puis crée une blob URL ; V : route protégée inaccessible sans JWT | Pas de téléchargement authentifié ni rendu du document existant pendant cet audit. | P1 |
-| Permissions d'accès au fichier | À revalider | C : propriétaire/admin/partage utilisateur/groupe dans `assertDocumentAccess`, contrôle de traversée de chemin ; V : garde JWT `401` | Les cas owner/editor/filler/absence de droit ne sont pas testés avec des comptes distincts ; 0 permission de document dans les données observées. | P1 |
+| Permissions d’accès au fichier | OK | I : matrice API et lecture authentifiée d’un PNG partagé dans le stack | La matrice complète des partages reste à recetter au navigateur. | P1 |
 | Persistance `uploads-data` | OK | V : même volume nommé monté dans API et Vision ; 28 PDF et 1 image comptés | Contrôle de présence seulement, pas de comparaison de checksum ni de restauration. | P1 |
 | Upload refusé après réception | Dette technique | C : l'intercepteur écrit sur disque avant le contrôle `canUser()` dans le contrôleur | Un utilisateur authentifié sans droit d'upload peut laisser un fichier temporaire orphelin. Scénario non exécuté. | P2 |
 
@@ -123,13 +180,13 @@ Sources : [`useAutosave.ts`](../apps/web/src/hooks/useAutosave.ts),
 Sources : [`permissions.service.ts`](../apps/api/src/permissions/permissions.service.ts),
 [`permission-matrix.ts`](../apps/api/src/config/permission-matrix.ts),
 [`ShareModal.tsx`](../apps/web/src/components/ShareModal.tsx).
-La VM compte actuellement 0 permission documentaire et 0 groupe : une matrice
+L’audit initial comptait 0 permission documentaire et 0 groupe : une matrice
 multi-utilisateur nécessite des données de test isolées et nettoyées ensuite.
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Rôle documentaire `owner` | À revalider | C : propriétaire/admin ont rôle owner | Partage et retrait de droits non testés. | P1 |
-| Rôle `editor` | À revalider | C : hiérarchie owner > editor > filler dans l'API de permissions | Édition structurelle et export selon partage non testés de bout en bout. | P1 |
+| Rôle documentaire `owner` | OK | I : matrice API et template/export autorisés dans le stack | Partage/retrait via l’interface à revalider. | P1 |
+| Rôle `editor` | OK | I : 43 tests API, 13 frontend et création de template partagé dans le stack | Édition structurelle interactive à revalider. | P1 |
 | Rôle `filler` | OK | Correction du 22/10 : permissions frontend combinées, handlers réels de FieldOverlay et panneau testés avec dépendances simulées | Structure bloquée même sur champ non verrouillé ; valeurs conservées. Validation dans le navigateur encore nécessaire. | P1 |
 | Partage direct utilisateur | À revalider | C : `DocumentPermission` et contrôle owner pour partager/révoquer | Aucun test avec deux utilisateurs. | P1 |
 | Partage par groupe | À revalider | C : résolution des appartenances, rôle le plus élevé parmi groupes | Aucun groupe ni permission dans l'instance observée ; aucun test automatisé. | P1 |
@@ -143,8 +200,8 @@ Sources : [`detect.controller.ts`](../apps/api/src/detect/detect.controller.ts),
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Communication API → Vision | OK | V : appel `/health` depuis le conteneur backend `200` ; C : endpoint `/detect` et timeout 180 s | Ne prouve pas une détection réelle. | P2 |
-| Accès au fichier partagé | OK | V : volume `lmpdf-git_uploads-data` monté dans API et Vision, fichiers présents | Lecture effective d'un document par l'algorithme non exécutée. | P2 |
+| Communication API → Vision | OK | V historique : health 200 ; I : appel /detect sur PNG partagé réellement traité | Précision et timeout/panne restent à mesurer. | P2 |
+| Accès au fichier partagé | OK | V historique : montages ; I : PNG uploadé par l’API puis lu réellement par Vision dans le stack | Précision de détection non évaluée. | P2 |
 | Détection de champs | À revalider | C : extraction grille/contours et OCR | Mesurer précision et faux positifs sur PDF/image de test ; aucun test automatisé. | P2 |
 | Sensibilité et lignes pointillées | À revalider | C : profils low/normal/high et `dottedAsLine` | Aucun comparatif sur documents de référence. | P2 |
 | PDF multi-page | Incomplet | C : `load_image()` ne convertit que `first_page=1, last_page=1` | La détection ne parcourt pas les pages suivantes ; première page à valider sur référence. | P2 |
@@ -163,24 +220,24 @@ Sources : [`exportPdf.ts`](../apps/web/src/exportPdf.ts),
 |---|---|---|---|---|
 | PDF navigateur | À revalider | C : `pdf-lib`, conversion coordonnées page→PDF, fichier téléchargé | Comparaison visuelle avec source, rotations et tous types de champs absente. | P1 |
 | Rich-text dans le PDF final | Bug confirmé | C : les deux chemins d'export convertissent le HTML en texte brut via [`richTextToPlainText.ts`](../apps/web/src/utils/richTextToPlainText.ts) | Gras/couleurs/surlignage disparaissent. En outre `div`/`p` ne produisent pas de saut de ligne dans `textContent`, sauf `<br>` ; risque de concaténation. | P1 |
-| Export serveur | À revalider | C : le navigateur génère le PDF, l'API dépose les octets sous une destination configurée ; V : 0 journal d'export | Fonction désactivée par défaut, pas de destination testée ; écritures non lancées dans cet audit. | P2 |
-| `allowedRoots` et chemins | À revalider | C : racine absolue, segments nettoyés, validation après résolution | Tests de traversée, symlinks et configuration erronée absents. | P1 |
-| Règles de destination | À revalider | C : premier match, contexte utilisateur/groupe/template | Priorité des règles et droits sur template à tester. | P2 |
-| Conflits overwrite/rename/skip | À revalider | C : trois stratégies dans `export-writer.ts` | Aucun test disque isolé ; collisions simultanées non couvertes. | P2 |
+| Export serveur | OK | I : resolve/run réels avec octets PDF synthétiques écrits et relus dans une destination temporaire ; tests HTTP des refus et limites | Rendu PDF fourni par le navigateur et recette visuelle non couverts. | P2 |
+| `allowedRoots` et chemins | OK | I : 18 tests disque de chemins, symlinks/hardlinks et remplacements ; writer vérifie aussi les racines | Linux requis ; racines et droits POSIX à contrôler au déploiement. | P1 |
+| Règles de destination | À revalider | I : nom canonique vérifié distinct du nom de sortie, règle réelle dans le stack ; tests de contexte et droits | Combinaisons de règles utilisateur/groupe non exhaustives. | P2 |
+| Conflits overwrite/rename/skip | OK | I : trois stratégies sur disque, collisions concurrentes rename/skip et normalisation des extensions | Overwrite existant non transactionnel en erreur I/O. | P2 |
 | Journaux d'export | À revalider | C : création asynchrone, liste/statistiques/purge admin | `fire-and-forget` peut perdre un journal en cas d'arrêt ; 0 journal observé. | P2 |
-| Fichier temporaire d'un export refusé | OK | Correction du 22/10 : réception multipart en mémoire, limite 50 Mo ; refus HTTP filler vérifié sans création de répertoire uploads | Aucun temporaire disque pour ce parcours. Dette d'upload classique distincte encore présente. | P2 |
+| Fichier temporaire d’un export refusé | OK | I : refus filler, dépassement 25 Mio, saturation à deux requêtes (429), interruption et reprise ; aucun temporaire disque | Environ 100 Mio de buffers transitoires à deux ; dette d’upload classique distincte. | P2 |
 
 ## Administration
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Lecture/modification des réglages admin | À revalider | C : [`admin-settings.controller.ts`](../apps/api/src/admin-settings.controller.ts), `@Roles('admin')` ; V : `401` sans JWT | Aucun test avec rôle admin ni validation exhaustive des valeurs de `PATCH`. | P1 |
-| Permissions configurables | À revalider | C : overrides chargés à chaque contrôle de rôle | Pas de test de propagation et de garde serveur après modification. | P1 |
+| Lecture/modification des réglages admin | OK | I : enrôlement admin puis connexion TOTP, GET/PATCH réels dans le stack ; refus de session restreinte | Validation exhaustive des valeurs de PATCH et UI à compléter. | P1 |
+| Permissions configurables | OK | I : override editor.exportPdf désactivé par PATCH puis refus serveur 403 observé | Autres overrides et recette UI à compléter. | P1 |
 | Paramètres LDAP | Bug confirmé | C : formulaire et test LDAP existent ; bibliothèque runtime absente (voir Authentification) | Le test de connexion LDAP ne peut pas réussir dans l'image actuelle si activé. | P1 |
-| Configuration export | À revalider | C : validation/preview admin et paramètres chargés de `admin-settings.json` | Pas de test de destination réelle ; dépend de la persistance suivante. | P2 |
-| Persistance `config/admin-settings.json` | OK | Correction du 22/10 sur branche dédiée : 12 tests Node isolés, 2 conteneurs runtime successifs comme appuser, modes privés et refus réel d’écriture validés | Volume `admin-config` proposé ; non déployé. Préserver/importer un éventuel fichier existant avant toute bascule. | P1 |
+| Configuration export | À revalider | I : réglages privés relus par le backend, destination temporaire et règle canonique testées | Formulaire admin, preview et toutes combinaisons de règles à recetter. | P2 |
+| Persistance `config/admin-settings.json` | OK | I : 12 tests, deux conteneurs successifs, stack complet, modes 0700/0600 et refus d’écriture ; volume admin-config déclaré dans les deux Compose | Non déployé. Sauvegarder/importer tout fichier existant avant bascule. | P1 |
 
-## Suivi du 22 octobre 2026 — persistance admin (non déployée)
+## Historique — persistance admin validée séparément (non déployée)
 
 La branche indépendante `fix/admin-settings-persistence`, issue du main documentaire,
 ajoute le volume `admin-config` et une écriture atomique privée. Sur Debian : build
@@ -188,8 +245,8 @@ API et runtime réussis, 12/12 tests Node, test de relecture dans deux conteneur
 éphémères et validations des deux Compose. Ces preuves couvrent le stockage ; la
 recette UI et le déploiement restent à faire. Voir
 [ADMIN_SETTINGS_PERSISTENCE.md](ADMIN_SETTINGS_PERSISTENCE.md).
-Les corrections de permissions sont proposées dans une autre branche non fusionnée ;
-leurs résultats ne sont pas incorporés dans cette branche indépendante.
+Ce suivi décrit la validation indépendante initiale. Les preuves combinées plus
+récentes et les fusions sont consignées en tête du document.
 
 ## Infrastructure
 
@@ -199,9 +256,9 @@ leurs résultats ne sont pas incorporés dans cette branche indépendante.
 | `uploads-data` | OK | V : volume monté dans API et Vision ; 29 fichiers présents | Même réserve sur sauvegarde/restauration. | P1 |
 | API | OK | V : conteneur actif sans restart ; `/api/health` `200`, lecture PostgreSQL réussie | Endpoint santé ne contrôle pas lui-même la DB. | P1 |
 | Frontend | OK | V : conteneur actif, page HTTP `200` | Flux authentifié et navigateur non couverts. | P1 |
-| Vision | OK | V : conteneur actif, `/health` `200` depuis backend | Algorithme `/detect` non testé. | P2 |
+| Vision | OK | V historique : health 200 ; I : démarrage de l’image et /detect sur PNG partagé | PDF et qualité des résultats à revalider. | P2 |
 | Garage / Redis absents | OK | C : aucun service dans les Compose actifs ; V : aucun conteneur actif ni volume nommé de ces services | Absence volontaire, aucune dépendance à réintroduire. | P3 |
-| Recréation d'un conteneur applicatif | À revalider | C : volumes critiques nommés ; V : montages actuels confirmés | Ne pas recréer pour ce seul audit ; régler la persistance admin avant une prochaine recréation si des réglages sont utilisés. | P1 |
+| Recréation d’un conteneur applicatif | À revalider | I : persistance des réglages entre deux conteneurs et démarrage complet temporaire ; V : montages actifs inchangés | Aucune recréation active effectuée ; recette après déploiement encore requise. | P1 |
 
 ## Dettes transversales et niveau de preuve
 
@@ -209,14 +266,26 @@ leurs résultats ne sont pas incorporés dans cette branche indépendante.
 |---|---|---|---|---|
 | CI | Dette technique | C : aucun workflow `.github/workflows` suivi | Aucun gate automatique de build/tests avant merge. | P2 |
 | Lint et format | Dette technique | C : scripts web/API `echo 'todo …'` | `pnpm lint` et `pnpm format` ne vérifient pas réellement ces applications. | P2 |
-| Couverture de tests | Dette technique | Suites ajoutées : 43 tests API de permissions et 13 tests frontend de décisions/handlers ; 17 autosave conservés | Pas de tests navigateur complets, d'export visuel ou de Vision. | P1 |
+| Couverture de tests | Dette technique | I : 154 tests API, 7 PostgreSQL réels, 34 frontend et 7 stack ; détail en tête du document | Pas de navigateur complet ni d’export visuel ; Vision limitée à un PNG synthétique. | P1 |
 | Taille de `App.tsx` | Dette technique | C : 3 049 lignes | État, rendu, droits et overflow fortement couplés ; rend les corrections difficiles à isoler. | P2 |
 | Bundle frontend | Dette technique | V : asset JS principal servi d'environ 1,8 Mo non compressé sur disque | Performance à mesurer dans le navigateur ; optimisation hors audit. | P3 |
-| Warning `canvas` facultatif | À revalider | Mentionné lors de builds précédents ; aucun build lancé pour cet audit | Origine et impact actuels non reconfirmés. | P3 |
+| Warning `canvas` facultatif | À revalider | Mention historique ; builds isolés réussis | Impact sur un rendu PDF réel non couvert par ces tests. | P3 |
 | Favicon | Bug confirmé | V : `GET /favicon.ico` → `404`, log nginx correspondant | Défaut cosmétique, pas d'impact métier. | P3 |
 | Documentation Vision | Dette technique | C : [`apps/vision/README.md`](../apps/vision/README.md) dit encore « placeholder » alors que `detector.py` est implémenté | Documentation trompeuse ; correction documentaire distincte possible. | P3 |
 
-## Ordre proposé pour les petites PR de correction
+## Prochaines étapes après intégration
+
+1. Recette navigateur authentifiée : enrôlement MFA, restauration/autosave,
+   matrice owner/editor/filler, partage, export et impression, sans contourner Authelia.
+2. Déploiement explicitement autorisé : sauvegarder les réglages non montés,
+   préparer le volume admin-config privé, préserver PostgreSQL et uploads-data,
+   puis ne recréer que les services approuvés avec rollback disponible. Aucune
+   migration nouvelle n’est requise par ces corrections.
+3. Traiter séparément les bugs restants : LDAP manquant et politique fallback
+   à clarifier, RP/origin WebAuthn, fidélité rich-text, puis parcours éditeur/Vision.
+4. Ajouter les gates CI et compléter les tests visuels/navigateur.
+
+## Ordre historique proposé pour les petites PR de correction
 
 1. **Droits documentaires côté serveur** : tests API sur owner/editor/filler,
    création de templates, exports et dossiers de groupe. Traiter d'abord les
@@ -245,7 +314,7 @@ modifié, suivre Fedora → GitHub → SHA exact sur `lmpdf-dev`, puis consigner
 validation avant merge. Les scénarios à plusieurs comptes ou écritures doivent
 utiliser des objets temporaires clairement nommés et être nettoyés après test.
 
-## Suivi du 22 octobre 2026 — branche permissions (non déployée)
+## Historique — branche permissions validée séparément (non déployée)
 
 La correction documentée dans [DOCUMENT_PERMISSION_ENFORCEMENT.md](DOCUMENT_PERMISSION_ENFORCEMENT.md)
 a été testée dans des images Docker de build isolées sur Debian : 43/43 tests API,
