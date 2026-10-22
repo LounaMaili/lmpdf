@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { compareSync } from 'bcryptjs';
 import { Public } from './public.decorator';
 import { loadRuntimeSettings } from '../config/runtime-settings';
+import { AllowMfaEnrollment } from './mfa-enrollment';
 
 @Controller('auth/mfa')
 export class MfaController {
@@ -17,6 +18,7 @@ export class MfaController {
    * GET /auth/mfa/status — Statut MFA de l'utilisateur connecté
    */
   @Get('status')
+  @AllowMfaEnrollment()
   async status(@Request() req: any) {
     const settings = await loadRuntimeSettings();
     const mfaStatus = await this.mfa.getMfaStatus(req.user.id);
@@ -30,6 +32,7 @@ export class MfaController {
    * POST /auth/mfa/setup — Démarre l'enrôlement MFA (génère secret + QR)
    */
   @Post('setup')
+  @AllowMfaEnrollment()
   async setup(@Request() req: any) {
     const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user) throw new UnauthorizedException();
@@ -48,13 +51,14 @@ export class MfaController {
    * Body: { secret: string, token: string }
    */
   @Post('confirm')
+  @AllowMfaEnrollment()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async confirm(@Request() req: any, @Body() body: { secret: string; token: string }) {
     if (!body.secret || !body.token) {
       throw new UnauthorizedException('Vérification MFA échouée');
     }
 
-    const result = await this.mfa.confirmEnrollment(req.user.id, body.secret, body.token);
+    const result = await this.mfa.confirmEnrollment(req.user.id, body.secret, body.token, req.user.mfaSetupRequired === true);
     if (!result.success) {
       throw new UnauthorizedException('Vérification MFA échouée');
     }

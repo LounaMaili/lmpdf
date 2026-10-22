@@ -15,6 +15,7 @@ import { Throttle } from '@nestjs/throttler';
 import { WebAuthnService } from './webauthn.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { compareSync } from 'bcryptjs';
+import { AllowMfaEnrollment } from './mfa-enrollment';
 
 @Controller('auth/webauthn')
 export class WebAuthnController {
@@ -27,6 +28,7 @@ export class WebAuthnController {
    * GET /auth/webauthn/credentials — Liste les clés WebAuthn de l'utilisateur
    */
   @Get('credentials')
+  @AllowMfaEnrollment()
   async listCredentials(@Request() req: any) {
     return this.webauthn.listCredentials(req.user.id);
   }
@@ -36,6 +38,7 @@ export class WebAuthnController {
    * Body: { password: string } (confirmation du mot de passe)
    */
   @Post('register/begin')
+  @AllowMfaEnrollment()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async beginRegistration(@Request() req: any, @Body() body: { password: string }) {
     const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
@@ -60,6 +63,7 @@ export class WebAuthnController {
    * Body: { response: RegistrationResponseJSON, label?: string }
    */
   @Post('register/finish')
+  @AllowMfaEnrollment()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async finishRegistration(
     @Request() req: any,
@@ -73,6 +77,7 @@ export class WebAuthnController {
       req.user.id,
       body.response,
       body.label,
+      req.user.mfaSetupRequired === true,
     );
 
     if (!result.success) {

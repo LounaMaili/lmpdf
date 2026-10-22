@@ -1,7 +1,8 @@
-import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { ALLOW_MFA_ENROLLMENT } from './mfa-enrollment';
 
 /**
  * JWT auth guard. Routes decorated with @Public() skip auth.
@@ -21,9 +22,12 @@ export class JwtAuthGuard extends PassportAuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest<TUser = any>(err: any, user: TUser, _info: any): TUser {
+  handleRequest<TUser = any>(err: any, user: TUser, _info: any, context: ExecutionContext): TUser {
     if (err || !user) {
       throw err || new UnauthorizedException('Authentification requise');
+    }
+    if ((user as any).mfaSetupRequired && !this.reflector.get<boolean>(ALLOW_MFA_ENROLLMENT, context.getHandler())) {
+      throw new ForbiddenException({ code: 'MFA_ENROLLMENT_REQUIRED', message: 'Enrôlement MFA obligatoire' });
     }
     return user;
   }

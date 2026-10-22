@@ -1,5 +1,6 @@
 export const ACCESS_TOKEN_PURPOSE = 'access';
 export const MFA_CHALLENGE_PURPOSE = 'mfa-challenge';
+export const MFA_ENROLLMENT_PURPOSE = 'mfa-enrollment';
 
 type SubjectClaims = { sub: string };
 
@@ -17,10 +18,18 @@ function matchesPurpose(payload: Record<string, unknown>, expected: string): boo
 
 export function isAccessTokenPayload(payload: unknown): payload is SubjectClaims {
   return hasSubject(payload) && !Object.prototype.hasOwnProperty.call(payload, 'mfaChallenge')
+    && !Object.prototype.hasOwnProperty.call(payload, 'mfaEnrollment')
     && matchesPurpose(payload, ACCESS_TOKEN_PURPOSE);
 }
 
 export function isMfaChallengePayload(payload: unknown): payload is SubjectClaims {
   return hasSubject(payload) && payload.mfaChallenge === true
+    && !Object.prototype.hasOwnProperty.call(payload, 'mfaEnrollment')
     && matchesPurpose(payload, MFA_CHALLENGE_PURPOSE);
+}
+
+export function isMfaEnrollmentPayload(payload: unknown): payload is SubjectClaims {
+  return hasSubject(payload) && payload.purpose === MFA_ENROLLMENT_PURPOSE
+    && payload.mfaEnrollment === true && !Object.prototype.hasOwnProperty.call(payload, 'mfaChallenge')
+    && matchesPurpose(payload, MFA_ENROLLMENT_PURPOSE);
 }

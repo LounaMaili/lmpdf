@@ -11,7 +11,8 @@ import { LoginDto } from './dto/login.dto';
 import { Public } from './public.decorator';
 import { resolveRolePermissions } from '../config/permission-matrix';
 import { loadRuntimeSettings } from '../config/runtime-settings';
-import { ACCESS_TOKEN_PURPOSE, MFA_CHALLENGE_PURPOSE, isMfaChallengePayload } from './jwt-purpose';
+import { ACCESS_TOKEN_PURPOSE, MFA_CHALLENGE_PURPOSE, MFA_ENROLLMENT_PURPOSE, isMfaChallengePayload } from './jwt-purpose';
+import { AllowMfaEnrollment, hasTotp, localMfaRequired } from './mfa-enrollment';
 
 // Messages d'erreur normalisés — anti-enumération
 const AUTH_FAIL = 'Identifiants invalides';
@@ -53,6 +54,7 @@ export class AuthController {
       },
     });
 
+    if (localMfaRequired(settings, user)) return this.enrollmentSession(user);
     const token = this.signToken(user);
     return {
       token,
@@ -93,7 +95,7 @@ export class AuthController {
 
     // ── MFA / WebAuthn challenge ──
     const hasWebauthn = await this.webauthn.hasCredentials(user.id);
-    if ((user.mfaEnabled && user.mfaSecret) || hasWebauthn) {
+    if (hasTotp(user) || hasWebauthn) {
       // Retourner un challenge MFA au lieu du token
       const mfaChallengeToken = this.jwtService.sign(
         { sub: user.id, email: user.email, role: user.role, purpose: MFA_CHALLENGE_PURPOSE, mfaChallenge: true },
@@ -113,7 +115,9 @@ export class AuthController {
       };
     }
 
-    // ── MFA policy check : si required et pas de MFA activé ──
+    if (localMfaRequired(settings, user)) return this.enrollmentSession(user);
+
+    // Existing hybrid policy indicator is retained without changing that policy.
     const mfaPolicy = settings.mfa?.policy ?? 'optional';
     const mfaSetupRequired = mfaPolicy === 'required' && !user.mfaEnabled && !hasWebauthn && user.authSource === 'local';
 
@@ -164,7 +168,7 @@ export class AuthController {
       throw new UnauthorizedException(MFA_FAIL);
     }
 
-    const token = this.signToken(user);
+    const token = this.signToken(user, true);
     return {
       token,
       user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role, authSource: user.authSource, externalId: user.externalId },
@@ -202,7 +206,7 @@ export class AuthController {
       throw new UnauthorizedException(WEBAUTHN_FAIL);
     }
 
-    const token = this.signToken(user);
+    const token = this.signToken(user, true);
     return {
       token,
       user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role, authSource: user.authSource, externalId: user.externalId },
@@ -251,7 +255,7 @@ export class AuthController {
       throw new UnauthorizedException(PASSWORDLESS_FAIL);
     }
 
-    const token = this.signToken(user);
+    const token = this.signToken(user, true);
     return {
       token,
       user: {
@@ -266,6 +270,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @AllowMfaEnrollment()
   async me(@Request() req: any) {
     const user = await this.prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user) throw new UnauthorizedException();
@@ -278,6 +283,7 @@ export class AuthController {
       mfaEnabled: user.mfaEnabled,
       hasWebauthn,
       mfaPolicy,
+      mfaSetupRequired: req.user.mfaSetupRequired === true,
     };
   }
 
@@ -442,7 +448,16 @@ export class AuthController {
     }
   }
 
-  private signToken(user: { id: string; email: string; role: string }) {
-    return this.jwtService.sign({ sub: user.id, email: user.email, role: user.role, purpose: ACCESS_TOKEN_PURPOSE });
+  private enrollmentSession(user: { id: string; email: string; role: string; displayName: string; authSource: string }) {
+    return {
+      mfaSetupRequired: true,
+      mfaEnrollmentToken: this.jwtService.sign({ sub: user.id, purpose: MFA_ENROLLMENT_PURPOSE, mfaEnrollment: true }, { expiresIn: '10m' }),
+      user: { id: user.id, email: user.email, role: user.role, displayName: user.displayName, authSource: user.authSource },
+    };
+  }
+
+  private signToken(user: { id: string; email: string; role: string }, mfaVerified = false) {
+    return this.jwtService.sign({ sub: user.id, email: user.email, role: user.role, purpose: ACCESS_TOKEN_PURPOSE,
+      ...(mfaVerified ? { mfaVerified: true } : {}) });
   }
 }

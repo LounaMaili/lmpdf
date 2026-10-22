@@ -19,6 +19,7 @@ export type AuthUser = {
   mfaEnabled?: boolean;
   hasWebauthn?: boolean;
   mfaPolicy?: 'disabled' | 'optional' | 'required';
+  mfaSetupRequired?: boolean;
 };
 
 export type LoginResult = {
@@ -28,6 +29,7 @@ export type LoginResult = {
   mfaChallengeToken?: string;
   webauthnOptions?: any;
   mfaSetupRequired?: boolean;
+  mfaEnrollmentToken?: string;
 };
 
 export function getToken(): string | null {
@@ -127,7 +129,7 @@ export async function loginPasswordlessFinish(email: string, response: any): Pro
   return res.json();
 }
 
-export async function register(email: string, password: string, displayName: string): Promise<{ token: string; user: AuthUser }> {
+export async function register(email: string, password: string, displayName: string): Promise<LoginResult> {
   const res = await fetchWithTimeout(`${API_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

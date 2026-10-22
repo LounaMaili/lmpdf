@@ -3,8 +3,10 @@ import { generateSecret, generateSync, generateURI, verifySync } from 'otplib';
 import * as QRCode from 'qrcode';
 import { hash, compare } from 'bcryptjs';
 import { randomBytes } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { encryptSecret, decryptSecret, isEncryptionEnabled, isEncrypted } from './crypto.util';
+import { completeFirstEnrollment } from './mfa-enrollment';
 
 const BACKUP_CODE_COUNT = 8;
 const APP_NAME = 'LMPdf';
@@ -59,7 +61,7 @@ export class MfaService {
    * Confirme l'enrôlement MFA : persiste le secret et génère les backup codes.
    * Retourne les backup codes en clair (affichés une seule fois).
    */
-  async confirmEnrollment(userId: string, secret: string, token: string): Promise<{
+  async confirmEnrollment(userId: string, secret: string, token: string, firstEnrollmentOnly = false): Promise<{
     success: boolean;
     backupCodes?: string[];
   }> {
@@ -74,7 +76,7 @@ export class MfaService {
     })));
 
     // Transaction : activer MFA + stocker backup codes
-    await this.prisma.$transaction(async (tx) => {
+    const activate = async (tx: Prisma.TransactionClient) => {
       // Supprimer les anciens backup codes
       await tx.userBackupCode.deleteMany({ where: { userId } });
 
@@ -95,7 +97,9 @@ export class MfaService {
           codeHash: hc.codeHash,
         })),
       });
-    });
+    };
+    if (firstEnrollmentOnly) await completeFirstEnrollment(this.prisma, userId, activate);
+    else await this.prisma.$transaction(activate);
 
     return { success: true, backupCodes: plainCodes };
   }
