@@ -47,7 +47,7 @@ import type { Rotation } from './utils';
 import type { DocumentPreset, FieldModel, FieldType, TemplateModel } from './types';
 import { getStoredUser } from './auth';
 import { useAutosave } from './hooks/useAutosave';
-import { canApplyFieldPatch, editorPermissions, type DocumentRole } from './utils/editorPermissions';
+import { canApplyDetection, canApplyFieldPatch, editorPermissions, type DocumentRole } from './utils/editorPermissions';
 import { useTranslation } from './i18n';
 
 /** Strip all HTML tags from a string, returning plain text. */
@@ -227,6 +227,8 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const docRole = documentRole && documentRole.id === sourceFileId ? documentRole.role : null;
   const { canEditStructure, canSaveTemplate, canManageTemplate, canExport, canPrintDoc } =
     editorPermissions(rolePermissions, docRole, !!sourceFileId);
+  const editorAccessRef = useRef({ sourceFileId, canEditStructure });
+  editorAccessRef.current = { sourceFileId, canEditStructure };
   /** Currently selected folder in the template library. */
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   /** All folders fetched from the server. */
@@ -1027,14 +1029,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    * Merges the partial object into the existing field.
    */
   const updateField = (id: string, partial: Partial<FieldModel>) => {
-    if (!canApplyFieldPatch(canEditStructure, partial)) return;
+    if (!canApplyFieldPatch(editorAccessRef.current.canEditStructure, partial)) return;
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, ...partial } : f)));
     setDirty(true);
   };
 
   /** Update the same partial properties on multiple fields at once. */
   const bulkUpdateFields = (ids: string[], partial: Partial<FieldModel>) => {
-    if (!canApplyFieldPatch(canEditStructure, partial)) return;
+    if (!canApplyFieldPatch(editorAccessRef.current.canEditStructure, partial)) return;
     const setIds = new Set(ids);
     setFields((prev) => prev.map((f) => (setIds.has(f.id) ? { ...f, ...partial } : f)));
     setDirty(true);
@@ -2596,7 +2598,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
         {/* Detect fields */}
         {sourceFileId && (
-          <button className="panel-icon-btn" title={t('panel.detect')} disabled={isDetecting} onClick={() => { if (!canEditStructure || !sourceFileId || isDetecting) return; setIsDetecting(true); setStatus(t('status.detecting')); const detectPreset = { low: { sensitivity: 'low', maxDetectWidth: 1200 }, normal: { sensitivity: 'normal', maxDetectWidth: 1800 }, high: { sensitivity: 'high', maxDetectWidth: 2400 } } as const; detectFields(sourceFileId, { targetWidth: pageW, targetHeight: pageH, rotation, ...detectPreset[detectSensitivity], dottedAsLine: detectDottedAsLine }).then(result => { if (result.error) { setStatus(t('status.detectionError', { error: result.error })); return; } if (!result.suggestedFields.length) { setStatus(t('status.noFieldDetected')); return; } const newFields = result.suggestedFields.map(sf => ({ id: sf.id || crypto.randomUUID(), label: sf.label || t('status.defaultFieldLabel'), value: '', x: sf.x, y: sf.y, w: Math.max(16, sf.w), h: Math.max(10, sf.h), type: (sf.type === 'checkbox' ? 'checkbox' : 'text') as FieldType, style: { fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, textAlign: 'left' as const, color: preset.color }, locked: false, overlayVisible: true, pageNumber: activePage })); setFields(prev => [...prev, ...newFields]); setDirty(true); setStatus(t('status.fieldsDetected', { count: newFields.length })); }).catch(err => { setStatus(err instanceof Error ? err.message : t('status.errorFallback')); }).finally(() => { setIsDetecting(false); }); }}>
+          <button className="panel-icon-btn" title={t('panel.detect')} disabled={isDetecting} onClick={() => { if (!canEditStructure || !sourceFileId || isDetecting) return; setIsDetecting(true); setStatus(t('status.detecting')); const detectPreset = { low: { sensitivity: 'low', maxDetectWidth: 1200 }, normal: { sensitivity: 'normal', maxDetectWidth: 1800 }, high: { sensitivity: 'high', maxDetectWidth: 2400 } } as const; detectFields(sourceFileId, { targetWidth: pageW, targetHeight: pageH, rotation, ...detectPreset[detectSensitivity], dottedAsLine: detectDottedAsLine }).then(result => { if (!canApplyDetection(editorAccessRef.current, sourceFileId)) return; if (result.error) { setStatus(t('status.detectionError', { error: result.error })); return; } if (!result.suggestedFields.length) { setStatus(t('status.noFieldDetected')); return; } const newFields = result.suggestedFields.map(sf => ({ id: sf.id || crypto.randomUUID(), label: sf.label || t('status.defaultFieldLabel'), value: '', x: sf.x, y: sf.y, w: Math.max(16, sf.w), h: Math.max(10, sf.h), type: (sf.type === 'checkbox' ? 'checkbox' : 'text') as FieldType, style: { fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, textAlign: 'left' as const, color: preset.color }, locked: false, overlayVisible: true, pageNumber: activePage })); setFields(prev => [...prev, ...newFields]); setDirty(true); setStatus(t('status.fieldsDetected', { count: newFields.length })); }).catch(err => { setStatus(err instanceof Error ? err.message : t('status.errorFallback')); }).finally(() => { setIsDetecting(false); }); }}>
             <WandIcon size={18} />
           </button>
         )}
@@ -2698,6 +2700,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                         targetWidth: pageW, targetHeight: pageH, rotation,
                         ...detectPreset[detectSensitivity], dottedAsLine: detectDottedAsLine,
                       });
+                      if (!canApplyDetection(editorAccessRef.current, sourceFileId)) return;
                       if (result.error) { setStatus(t('status.detectionError', { error: result.error })); return; }
                       if (!result.suggestedFields.length) { setStatus(t('status.noFieldDetected')); return; }
                       const newFields: FieldModel[] = result.suggestedFields.map((sf) => ({

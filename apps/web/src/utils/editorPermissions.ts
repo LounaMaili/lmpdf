@@ -10,6 +10,13 @@ export function canApplyFieldPatch(canEditStructure: boolean, patch: object): bo
   return canEditStructure || Object.keys(patch).every((key) => key === 'value');
 }
 
+export function canApplyDetection(
+  active: { sourceFileId?: string; canEditStructure: boolean },
+  requestedDocumentId: string,
+): boolean {
+  return active.canEditStructure && active.sourceFileId === requestedDocumentId;
+}
+
 export function editorPermissions(
   global: { editStructure: boolean; createTemplate: boolean; manageTemplate: boolean; exportPdf: boolean; printDocument: boolean },
   role: DocumentRole,

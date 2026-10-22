@@ -31,7 +31,7 @@ Module._load = function(request, parent, isMain) {
   }
   return load.call(this, request, parent, isMain);
 };
-const { editorPermissions, canApplyFieldPatch } = require('../src/utils/editorPermissions.ts');
+const { editorPermissions, canApplyFieldPatch, canApplyDetection } = require('../src/utils/editorPermissions.ts');
 const FieldOverlay = require('../src/components/FieldOverlay.tsx').default;
 const PropertiesPanel = require('../src/components/PropertiesPanel.tsx').default;
 const all = { editStructure: true, createTemplate: true, manageTemplate: true, exportPdf: true, printDocument: true };
@@ -97,4 +97,10 @@ test('panneau filler : valeur modifiable ; type, géométrie et actions structur
   nodes(form).find(n => n.type === 'input').props.onChange({ target: { checked: true } });
   assert.deepEqual(changes, [[field.id, { value: 'true' }]]);
   assert.equal(nodes(tree).some(n => hasClass(n, 'bulk-actions')), false);
+});
+
+test('détection tardive : ni autre document ni retrait du droit ne peuvent modifier la structure', () => {
+  assert.equal(canApplyDetection({ sourceFileId: 'A', canEditStructure: true }, 'A'), true);
+  assert.equal(canApplyDetection({ sourceFileId: 'B', canEditStructure: true }, 'A'), false);
+  assert.equal(canApplyDetection({ sourceFileId: 'A', canEditStructure: false }, 'A'), false);
 });
