@@ -12,8 +12,8 @@
  * - Rich text (bold, italic, underline, colors) is only available in fillMode or
  *   when the field is selected. When neither is true the field renders as a plain
  *   div with dangerouslySetInnerHTML for performance.
- * - Structural edits (move, resize) are blocked in fillMode or when the current
- *   user role is "filler" and the field is locked.
+ * - Structural edits require an explicit structure permission and are blocked
+ *   in fillMode and for every filler, including unlocked fields.
  * - Fused fields (continuous overflow extension across multiple physical fields)
  *   use `fusedMeta` to report their logical bounds; the anchor field carries
  *   the full combined bounds and hidden ghost fields are display:none.
@@ -42,6 +42,7 @@ type Props = {
   rotation: Rotation;
   /** Role of the current user in this document. */
   docRole?: 'owner' | 'editor' | 'filler' | null;
+  canEditStructure?: boolean;
   /** True when the user is in fill mode (editing field values). */
   fillMode?: boolean;
   onSelect: (ctrlKey: boolean) => void;
@@ -101,6 +102,7 @@ export default function FieldOverlay({
   dispRatio,
   rotation,
   docRole,
+  canEditStructure = false,
   fillMode,
   onSelect,
   onMove,
@@ -117,9 +119,8 @@ export default function FieldOverlay({
 }: Props) {
   const { t } = useTranslation();
 
-  // Structural edits (move/resize) are blocked when the field is locked and the
-  // user is a filler, or when in fill mode (fill mode is for data entry only).
-  const structureLocked = (field.locked && docRole === 'filler') || Boolean(fillMode);
+  // Fillers can change values only, regardless of the field lock state.
+  const structureLocked = !canEditStructure || docRole === 'filler' || Boolean(fillMode);
 
   const [dragging, setDragging] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -167,7 +168,7 @@ export default function FieldOverlay({
     // Preserve contentEditable editing in an already-selected rich text field.
     if ((e.target as HTMLElement).closest('[contentEditable]') && selected) return;
 
-    if (fillMode) return;
+    if (structureLocked) return;
 
     setDragging(true);
     const startX = e.clientX;

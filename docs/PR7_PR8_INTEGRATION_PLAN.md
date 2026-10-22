@@ -1,5 +1,10 @@
 # Revue complémentaire des PR #7 et #8 — 22 octobre 2026
 
+**Revue initiale conservée comme historique.** #9 a ensuite été fusionnée et #8
+actualisée ; les corrections de mémoire/nommage de #7 sont décrites dans
+[DOCUMENT_PERMISSION_ENFORCEMENT.md](DOCUMENT_PERMISSION_ENFORCEMENT.md).
+Les mesures et problèmes ci-dessous décrivent le SHA initial de #7.
+
 Revue en lecture seule ; aucune modification de leurs branches, aucune fusion,
 aucun déploiement. Les deux PR ciblent `main` et restent ouvertes en brouillon.
 

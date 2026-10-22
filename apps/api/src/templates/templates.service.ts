@@ -3,6 +3,7 @@ import { FieldType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTemplateDto } from './dto/create-template.dto';
 import { sanitizeRichTextHtml } from '../utils/sanitizeRichText';
+import { PermissionsService } from '../permissions/permissions.service';
 
 type AuthUser = { id: string; role: Role };
 
@@ -18,7 +19,10 @@ function toApiFieldType(type: FieldType): 'text' | 'checkbox' | 'counter-tally' 
 
 @Injectable()
 export class TemplatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   private normalizeTemplate<T extends { fields: Array<{ type: FieldType }> }>(tpl: T) {
     return {
@@ -41,34 +45,14 @@ export class TemplatesService {
 
   /** Check if user has access to a document (owner, admin, or via DocumentPermission) */
   private async hasDocAccess(documentId: string, user: AuthUser): Promise<boolean> {
-    if (isAdmin(user)) return true;
-
-    const doc = await this.prisma.document.findUnique({ where: { id: documentId } });
-    if (!doc) return false;
-    if (doc.ownerId === user.id) return true;
-
-    // Check direct user permission
-    const userPerm = await this.prisma.documentPermission.findUnique({
-      where: { documentId_userId: { documentId, userId: user.id } },
-    });
-    if (userPerm) return true;
-
-    // Check group permissions
-    const groupIds = await this.userGroupIds(user.id);
-    if (groupIds.length > 0) {
-      const groupPerm = await this.prisma.documentPermission.findFirst({
-        where: { documentId, groupId: { in: groupIds } },
-      });
-      if (groupPerm) return true;
-    }
-
-    return false;
+    return (await this.permissions.resolveDocRole(documentId, user)) !== null;
   }
 
   async create(payload: CreateTemplateDto, user: AuthUser) {
     if (payload.sourceFileId) {
-      const hasAccess = await this.hasDocAccess(payload.sourceFileId, user);
-      if (!hasAccess) throw new ForbiddenException('Accès refusé au document source');
+      const doc = await this.prisma.document.findUnique({ where: { id: payload.sourceFileId } });
+      if (!doc) throw new NotFoundException('Document source introuvable');
+      await this.permissions.requireDocRole(payload.sourceFileId, user, 'editor');
     }
 
     const created = await this.prisma.template.create({

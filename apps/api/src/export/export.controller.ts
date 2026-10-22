@@ -4,6 +4,8 @@ import {
   Controller,
   Delete,
   ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
   Post,
   Get,
   Query,
@@ -12,9 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { randomUUID } from 'crypto';
-import { promises as fsP } from 'fs';
+import { memoryStorage } from 'multer';
 import { Roles } from '../auth/roles.decorator';
 import { loadRuntimeSettings } from '../config/runtime-settings';
 import { canUser } from '../config/permission-matrix';
@@ -24,6 +24,9 @@ import type { ExportContext, ExportSettings } from './export-types';
 import { defaultExportSettings } from './export-types';
 import { writeExportFile } from './export-writer';
 import { PrismaService } from '../prisma/prisma.service';
+import { PermissionsService } from '../permissions/permissions.service';
+import { ExportRequestDto } from './dto/export-request.dto';
+import { ExportCapacityInterceptor, MAX_EXPORT_BYTES } from './export-capacity.interceptor';
 
 // ── Helper: build ExportContext from JWT user + optional overrides ──
 async function buildExportContext(
@@ -121,7 +124,40 @@ export class ExportAdminController {
 
 @Controller('export')
 export class ExportController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissions: PermissionsService,
+  ) {}
+
+  /** Resolve a trusted document context before rules, logging or filesystem writes. */
+  private async authorizeExport(body: ExportRequestDto, user: any) {
+    if (!user) throw new UnauthorizedException('Authentification requise');
+    if (!(await canUser(user.role, 'exportPdf'))) {
+      throw new ForbiddenException('Droits insuffisants pour exporter');
+    }
+
+    let sourceFileId = body.sourceFileId;
+    let templateName: string | undefined;
+    if (body.templateId) {
+      const template = await this.prisma.template.findUnique({ where: { id: body.templateId } });
+      if (!template) throw new NotFoundException('Template introuvable');
+      if (!template.sourceFileId) throw new BadRequestException('Ce template ne possède pas de document source');
+      if (sourceFileId && sourceFileId !== template.sourceFileId) {
+        throw new BadRequestException('Template et document source incohérents');
+      }
+      sourceFileId = template.sourceFileId;
+      templateName = template.name;
+    }
+    if (!sourceFileId) throw new BadRequestException('Un document source est requis pour exporter');
+    const document = await this.prisma.document.findUnique({ where: { id: sourceFileId } });
+    if (!document) throw new NotFoundException('Document source introuvable');
+    await this.permissions.requireDocRole(sourceFileId, user, 'editor');
+    return {
+      sourceFileId,
+      templateId: body.templateId,
+      templateName: templateName ?? document.originalName,
+    };
+  }
 
   /** Fire-and-forget export log helper */
   private logExport(
@@ -162,15 +198,11 @@ export class ExportController {
    */
   @Post('resolve')
   async resolve(
-    @Body() body: { templateName?: string; templateId?: string },
+    @Body() body: ExportRequestDto,
     @Request() req: any,
   ) {
     const user = req.user;
-    if (!user) throw new ForbiddenException('Authentification requise');
-
-    if (!(await canUser(user.role, 'exportPdf'))) {
-      throw new ForbiddenException('Droits insuffisants pour exporter');
-    }
+    const documentContext = await this.authorizeExport(body, user);
 
     const settings = await loadRuntimeSettings();
     const exportCfg: ExportSettings = settings.export ?? defaultExportSettings();
@@ -180,11 +212,11 @@ export class ExportController {
     }
 
     const ctx = await buildExportContext(user, this.prisma, {
-      templateName: body.templateName || undefined,
-      templateId: body.templateId || undefined,
+      templateName: documentContext.templateName,
+      templateId: documentContext.templateId,
     });
 
-    const result = resolveExport(exportCfg, ctx);
+    const result = resolveExport(exportCfg, ctx, body.outputFileName);
     return { ...result, enabled: true };
   }
 
@@ -193,7 +225,8 @@ export class ExportController {
    *
    * Accepts a multipart upload with:
    *   - file: the generated PDF bytes (from the front-end)
-   *   - templateName (optional): for path placeholders
+   *   - sourceFileId and/or templateId: checked against stored documents
+   *   - templateName (legacy, ignored): names are resolved from the database
    *   - templateId (optional): for rule matching
    *
    * Resolves destination using current config + authenticated user context,
@@ -203,35 +236,24 @@ export class ExportController {
    */
   @Post('run')
   @UseInterceptors(
+    ExportCapacityInterceptor,
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: 'uploads/tmp-export',
-        filename: (_, _file, cb) => cb(null, `export-${randomUUID()}.pdf`),
-      }),
-      limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+      // Parse multipart without writing untrusted uploads to disk.
+      storage: memoryStorage(),
+      // Busboy emits its limit event when reaching this value (exclusive bound).
+      limits: { fileSize: MAX_EXPORT_BYTES + 1, files: 1, fields: 4, parts: 5, fieldSize: 1024, fieldNameSize: 100 },
     }),
   )
   async runExport(
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Body() body: { templateName?: string; templateId?: string },
+    @Body() body: ExportRequestDto,
     @Request() req: any,
   ) {
-    // ── Permission check ──
     const user = req.user;
-    if (!user) throw new ForbiddenException('Authentification requise');
-
-    if (!(await canUser(user.role, 'exportPdf'))) {
-      throw new ForbiddenException('Droits insuffisants pour exporter');
-    }
-
-    if (!file) {
-      throw new BadRequestException('Fichier PDF manquant');
-    }
-
-    // ── Basic PDF validation (magic bytes) ──
-    const pdfBuffer = await fsP.readFile(file.path);
-    if (pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
-      await fsP.unlink(file.path).catch(() => {});
+    const documentContext = await this.authorizeExport(body, user);
+    if (!file) throw new BadRequestException('Fichier PDF manquant');
+    const pdfBuffer = file.buffer;
+    if (pdfBuffer.length < 5 || pdfBuffer.subarray(0, 5).toString() !== '%PDF-') {
       throw new BadRequestException('Le fichier envoyé n\'est pas un PDF valide');
     }
 
@@ -245,15 +267,15 @@ export class ExportController {
       }
 
       const ctx = await buildExportContext(user, this.prisma, {
-        templateName: body.templateName || undefined,
-        templateId: body.templateId || undefined,
+        templateName: documentContext.templateName,
+        templateId: documentContext.templateId,
       });
 
-      const resolved = resolveExport(exportCfg, ctx);
+      const resolved = resolveExport(exportCfg, ctx, body.outputFileName);
 
       if (!resolved.matched || resolved.errors.length > 0) {
         // Log the error
-        this.logExport(user, body, resolved, 'error', null, resolved.errors.join('; ') || 'Aucune règle ne correspond');
+        this.logExport(user, documentContext, resolved, 'error', null, resolved.errors.join('; ') || 'Aucune règle ne correspond');
         throw new BadRequestException(
           resolved.errors.length > 0
             ? resolved.errors.join('; ')
@@ -262,7 +284,7 @@ export class ExportController {
       }
 
       if (!resolved.fullPath) {
-        this.logExport(user, body, resolved, 'error', null, 'Chemin d\'export résolu vide');
+        this.logExport(user, documentContext, resolved, 'error', null, 'Chemin d\'export résolu vide');
         throw new BadRequestException('Chemin d\'export résolu vide');
       }
 
@@ -271,6 +293,7 @@ export class ExportController {
         resolved.fullPath,
         pdfBuffer,
         resolved.conflictStrategy || 'overwrite',
+        exportCfg.allowedRoots,
       );
 
       // ── Determine status for log ──
@@ -281,7 +304,7 @@ export class ExportController {
           : 'written';
 
       // ── Record export log (fire-and-forget — don't block response) ──
-      this.logExport(user, body, resolved, logStatus, writeResult.finalPath, null, pdfBuffer.length);
+      this.logExport(user, documentContext, resolved, logStatus, writeResult.finalPath, null, pdfBuffer.length);
 
       return {
         ok: true,
@@ -298,11 +321,8 @@ export class ExportController {
         throw err;
       }
       // Unexpected error — log it
-      this.logExport(user, body, null, 'error', null, (err as Error)?.message || 'Erreur interne', pdfBuffer.length);
+      this.logExport(user, documentContext, null, 'error', null, (err as Error)?.message || 'Erreur interne', pdfBuffer.length);
       throw err;
-    } finally {
-      // Clean up temporary file
-      await fsP.unlink(file.path).catch(() => {});
     }
   }
 }

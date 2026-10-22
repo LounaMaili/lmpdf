@@ -47,6 +47,7 @@ import type { Rotation } from './utils';
 import type { DocumentPreset, FieldModel, FieldType, TemplateModel } from './types';
 import { getStoredUser } from './auth';
 import { useAutosave } from './hooks/useAutosave';
+import { canApplyDetection, canApplyFieldPatch, editorPermissions, type DocumentRole } from './utils/editorPermissions';
 import { useTranslation } from './i18n';
 
 /** Strip all HTML tags from a string, returning plain text. */
@@ -222,13 +223,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   /** Whether the share-collaboration modal is open. */
   const [showShareModal, setShowShareModal] = useState(false);
   /** The current user's role on the active document (owner/editor/filler). */
-  const [docRole, setDocRole] = useState<'owner' | 'editor' | 'filler' | null>(null);
-  // ───── Derived permission booleans (combining global perms with doc-level role) ─────
-  const canEditStructure = rolePermissions.editStructure && docRole !== 'filler';
-  const canSaveTemplate = rolePermissions.createTemplate && (docRole === 'owner' || docRole === 'editor' || docRole === null);
-  const canManageTemplate = rolePermissions.manageTemplate && (docRole === 'owner' || docRole === 'editor' || docRole === null);
-  const canExport = rolePermissions.exportPdf && docRole !== 'filler';
-  const canPrintDoc = rolePermissions.printDocument && docRole !== 'filler';
+  const [documentRole, setDocumentRole] = useState<{ id: string; role: DocumentRole } | null>(null);
+  const docRole = documentRole && documentRole.id === sourceFileId ? documentRole.role : null;
+  const { canEditStructure, canSaveTemplate, canManageTemplate, canExport, canPrintDoc } =
+    editorPermissions(rolePermissions, docRole, !!sourceFileId);
+  const editorAccessRef = useRef({ sourceFileId, canEditStructure });
+  editorAccessRef.current = { sourceFileId, canEditStructure };
   /** Currently selected folder in the template library. */
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   /** All folders fetched from the server. */
@@ -264,6 +264,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
   const [preset, setPreset] = useState<DocumentPreset>({ ...defaultDocumentPreset });
   /** If true, the user is in "fill mode" (edit values only, not structure). */
   const [fillMode, setFillMode] = useState(true);
+  useEffect(() => { if (!canEditStructure) setFillMode(true); }, [canEditStructure]);
   /** Toggle to render overflow-order index numbers on each field (visual debug aid). */
   const [showDebugOrder, setShowDebugOrder] = useState(false);
   /** Tracks visual/overflow state per group key (continuous & fused modes). */
@@ -466,8 +467,12 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   /** Fetch the user's effective role on the current document whenever the source file changes. */
   useEffect(() => {
-    if (!sourceFileId) { setDocRole(null); return; }
-    getMyDocRole(sourceFileId).then((r) => setDocRole(r.docRole as any)).catch(() => setDocRole(null));
+    let cancelled = false;
+    if (!sourceFileId) { setDocumentRole(null); return; }
+    getMyDocRole(sourceFileId).then((r) => {
+      if (!cancelled) setDocumentRole({ id: sourceFileId, role: r.docRole as DocumentRole });
+    }).catch(() => { if (!cancelled) setDocumentRole(null); });
+    return () => { cancelled = true; };
   }, [sourceFileId]);
 
   /** Calcule renderW pour fit-to-width ou fit-to-page */
@@ -558,7 +563,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       }
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (fillMode) return;
+        if (fillMode || !canEditStructure) return;
         // Never intercept Delete/Backspace while the user is editing a form control.
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -586,7 +591,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFieldId, multiSelectedIds, fields, fillMode, activePage, rotation, pageW, pageH]);
+  }, [selectedFieldId, multiSelectedIds, fields, fillMode, activePage, rotation, pageW, pageH, canEditStructure]);
 
   /** After Tab/arrow selection, move DOM focus to the field's input control for immediate typing. */
   useEffect(() => {
@@ -1003,6 +1008,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   /** Duplicate a single field, offsetting it slightly below the original. */
   const duplicateField = (id: string) => {
+    if (!canEditStructure) return;
     const source = fields.find((f) => f.id === id);
     if (!source) return;
     const dup: FieldModel = {
@@ -1023,12 +1029,14 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    * Merges the partial object into the existing field.
    */
   const updateField = (id: string, partial: Partial<FieldModel>) => {
+    if (!canApplyFieldPatch(editorAccessRef.current.canEditStructure, partial)) return;
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, ...partial } : f)));
     setDirty(true);
   };
 
   /** Update the same partial properties on multiple fields at once. */
   const bulkUpdateFields = (ids: string[], partial: Partial<FieldModel>) => {
+    if (!canApplyFieldPatch(editorAccessRef.current.canEditStructure, partial)) return;
     const setIds = new Set(ids);
     setFields((prev) => prev.map((f) => (setIds.has(f.id) ? { ...f, ...partial } : f)));
     setDirty(true);
@@ -1036,6 +1044,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   /** Patch the style object on multiple text fields at once. */
   const bulkPatchFieldStyle = (ids: string[], stylePatch: Partial<FieldModel['style']>) => {
+    if (!canEditStructure) return;
     const setIds = new Set(ids);
     setFields((prev) => prev.map((f) => {
       if (!setIds.has(f.id) || f.type !== 'text') return f;
@@ -1893,6 +1902,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    * using the deterministic sortOverflowGroup algorithm.
    */
   const autoOrderOverflowGroup = (groupId: string, _mode: 'rows' | 'right' | 'down' = 'rows') => {
+    if (!canEditStructure) return;
     const gid = groupId.trim();
     if (!gid) return;
 
@@ -1916,6 +1926,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    * selected text fields at once.
    */
   const bulkAssignOverflowGroup = (ids: string[], groupId: string, _mode: 'rows' | 'right' | 'down' = 'rows') => {
+    if (!canEditStructure) return;
     const gid = groupId.trim();
     if (!gid) return;
     const selectedSet = new Set(ids);
@@ -1948,6 +1959,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   /** Change the type of multiple fields, resetting values to type-appropriate defaults. */
   const bulkUpdateType = (ids: string[], type: FieldType) => {
+    if (!canEditStructure) return;
     const newValue = type === 'counter-tally' || type === 'counter-numeric' ? '0' : '';
     setFields((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, type, value: newValue } : f)));
     setDirty(true);
@@ -1955,6 +1967,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
   /** Delete a single field by ID, cleaning up selection state. */
   const deleteField = (id: string) => {
+    if (!canEditStructure) return;
     setFields((prev) => prev.filter((f) => f.id !== id));
     if (selectedFieldId === id) setSelectedFieldId(null);
     setMultiSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
@@ -1966,6 +1979,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    * Used for manual reordering in the properties panel field list.
    */
   const reorderField = (id: string, direction: 'up' | 'down') => {
+    if (!canEditStructure) return;
     setFields((prev) => {
       const idx = prev.findIndex((f) => f.id === id);
       if (idx < 0) return prev;
@@ -2233,10 +2247,10 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    */
   useEffect(() => {
     if (!canExport || !sourceUrl) { setServerExportAvailable(false); return; }
-    resolveExportDestination({ templateName: name, templateId: loadedTemplateId || undefined })
+    resolveExportDestination({ sourceFileId, templateId: loadedTemplateId || undefined, outputFileName: name })
       .then((r) => setServerExportAvailable(r.enabled === true && r.matched === true && r.errors.length === 0))
       .catch(() => setServerExportAvailable(false));
-  }, [canExport, sourceUrl, name, loadedTemplateId]);
+  }, [canExport, sourceUrl, sourceFileId, name, loadedTemplateId]);
 
   /**
    * Generate the filled PDF in the browser and upload it to the server
@@ -2255,8 +2269,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
       // 2. Send to backend for filesystem write
       const result = await runServerExport(pdfBlob, {
-        templateName: name,
+        sourceFileId,
         templateId: loadedTemplateId || undefined,
+        outputFileName: name,
       });
 
       if (result.skipped) {
@@ -2290,6 +2305,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
    * Wraps around to stay within 0–359°.
    */
   const rotateBy = (deg: 90 | -90) => {
+    if (!canEditStructure) return;
     setRotation((prev) => (((prev + deg) % 360 + 360) % 360) as Rotation);
     setDirty(true);
   };
@@ -2428,7 +2444,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
           <input
             className="toolbar-name-input"
             value={name}
+            disabled={!canSaveTemplate}
             onChange={(e) => {
+              if (!canSaveTemplate) return;
               setName(e.target.value);
               setDirty(true);
             }}
@@ -2504,9 +2522,9 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
 
           {/* Rotation controls: rotate 90° left/right */}
           <div className="rotation-controls compact">
-            <button onClick={() => rotateBy(-90)} title={t('toolbar.rotateLeft')}> <RotateLeftIcon size={16} /></button>
+            <button disabled={!canEditStructure} onClick={() => rotateBy(-90)} title={t('toolbar.rotateLeft')}> <RotateLeftIcon size={16} /></button>
             <span>{rotation}°</span>
-            <button onClick={() => rotateBy(90)} title={t('toolbar.rotateRight')}> <RotateRightIcon size={16} /></button>
+            <button disabled={!canEditStructure} onClick={() => rotateBy(90)} title={t('toolbar.rotateRight')}> <RotateRightIcon size={16} /></button>
           </div>
         </div>
 
@@ -2575,13 +2593,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         </button>
 
         {/* Fill mode toggle */}
-        <button className={`panel-icon-btn fill-edit-mode ${fillMode ? 'fill-active' : 'edit-active'}`} title={fillMode ? 'Switch to edit mode' : 'Switch to fill mode'} onClick={() => setFillMode((v) => !v)}>
+        <button className={`panel-icon-btn fill-edit-mode ${fillMode ? 'fill-active' : 'edit-active'}`} title={fillMode ? 'Switch to edit mode' : 'Switch to fill mode'} disabled={!canEditStructure} onClick={() => setFillMode((v) => !v)}>
           {fillMode ? <EditIcon size={18} /> : <EyeIcon size={18} />}
         </button>
 
         {/* Detect fields */}
         {sourceFileId && (
-          <button className="panel-icon-btn" title={t('panel.detect')} disabled={isDetecting} onClick={() => { if (!canEditStructure || !sourceFileId || isDetecting) return; setIsDetecting(true); setStatus(t('status.detecting')); const detectPreset = { low: { sensitivity: 'low', maxDetectWidth: 1200 }, normal: { sensitivity: 'normal', maxDetectWidth: 1800 }, high: { sensitivity: 'high', maxDetectWidth: 2400 } } as const; detectFields(sourceFileId, { targetWidth: pageW, targetHeight: pageH, rotation, ...detectPreset[detectSensitivity], dottedAsLine: detectDottedAsLine }).then(result => { if (result.error) { setStatus(t('status.detectionError', { error: result.error })); return; } if (!result.suggestedFields.length) { setStatus(t('status.noFieldDetected')); return; } const newFields = result.suggestedFields.map(sf => ({ id: sf.id || crypto.randomUUID(), label: sf.label || t('status.defaultFieldLabel'), value: '', x: sf.x, y: sf.y, w: Math.max(16, sf.w), h: Math.max(10, sf.h), type: (sf.type === 'checkbox' ? 'checkbox' : 'text') as FieldType, style: { fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, textAlign: 'left' as const, color: preset.color }, locked: false, overlayVisible: true, pageNumber: activePage })); setFields(prev => [...prev, ...newFields]); setDirty(true); setStatus(t('status.fieldsDetected', { count: newFields.length })); }).catch(err => { setStatus(err instanceof Error ? err.message : t('status.errorFallback')); }).finally(() => { setIsDetecting(false); }); }}>
+          <button className="panel-icon-btn" title={t('panel.detect')} disabled={isDetecting} onClick={() => { if (!canEditStructure || !sourceFileId || isDetecting) return; setIsDetecting(true); setStatus(t('status.detecting')); const detectPreset = { low: { sensitivity: 'low', maxDetectWidth: 1200 }, normal: { sensitivity: 'normal', maxDetectWidth: 1800 }, high: { sensitivity: 'high', maxDetectWidth: 2400 } } as const; detectFields(sourceFileId, { targetWidth: pageW, targetHeight: pageH, rotation, ...detectPreset[detectSensitivity], dottedAsLine: detectDottedAsLine }).then(result => { if (!canApplyDetection(editorAccessRef.current, sourceFileId)) return; if (result.error) { setStatus(t('status.detectionError', { error: result.error })); return; } if (!result.suggestedFields.length) { setStatus(t('status.noFieldDetected')); return; } const newFields = result.suggestedFields.map(sf => ({ id: sf.id || crypto.randomUUID(), label: sf.label || t('status.defaultFieldLabel'), value: '', x: sf.x, y: sf.y, w: Math.max(16, sf.w), h: Math.max(10, sf.h), type: (sf.type === 'checkbox' ? 'checkbox' : 'text') as FieldType, style: { fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, textAlign: 'left' as const, color: preset.color }, locked: false, overlayVisible: true, pageNumber: activePage })); setFields(prev => [...prev, ...newFields]); setDirty(true); setStatus(t('status.fieldsDetected', { count: newFields.length })); }).catch(err => { setStatus(err instanceof Error ? err.message : t('status.errorFallback')); }).finally(() => { setIsDetecting(false); }); }}>
             <WandIcon size={18} />
           </button>
         )}
@@ -2631,14 +2649,15 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                 <button onClick={duplicateActivePage} disabled={!sourceUrl || !canEditStructure}>{t('toolbar.duplicatePage')}</button>
                 <button onClick={deleteActivePage} disabled={pageCount <= 1 || !canEditStructure}>{t('toolbar.deletePage')}</button>
               </div>
-              <button className={`panel-action-btn ${fillMode ? 'active' : ''}`} onClick={() => setFillMode(v => !v)}>
+              <button className={`panel-action-btn ${fillMode ? 'active' : ''}`} disabled={!canEditStructure} onClick={() => setFillMode(v => !v)}>
                 {fillMode ? t('panel.fillModeOn') : t('panel.fillModeOff')}
               </button>
               <button className={`panel-action-btn ${showDebugOrder ? 'active' : ''}`} onClick={() => setShowDebugOrder(v => !v)}>
                 {showDebugOrder ? t('panel.debugOrderOn') : t('panel.debugOrderOff')}
               </button>
               {fields.length > 0 && (
-                <button className="panel-action-btn danger" disabled={fillMode} onClick={() => {
+                <button className="panel-action-btn danger" disabled={fillMode || !canEditStructure} onClick={() => {
+                  if (!canEditStructure) return;
                   if (window.confirm(t('panel.deleteAllFieldsConfirm', { count: fields.length }))) {
                     setFields([]); setSelectedFieldId(null); setMultiSelectedIds(new Set()); setDirty(true);
                     setStatus(t('status.fieldsDeleted', { count: fields.length }));
@@ -2682,6 +2701,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                         targetWidth: pageW, targetHeight: pageH, rotation,
                         ...detectPreset[detectSensitivity], dottedAsLine: detectDottedAsLine,
                       });
+                      if (!canApplyDetection(editorAccessRef.current, sourceFileId)) return;
                       if (result.error) { setStatus(t('status.detectionError', { error: result.error })); return; }
                       if (!result.suggestedFields.length) { setStatus(t('status.noFieldDetected')); return; }
                       const newFields: FieldModel[] = result.suggestedFields.map((sf) => ({
@@ -2707,7 +2727,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
             )}
 
             {/* ── Default style section: font family, size, weight, color ── */}
-            <details className="panel-section">
+            {canEditStructure && <details className="panel-section">
               <summary>{t('panel.defaultStyle')}</summary>
               <label>
                 {t('panel.font')}
@@ -2752,14 +2772,15 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     setDirty(true);
                   }} />
               </label>
-              <button className="panel-action-btn" onClick={() => {
+              <button className="panel-action-btn" disabled={!canEditStructure} onClick={() => {
+                if (!canEditStructure) return;
                 setFields((prev) => prev.map((f) => ({
                   ...f, style: { ...f.style, fontFamily: preset.fontFamily, fontSize: preset.fontSize, fontWeight: preset.fontWeight, color: preset.color }
                 })));
                 setDirty(true);
                 setStatus(t('status.presetApplied'));
               }}>{t('panel.applyToAllFields')}</button>
-            </details>
+            </details>}
 
           </aside>
 
@@ -2839,6 +2860,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
                     dispRatio={(renderW * userZoom) / pageW}
                     rotation={rotation}
                     docRole={docRole}
+        canEditStructure={canEditStructure}
                     fillMode={fillMode}
                     // Selection handler: activates page and selects/deselects field
                     onSelect={(ctrlKey) => {
@@ -3006,6 +3028,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
         onDuplicate={duplicateField}
         onAutoOrderOverflowGroup={autoOrderOverflowGroup}
         docRole={docRole}
+        canEditStructure={canEditStructure}
         fillMode={fillMode}
         // Callback to reset fused UI state for a given key (used when changing overflow settings)
         onResetFused={(fusedKey: string) => {

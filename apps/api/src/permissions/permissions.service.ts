@@ -13,11 +13,10 @@ export class PermissionsService {
    * Priority: admin → direct owner → DocumentPermission (user) → DocumentPermission (group) → null
    */
   async resolveDocRole(documentId: string, user: AuthUser): Promise<DocRole | null> {
-    // Global admin bypasses everything
-    if (user.role === 'admin') return 'owner';
-
     const doc = await this.prisma.document.findUnique({ where: { id: documentId } });
     if (!doc) return null;
+    // Admin privileges do not make an unknown document exist.
+    if (user.role === 'admin') return 'owner';
 
     // Document owner gets owner role
     if (doc.ownerId === user.id) return 'owner';
