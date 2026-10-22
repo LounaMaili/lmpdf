@@ -113,7 +113,10 @@ Ne jamais afficher, copier ou committer de secrets, ni le contenu des fichiers
 committer `.env`, `.env.*`, clés JWT/MFA, identifiants LDAP, mots de passe,
 uploads, exports utilisateur, dumps ou volumes Docker. `infra/postgres-data/`,
 `uploads/` et le volume Docker `uploads-data` sont des données runtime ;
-PostgreSQL et `uploads-data` sont les deux persistances critiques à préserver.
+PostgreSQL et `uploads-data` sont les deux persistances critiques de contenu à préserver.
+Le volume `admin-config` conserve les réglages sensibles administrateur ; le
+préserver également et sauvegarder un éventuel fichier non monté avant une
+première bascule vers ce volume.
 Les anciens répertoires locaux `infra/minio-data/`, `infra/garage-data/`,
 `infra/garage-meta/` et `infra/redis-data/` restent ignorés et ne font pas partie
 de l'infrastructure active. Documenter toute nouvelle variable dans

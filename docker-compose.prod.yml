@@ -57,6 +57,7 @@ services:
       MFA_POLICY: ${MFA_POLICY:-optional}
     volumes:
       - uploads-data:/app/apps/api/uploads
+      - admin-config:/app/apps/api/config
     expose:
       - "3000"
     depends_on:
@@ -91,3 +92,4 @@ services:
 volumes:
   postgres-data:
   uploads-data:
+  admin-config:
