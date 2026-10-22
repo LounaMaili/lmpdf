@@ -1,4 +1,16 @@
-import { resolve, normalize, isAbsolute } from 'path';
+import { resolve, isAbsolute, relative, sep, parse, join } from 'path';
+import { lstatSync } from 'fs';
+
+export function exportRootForPath(fullPath: string, allowedRoots: string[]): string | null {
+  if (!fullPath || !isAbsolute(fullPath) || fullPath.includes('..') || fullPath.includes('\0')) return null;
+  const absolute = resolve(fullPath);
+  for (const root of [...allowedRoots].sort((a, b) => b.length - a.length)) {
+    if (!isAbsolute(root) || root.includes('..') || root.includes('\0')) continue;
+    const normalized = resolve(root), child = relative(normalized, absolute);
+    if (child && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)) return normalized;
+  }
+  return null;
+}
 
 /**
  * Validate that a resolved path stays within one of the allowed roots.
@@ -8,27 +20,22 @@ export function validateExportPath(
   fullPath: string,
   allowedRoots: string[],
 ): { valid: true; sanitised: string } | { valid: false; error: string } {
-  if (!fullPath) return { valid: false, error: 'Chemin vide' };
-
-  // Reject explicit path traversal tokens in the raw input
-  if (fullPath.includes('..')) {
-    return { valid: false, error: 'Séquence ".." interdite dans le chemin d\'export' };
-  }
-
-  const abs = normalize(resolve(fullPath));
-
-  // Double-check after resolve (belt-and-suspenders)
-  for (const root of allowedRoots) {
-    const normRoot = normalize(resolve(root));
-    if (abs.startsWith(normRoot + '/') || abs === normRoot) {
-      return { valid: true, sanitised: abs };
+  const invalid = { valid: false as const, error: 'Chemin d’export hors racine, symbolique ou non sûr' };
+  if (!exportRootForPath(fullPath, allowedRoots)) return invalid;
+  const absolute = resolve(fullPath), parts = relative(parse(absolute).root, absolute).split(sep);
+  let current = parse(absolute).root;
+  for (let index = 0; index < parts.length; index++) {
+    current = join(current, parts[index]);
+    try {
+      const info = lstatSync(current);
+      if (info.isSymbolicLink()) return invalid;
+      if (index < parts.length - 1 ? !info.isDirectory() : !info.isFile() || info.nlink !== 1) return invalid;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') break; // New directories/files are created safely by the writer.
+      return invalid;
     }
   }
-
-  return {
-    valid: false,
-    error: `Chemin "${abs}" hors des racines autorisées [${allowedRoots.join(', ')}]`,
-  };
+  return { valid: true, sanitised: absolute };
 }
 
 /**

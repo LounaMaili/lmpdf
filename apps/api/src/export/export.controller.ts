@@ -293,6 +293,7 @@ export class ExportController {
         resolved.fullPath,
         pdfBuffer,
         resolved.conflictStrategy || 'overwrite',
+        exportCfg.allowedRoots,
       );
 
       // ── Determine status for log ──

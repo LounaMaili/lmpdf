@@ -206,8 +206,8 @@ test('HTTP : fallback document et template ne doublent plus les extensions', asy
 for (const strategy of ['overwrite', 'rename', 'skip']) {
   test(`collision disque : ${strategy}`, async () => {
     const target = path.join(destination, 'scan.pdf');
-    await writer.writeExportFile(target, Buffer.from('old'), 'overwrite');
-    const result = await writer.writeExportFile(target, Buffer.from('new'), strategy);
+    await writer.writeExportFile(target, Buffer.from('old'), 'overwrite', [root]);
+    const result = await writer.writeExportFile(target, Buffer.from('new'), strategy, [root]);
     assert.equal(fs.readFileSync(target, 'utf8'), strategy === 'overwrite' ? 'new' : 'old');
     if (strategy === 'rename') assert.equal(fs.readFileSync(result.finalPath, 'utf8'), 'new');
     if (strategy === 'skip') assert.equal(result.skipped, true);
@@ -216,12 +216,12 @@ for (const strategy of ['overwrite', 'rename', 'skip']) {
 }
 test('collision concurrente : rename ne peut pas écraser un autre export', async () => {
   const target = path.join(destination, 'scan.pdf');
-  const results = await Promise.all(Array.from({ length: 6 }, (_, i) => writer.writeExportFile(target, Buffer.from(String(i)), 'rename')));
+  const results = await Promise.all(Array.from({ length: 6 }, (_, i) => writer.writeExportFile(target, Buffer.from(String(i)), 'rename', [root])));
   assert.equal(new Set(results.map(r => r.finalPath)).size, 6);
   assert.deepEqual(results.map(r => fs.readFileSync(r.finalPath, 'utf8')).sort(), ['0', '1', '2', '3', '4', '5']);
 });
 test('collision concurrente : skip ne crée qu’un fichier sans écrasement', async () => {
   const target = path.join(destination, 'scan.pdf');
-  const results = await Promise.all(Array.from({ length: 6 }, (_, i) => writer.writeExportFile(target, Buffer.from(String(i)), 'skip')));
+  const results = await Promise.all(Array.from({ length: 6 }, (_, i) => writer.writeExportFile(target, Buffer.from(String(i)), 'skip', [root])));
   assert.equal(results.filter(r => r.written).length, 1); assert.equal(fs.readdirSync(destination).length, 1);
 });
