@@ -6,6 +6,7 @@
     "start": "node dist/main.js",
     "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "build": "tsc -p tsconfig.json",
+    "test:auth": "node --test tests/jwt-mfa.test.cjs",
     "test:settings": "node --test tests/admin-settings.test.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
