@@ -6,12 +6,12 @@
     "start": "node dist/main.js",
     "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "build": "tsc -p tsconfig.json",
+    "test:settings": "node --test tests/admin-settings.test.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:deploy": "prisma migrate deploy",
     "lint": "echo 'todo lint api'",
-    "format": "echo 'todo format api'",
-    "test:settings": "node --test tests/admin-settings.test.cjs"
+    "format": "echo 'todo format api'"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.13",

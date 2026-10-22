@@ -34,7 +34,9 @@ Les configurations runtime sont exclues de Git et des contextes Docker pour
 
 **Cette branche n'a pas été déployée.** Le contrôle en lecture seule du 22/10/2026
 sur le backend actif indiquait l'absence de `config/admin-settings.json` et de
-répertoire `config`. Cela doit être vérifié à nouveau juste avant une bascule :
+répertoire `config`. Le parent `/app/apps/api` est root:root en `0755` et
+non inscriptible par `appuser`, ce qui empêche aussi la création initiale du
+répertoire dans le conteneur actuel. Cela doit être vérifié à nouveau juste avant une bascule :
 un administrateur peut avoir enregistré des réglages entre-temps.
 
 1. Relever le SHA approuvé, les IDs des conteneurs et les montages actuels. Vérifier
@@ -84,3 +86,18 @@ Docker utilise deux conteneurs éphémères et un bind mount temporaire sous `/t
 avec `appuser`, pour vérifier la persistance après recréation. Il ne monte aucun
 volume applicatif, ne crée aucun compte et ne lance aucune migration. Aucun
 `pnpm` installé sur l'hôte n'est nécessaire.
+
+## Résultats du 22 octobre 2026
+
+Validation sur la source `39add6faa6478afe7d2dda819f1d767cff17e8bd` poussée :
+
+- build API et génération du client Prisma réussis (aucune migration) ;
+- 12/12 tests Node réussis ;
+- build de l'image runtime réussi ;
+- deux conteneurs de test successifs : écriture puis relecture conservée,
+  utilisateur non privilégié, ownership et modes privés validés ;
+- tentative d'écriture sur le répertoire de test non inscriptible réellement
+  refusée, ancien contenu conservé ;
+- configurations Compose dev/prod valides, chemins `config` attendus confirmés ;
+- PostgreSQL et uploads gardent les montages précédents ; aucun conteneur actif
+  recréé, aucune donnée réelle utilisée.
