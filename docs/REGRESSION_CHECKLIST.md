@@ -41,9 +41,10 @@ qu’à leurs bases temporaires. `prisma migrate diff` y constate un schéma san
 écart ; ni schéma ni migration Prisma n’est modifié par ces PR. Aucun besoin de
 nouvelle migration identifié pour leur déploiement.
 
-Le volume `admin-config` est déclaré au chemin `/app/apps/api/config` dans les
-deux Compose ; les tests de persistance et de démarrage emploient un bind mount
-temporaire à ce même chemin. Aucun volume nommé actif n’a été créé, supprimé ou
+Le volume `admin-config` est déclaré à `/app/config` en développement (WORKDIR
+`/app`) et `/app/apps/api/config` en production (WORKDIR `/app/apps/api`). Les
+tests de persistance et de démarrage emploient un bind mount temporaire au
+chemin de production. Aucun volume nommé actif n’a été créé, supprimé ou
 reconfiguré pour ces tests. Sauvegarder/importer un éventuel réglage non monté
 avant la première bascule, en conservant ownership et modes privés.
 
