@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, MinLength, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID, MinLength, MaxLength } from 'class-validator';
 
 export class CreateFolderDto {
   @IsString()
@@ -11,7 +11,7 @@ export class CreateFolderDto {
   parentId?: string;
 
   @IsOptional()
-  @IsString()
+  @IsIn(['me', 'group'])
   ownerScope?: 'me' | 'group';
 
   @IsUUID()

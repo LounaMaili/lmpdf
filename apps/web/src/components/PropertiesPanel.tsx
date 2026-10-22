@@ -20,6 +20,7 @@ type Props = {
   onDuplicate: (id: string) => void;
   onAutoOrderOverflowGroup: (groupId: string, mode?: "rows" | "right" | "down") => void;
   docRole?: 'owner' | 'editor' | 'filler' | null;
+  canEditStructure?: boolean;
   fillMode?: boolean;
   onResetFused?: (fusedKey: string) => void;
   /* Library props */
@@ -62,6 +63,7 @@ export default function PropertiesPanel({
   onDuplicate,
   onAutoOrderOverflowGroup,
   docRole,
+  canEditStructure: structureAllowed = false,
   fillMode,
   onResetFused,
   templates,
@@ -76,7 +78,7 @@ export default function PropertiesPanel({
   canManageTemplate,
 }: Props) {
   const { t } = useTranslation();
-  const canEditStructure = (!docRole || docRole === 'owner' || docRole === 'editor') && !fillMode;
+  const canEditStructure = structureAllowed && docRole !== 'filler' && !fillMode;
   const updateStyle = (key: string, value: string | number | boolean | undefined) => {
     if (!field) return;
     if (hasMultiSelection) {
@@ -164,8 +166,8 @@ export default function PropertiesPanel({
                 onClick={(e) => onSelectField(f.id, e.ctrlKey || e.metaKey)}
               >
                 <div className="field-list-reorder">
-                  <button className="reorder-btn-small" disabled={i === 0} onClick={(e) => { e.stopPropagation(); onReorder(f.id, 'up'); }} title={t('fields.moveUp')}>⌃</button>
-                  <button className="reorder-btn-small" disabled={i === fields.length - 1} onClick={(e) => { e.stopPropagation(); onReorder(f.id, 'down'); }} title={t('fields.moveDown')}>⌄</button>
+                  <button className="reorder-btn-small" disabled={!canEditStructure || i === 0} onClick={(e) => { e.stopPropagation(); onReorder(f.id, 'up'); }} title={t('fields.moveUp')}>⌃</button>
+                  <button className="reorder-btn-small" disabled={!canEditStructure || i === fields.length - 1} onClick={(e) => { e.stopPropagation(); onReorder(f.id, 'down'); }} title={t('fields.moveDown')}>⌄</button>
                 </div>
                 <span className="field-list-type">
                   {f.type === 'checkbox' ? '☐' : f.type === 'counter-tally' ? '𝍸' : f.type === 'counter-numeric' ? '#' : f.type === 'date' ? '📅' : 'T'}
@@ -180,7 +182,7 @@ export default function PropertiesPanel({
       </details>
 
       {/* BULK TYPE CHANGE */}
-      {hasMultiSelection && (
+      {hasMultiSelection && canEditStructure && (
         <div className="bulk-actions panel-card">
           <h4>{t('bulk.actionsTitle', { count: multiSelectedIds.size })}</h4>
           <label>
@@ -293,9 +295,21 @@ export default function PropertiesPanel({
       <div className="properties-form-card panel-card">
         {!field ? (
           <p className="hint">{t('panel.selectFieldHint')}</p>
+        ) : !canEditStructure ? (
+          <label>
+            {field.label} — {t('fields.value')}
+            <input
+              type={field.type === 'checkbox' ? 'checkbox' : field.type.startsWith('counter-') ? 'number' : 'text'}
+              checked={field.type === 'checkbox' ? field.value === 'true' : undefined}
+              value={field.value}
+              onChange={(e) => onUpdate(field.id, {
+                value: field.type === 'checkbox' ? String(e.target.checked) : e.target.value,
+              })}
+            />
+          </label>
         ) : (
           <>
-          {hasMultiSelection && (
+          {hasMultiSelection && canEditStructure && (
             <div style={{ background: '#e8f4fd', border: '1px solid #3498db', borderRadius: 4, padding: '4px 8px', marginBottom: 8, fontSize: 12, color: '#2c3e50' }}>
               ✏️ {t('panel.multiSelected', { count: multiSelectedIds.size })} — les modifications s'appliquent à tous les champs sélectionnés
             </div>
@@ -745,7 +759,7 @@ export default function PropertiesPanel({
       </div>
 
       {/* ── Document Defaults ── */}
-      {!fillMode && (
+      {canEditStructure && (
         <details className="panel-card" style={{ marginTop: 2 }}>
           <summary>{t('panel.defaultStyleTitle')}</summary>
           <label>
@@ -778,7 +792,7 @@ export default function PropertiesPanel({
           <button type="button" onClick={applyDocDefaults} style={{ marginTop: 6 }}>
             {hasMultiSelection ? t('panel.applyToSelectedFields', { count: multiSelectedIds.size }) : t('panel.applyToAllFields')}
           </button>
-          {hasMultiSelection && (
+          {hasMultiSelection && canEditStructure && (
             <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
               <button type="button" onClick={() => onBulkUpdateFields(Array.from(multiSelectedIds), { locked: true })}>🔒 Verrouiller la sélection</button>
               <button type="button" onClick={() => onBulkUpdateFields(Array.from(multiSelectedIds), { locked: false })}>🔓 Déverrouiller la sélection</button>

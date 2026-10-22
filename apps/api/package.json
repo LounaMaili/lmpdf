@@ -10,7 +10,8 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:deploy": "prisma migrate deploy",
     "lint": "echo 'todo lint api'",
-    "format": "echo 'todo format api'"
+    "format": "echo 'todo format api'",
+    "test:permissions": "node --test tests/document-permissions.test.cjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.13",

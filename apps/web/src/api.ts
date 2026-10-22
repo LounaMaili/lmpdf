@@ -386,7 +386,7 @@ export type ExportRunResult = {
  * Returns what path would be used, without actually writing anything.
  */
 export async function resolveExportDestination(context: {
-  templateName?: string;
+  sourceFileId?: string;
   templateId?: string;
 }): Promise<ExportResolveResult> {
   const res = await fetch(`${API_URL}/export/resolve`, {
@@ -406,11 +406,11 @@ export async function resolveExportDestination(context: {
  */
 export async function runServerExport(
   pdfBlob: Blob,
-  context: { templateName?: string; templateId?: string },
+  context: { sourceFileId?: string; templateId?: string },
 ): Promise<ExportRunResult> {
   const formData = new FormData();
   formData.append('file', pdfBlob, 'export.pdf');
-  if (context.templateName) formData.append('templateName', context.templateName);
+  if (context.sourceFileId) formData.append('sourceFileId', context.sourceFileId);
   if (context.templateId) formData.append('templateId', context.templateId);
 
   const res = await fetch(`${API_URL}/export/run`, {
