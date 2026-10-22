@@ -70,7 +70,8 @@ effectué.
 Sources principales : [`App.tsx`](../apps/web/src/App.tsx),
 [`FieldOverlay.tsx`](../apps/web/src/components/FieldOverlay.tsx),
 [`PropertiesPanel.tsx`](../apps/web/src/components/PropertiesPanel.tsx).
-Aucun test automatisé de composant ou de navigateur n'est suivi dans le dépôt.
+Depuis le 22/10, des tests de décisions et de handlers de composants avec
+hooks/DOM simulés sont suivis. Aucun test navigateur complet n'est encore suivi.
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
@@ -98,7 +99,7 @@ Aucun test automatisé de composant ou de navigateur n'est suivi dans le dépôt
 | Modification de la structure d'un template existant | Incomplet | C : `onSave()` crée toujours un nouveau template ; API expose `POST`, `PATCH` nom et `DELETE`, sans mise à jour des champs | La modification crée une autre entrée plutôt qu'une nouvelle version du même template. Confirmer la sémantique produit attendue. | P2 |
 | Renommage / suppression | À revalider | C : contrôle propriétaire/admin dans [`templates.service.ts`](../apps/api/src/templates/templates.service.ts) | Aucun test de droit ni de suppression sur donnée temporaire. | P2 |
 | Dossiers : liste/création/renommage/suppression | À revalider | C : [`folders.controller.ts`](../apps/api/src/folders.controller.ts) ; V : 0 groupe, aucun scénario partagé | Le renommage/suppression est contrôlé, mais droits de création et hiérarchie restent à tester. | P2 |
-| Dossier de groupe et déplacement entre dossiers | Bug confirmé | C : création accepte un `groupId` sans vérifier l'appartenance ; `move-document`/`move-template` vérifient l'objet déplacé mais pas le droit sur le dossier destination | Un appel authentifié peut viser un dossier/groupe hors de son périmètre. Aucun déplacement réel exécuté. | P1 |
+| Dossier de groupe et déplacement entre dossiers | OK | Correction du 22/10 : tests API sur membre/non-membre/admin, parent cohérent, destination inaccessible et IDs inconnus | Décisions automatisées validées ; parcours dossiers dans le navigateur encore à revalider. | P1 |
 
 ## Brouillons
 
@@ -129,11 +130,11 @@ multi-utilisateur nécessite des données de test isolées et nettoyées ensuite
 |---|---|---|---|---|
 | Rôle documentaire `owner` | À revalider | C : propriétaire/admin ont rôle owner | Partage et retrait de droits non testés. | P1 |
 | Rôle `editor` | À revalider | C : hiérarchie owner > editor > filler dans l'API de permissions | Édition structurelle et export selon partage non testés de bout en bout. | P1 |
-| Rôle `filler` | Bug confirmé | C : `FieldOverlay` ne bloque déplacement/redimensionnement pour filler que si le champ est verrouillé ; bascule de `fillMode` disponible | Un filler peut modifier localement la géométrie d'un champ non verrouillé en mode édition ; persistance et effets indirects restent à mesurer. | P1 |
+| Rôle `filler` | OK | Correction du 22/10 : permissions frontend combinées, handlers réels de FieldOverlay et panneau testés avec dépendances simulées | Structure bloquée même sur champ non verrouillé ; valeurs conservées. Validation dans le navigateur encore nécessaire. | P1 |
 | Partage direct utilisateur | À revalider | C : `DocumentPermission` et contrôle owner pour partager/révoquer | Aucun test avec deux utilisateurs. | P1 |
 | Partage par groupe | À revalider | C : résolution des appartenances, rôle le plus élevé parmi groupes | Aucun groupe ni permission dans l'instance observée ; aucun test automatisé. | P1 |
-| Création de template depuis un document `filler` | Bug confirmé | C : `POST /templates` vérifie le rôle global et **un accès quelconque** au document, sans exiger `editor` ; l'UI est plus restrictive | Un utilisateur globalement autorisé à créer des templates peut appeler directement l'API avec un document partagé en `filler`. Scénario non exécuté. | P1 |
-| Restrictions d'export / impression | Bug confirmé | C : l'UI interdit export/print au filler ; `POST /export/run` vérifie seulement le rôle global `exportPdf`, sans identifiant ni rôle documentaire | Une requête API directe peut contourner l'interdiction documentaire d'export. L'impression est côté navigateur et n'a pas de garde serveur. | P1 |
+| Création de template depuis un document `filler` | OK | Correction du 22/10 : permission globale + `requireDocRole(editor)` ; matrice owner/editor/filler/aucun/admin testée | Filler refusé ; existence du document vérifiée même pour admin. Pas de déploiement. | P1 |
+| Restrictions d'export / impression | À revalider | Correction du 22/10 : resolve/run exigent contexte cohérent et rôle editor ; refus avant écriture testés. Flags export/print frontend testés | Correctif automatisé validé ; export visuel et impression restent à vérifier dans le navigateur. | P1 |
 
 ## Vision
 
@@ -167,7 +168,7 @@ Sources : [`exportPdf.ts`](../apps/web/src/exportPdf.ts),
 | Règles de destination | À revalider | C : premier match, contexte utilisateur/groupe/template | Priorité des règles et droits sur template à tester. | P2 |
 | Conflits overwrite/rename/skip | À revalider | C : trois stratégies dans `export-writer.ts` | Aucun test disque isolé ; collisions simultanées non couvertes. | P2 |
 | Journaux d'export | À revalider | C : création asynchrone, liste/statistiques/purge admin | `fire-and-forget` peut perdre un journal en cas d'arrêt ; 0 journal observé. | P2 |
-| Fichier temporaire d'un export refusé | Dette technique | C : intercepteur multipart écrit avant `canUser()` ; ce refus précède le bloc `finally` qui supprime le temporaire | Un utilisateur authentifié sans droit d'export peut laisser un fichier sous `uploads/tmp-export`. Non provoqué sur la VM. | P2 |
+| Fichier temporaire d'un export refusé | OK | Correction du 22/10 : réception multipart en mémoire, limite 50 Mo ; refus HTTP filler vérifié sans création de répertoire uploads | Aucun temporaire disque pour ce parcours. Dette d'upload classique distincte encore présente. | P2 |
 
 ## Administration
 
@@ -197,7 +198,7 @@ Sources : [`exportPdf.ts`](../apps/web/src/exportPdf.ts),
 |---|---|---|---|---|
 | CI | Dette technique | C : aucun workflow `.github/workflows` suivi | Aucun gate automatique de build/tests avant merge. | P2 |
 | Lint et format | Dette technique | C : scripts web/API `echo 'todo …'` | `pnpm lint` et `pnpm format` ne vérifient pas réellement ces applications. | P2 |
-| Couverture de tests | Dette technique | C : un seul fichier de tests suivi, 17 cas pour le scheduler autosave | Pas de tests API, permissions, export, éditeur UI ou Vision. | P1 |
+| Couverture de tests | Dette technique | Suites ajoutées : 43 tests API de permissions et 13 tests frontend de décisions/handlers ; 17 autosave conservés | Pas de tests navigateur complets, d'export visuel ou de Vision. | P1 |
 | Taille de `App.tsx` | Dette technique | C : 3 049 lignes | État, rendu, droits et overflow fortement couplés ; rend les corrections difficiles à isoler. | P2 |
 | Bundle frontend | Dette technique | V : asset JS principal servi d'environ 1,8 Mo non compressé sur disque | Performance à mesurer dans le navigateur ; optimisation hors audit. | P3 |
 | Warning `canvas` facultatif | À revalider | Mentionné lors de builds précédents ; aucun build lancé pour cet audit | Origine et impact actuels non reconfirmés. | P3 |
@@ -232,3 +233,14 @@ Chaque PR doit garder un périmètre étroit, inclure des tests du comportement
 modifié, suivre Fedora → GitHub → SHA exact sur `lmpdf-dev`, puis consigner la
 validation avant merge. Les scénarios à plusieurs comptes ou écritures doivent
 utiliser des objets temporaires clairement nommés et être nettoyés après test.
+
+## Suivi du 22 octobre 2026 — branche permissions (non déployée)
+
+La correction documentée dans [DOCUMENT_PERMISSION_ENFORCEMENT.md](DOCUMENT_PERMISSION_ENFORCEMENT.md)
+a été testée dans des images Docker de build isolées sur Debian : 43/43 tests API,
+13/13 tests frontend de permissions, 17/17 tests autosave, builds API et web réussis.
+La source API validée est `9ba36ce4d37da2daab5b70da01369f68d9fc25c9` ; le dernier
+ajout frontend validé est `15c3c51b586d3e970e4b47c592272dbfcb0b8b8a`.
+Les tests HTTP emploient Prisma simulé et des JWT synthétiques ; aucun compte réel,
+volume applicatif ou service actif n'a été utilisé. Les états OK ajoutés ci-dessus
+couvrent les décisions testées, pas une recette multi-utilisateur dans le navigateur.

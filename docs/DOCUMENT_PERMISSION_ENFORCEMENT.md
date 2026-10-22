@@ -32,7 +32,7 @@ structure sont bloqués. Le rôle résolu reste associé à l'ID du document pou
 
 ## Validation
 
-Tests à exécuter sur le SHA poussé dans des images de build isolées sur Debian :
+Tests exécutés sur les SHA poussés dans des images de build isolées sur Debian :
 
 - API : build puis `pnpm --filter @lmpdf/api test:permissions` ;
 - web : build puis `pnpm --filter @lmpdf/web test:permissions` et
@@ -42,3 +42,9 @@ Les tests API utilisent Prisma simulé et un serveur Nest HTTP local au conteneu
 avec JWT synthétiques. Les tests UI exécutent les handlers réels des composants
 avec hooks et dépendances DOM simulés. Ils ne remplacent pas les tests navigateur
 avec plusieurs comptes, qui restent à réaliser avant déploiement.
+
+Résultats du 22/10/2026 : build API et 43/43 tests API sur `9ba36ce…` ; build web,
+13/13 tests frontend de permissions et 17/17 autosave sur `15c3c51…`. Les builds
+utilisent le lockfile figé. Le warning de gros bundle Vite reste présent.
+La revue a ajouté un garde contre les réponses de détection tardives après un
+changement de document ou une perte de droit. Aucun déploiement effectué.
