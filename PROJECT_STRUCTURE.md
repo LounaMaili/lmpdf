@@ -66,3 +66,10 @@ mise à jour applicative.
   ignorés par Git.
 - Les dépendances et les builds applicatifs sont gérés sur la VM `lmpdf-dev`,
   jamais sur le poste Fedora. Voir `AGENTS.md`.
+
+## Réglages administrateur persistants
+
+Le volume `admin-config` conserve le fichier sensible `admin-settings.json` dans
+le répertoire `config/` du backend. Il est distinct des deux persistances de
+contenu PostgreSQL et `uploads-data` et doit également être préservé. La procédure
+avant une première bascule est dans [docs/ADMIN_SETTINGS_PERSISTENCE.md](docs/ADMIN_SETTINGS_PERSISTENCE.md).
