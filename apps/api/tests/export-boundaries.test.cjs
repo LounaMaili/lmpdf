@@ -111,16 +111,17 @@ test('HTTP : refus de droits et PDF invalide ne laissent aucun temporaire', asyn
   assert.equal(write.mock.callCount(), 0); noDiskOutput();
   assert.equal((await run()).status, 201);
 });
-test('HTTP : deux exports maximum, surplus 429 avant buffering, puis reprise', async () => {
+test('HTTP : deux exports de 25 Mio maximum, surplus 429, puis reprise', async () => {
   assert.equal(MAX_CONCURRENT_EXPORTS, 2);
   let release, ready;
   const gate = new Promise(resolve => { release = resolve; });
   const started = new Promise(resolve => { ready = resolve; });
   let count = 0;
-  mock.method(writer, 'writeExportFile', async finalPath => {
+  mock.method(writer, 'writeExportFile', async (finalPath, bytes) => {
+    if (count < 2) assert.equal(bytes.length, MAX_EXPORT_BYTES);
     if (++count === 2) ready(); await gate; return { written: true, finalPath };
   });
-  const pending = [run(), run()];
+  const pending = [run(form({ size: MAX_EXPORT_BYTES })), run(form({ size: MAX_EXPORT_BYTES }))];
   try {
     await Promise.race([started, Promise.all(pending).then(() => assert.fail('exports did not reach the writer'))]);
     assert.equal((await run()).status, 429); assert.equal(count, 2); noDiskOutput();
