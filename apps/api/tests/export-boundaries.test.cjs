@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const http = require('node:http');
 require('reflect-metadata');
 const originalCwd = process.cwd();
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lmpdf-export-boundaries-'));
@@ -131,6 +132,30 @@ test('HTTP : erreur writer libère aussi la capacité, sans temporaire', async (
   const write = mock.method(writer, 'writeExportFile', async () => { throw new Error('synthetic write failure'); });
   assert.equal((await run()).status, 500); noDiskOutput(); write.mock.restore(); fakeWrite();
   assert.deepEqual((await Promise.all([run(), run()])).map(r => r.status), [201, 201]);
+});
+test('HTTP : upload interrompu libère sa place et ne laisse aucun fichier', async () => {
+  fakeWrite();
+  let received, closed;
+  const incoming = new Promise(resolve => { received = resolve; });
+  const disconnected = new Promise(resolve => { closed = resolve; });
+  const server = app.getHttpServer();
+  const observe = req => {
+    if (req.headers['x-synthetic-abort']) {
+      req.once('data', received); req.once('close', closed);
+    }
+  };
+  server.on('request', observe);
+  const client = http.request(`${base}/api/export/run`, { method: 'POST', headers: {
+    Authorization: `Bearer ${jwt}`, 'Content-Type': 'multipart/form-data; boundary=synthetic',
+    'Content-Length': MAX_EXPORT_BYTES, 'x-synthetic-abort': '1',
+  } });
+  client.on('error', () => {});
+  try {
+    client.write('--synthetic\r\nContent-Disposition: form-data; name="file"; filename="test.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF-incomplete');
+    await incoming; client.destroy(); await disconnected;
+    assert.deepEqual((await Promise.all([run(), run()])).map(r => r.status), [201, 201]);
+    noDiskOutput();
+  } finally { client.destroy(); server.removeListener('request', observe); }
 });
 test('HTTP : nom libre nettoyé, contexte canonique inchangé pour les règles', async () => {
   fakeWrite();

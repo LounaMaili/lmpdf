@@ -7,7 +7,7 @@ export function documentNameStem(name: string): string {
 
 /** One leaf filename, never a path or an authorization/rule input. */
 export function pdfOutputFileName(name: string): string {
-  const cleaned = sanitiseSegment(name.normalize('NFC').replace(/[\\/]/g, '_'))
+  const cleaned = sanitiseSegment((name.trim() || 'document').normalize('NFC').replace(/[\\/]/g, '_'))
     .replace(/[. ]+$/g, '');
   const stem = documentNameStem(cleaned).slice(0, 180).replace(/[. ]+$/g, '');
   return `${stem || 'document'}.pdf`;
