@@ -51,3 +51,20 @@ Les suites permissions/exports existantes conservent les limites 25 Mio / deux
 requêtes / HTTP 429, l'absence d'écriture sur refus, le nom de sortie distinct
 du contexte canonique, les extensions et les collisions. L'ensemble est à rejouer
 sur le SHA combinant MFA, permissions et réglages avant fusion.
+
+## Recette runtime isolée
+
+`sh apps/api/tests/isolated-stack.sh <api-build> <api-runtime> <web-runtime> <vision>`
+lance quatre nouveaux conteneurs sur un réseau interne sans port publié :
+PostgreSQL en tmpfs, backend, nginx et Vision. Aucun .env ni volume applicatif
+n'est monté. Les uploads, exports et réglages sont dans un mkdtemp dédié ; le
+script ne supprime que ses conteneurs/réseau et ses fichiers synthétiques.
+
+Les comptes de recette se connectent normalement avec mot de passe et TOTP.
+Le parcours vérifie l'enrôlement d'un admin, les droits owner/editor/filler,
+un upload PNG synthétique, sa lecture par l'API et Vision, un export réel dans
+la destination temporaire, le nom libre distinct de la règle canonique, le
+plafond nginx 30 Mio et la propagation d'un override administrateur. Le backend
+fonctionne en NODE_ENV=production avec des valeurs de test, la configuration
+requiert MFA même si l'environnement est optional. Les modes/ownership du
+répertoire administrateur sont contrôlés sans afficher son contenu.
