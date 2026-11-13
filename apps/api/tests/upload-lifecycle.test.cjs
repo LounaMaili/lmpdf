@@ -163,6 +163,14 @@ test('HTTP: database rejection after receipt removes the promoted file', async (
   create = async () => { throw rejectedInsert(); };
   assert.equal((await upload()).status, 500); assert.equal(creates, 1); empty();
 });
+test('HTTP: definite P2003 rejection cleans its file even when reconciliation reads would fail', async () => {
+  create = async () => { throw rejectedInsert(); };
+  const lookup = mock.method(prisma.document, 'findUnique', async () => { throw new Error('synthetic read unavailable'); });
+  const logged = mock.method(Logger.prototype, 'error', () => {});
+  assert.equal((await upload()).status, 500); assert.equal(creates, 1); empty();
+  assert.equal(lookup.mock.callCount(), 0, 'a definite rejection needs no reconciliation read');
+  assert.equal(logged.mock.callCount(), 0, 'no indeterminate-outcome signal for a definite rejection');
+});
 test('HTTP: read failure after receipt cleans only the current file', async () => {
   for (const method of ['readFile', 'open']) {
     const original = fs.promises[method].bind(fs.promises);
