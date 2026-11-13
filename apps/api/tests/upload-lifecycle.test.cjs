@@ -53,6 +53,7 @@ function persist({ data }) {
   const record = { id: `synthetic-document-${records.length}`, ...data };
   records.push(record); return record;
 }
+function rejectedInsert() { return Object.assign(new Error('synthetic rejected insert'), { code: 'P2003' }); }
 function token(role = 'editor', claims = {}) {
   return signer.sign({ sub: actors[role].id, purpose: 'access', ...claims });
 }
@@ -159,7 +160,7 @@ test('HTTP: declared size exceeded (25 MiB + 1) cleans storage and creates no ro
   assert.equal((await upload({ form: body(bytes) })).status, 413); assert.equal(creates, 0); empty();
 });
 test('HTTP: database rejection after receipt removes the promoted file', async () => {
-  create = async () => { throw new Error('synthetic Prisma rejection'); };
+  create = async () => { throw rejectedInsert(); };
   assert.equal((await upload()).status, 500); assert.equal(creates, 1); empty();
 });
 test('HTTP: read failure after receipt cleans only the current file', async () => {
@@ -217,7 +218,7 @@ for (const succeeds of [false, true]) test(`HTTP: disconnect during pending data
   const reached = deferred(), release = deferred(), settled = deferred();
   create = async args => {
     reached.resolve(); await release.promise;
-    try { if (!succeeds) throw new Error('synthetic database failure'); return persist(args); }
+    try { if (!succeeds) throw rejectedInsert(); return persist(args); }
     finally { settled.resolve(); }
   };
   const observed = observeDisconnect('database-abort'), client = rawRequest('database-abort');
@@ -229,7 +230,7 @@ for (const succeeds of [false, true]) test(`HTTP: disconnect during pending data
   } finally { release.resolve(); client.destroy(); observed.stop(); }
 });
 test('HTTP: one failed concurrent upload cannot delete a successful upload or existing file', async () => {
-  create = args => args.data.originalName === 'rejected.pdf' ? Promise.reject(new Error('synthetic rejection')) : persist(args);
+  create = args => args.data.originalName === 'rejected.pdf' ? Promise.reject(rejectedInsert()) : persist(args);
   const results = await Promise.all([upload({ form: body(pdf, { name: 'accepted.pdf' }) }), upload({ form: body(pdf, { name: 'rejected.pdf' }) })]);
   assert.deepEqual(results.map(r => r.status), [201, 500]); assert.equal(records.length, 1); assert.deepEqual(files(), [records[0].path]); untouched();
 });
@@ -302,7 +303,7 @@ test('HTTP: a failure delivering committed metadata does not delete the committe
   assert.deepEqual(files(), [records[0].path]); assert.deepEqual(fs.readFileSync(path.join('uploads', records[0].path)), pdf); untouched();
 });
 test('HTTP: persistent unlink failure is reported, never silently treated as cleanup success', async () => {
-  create = async () => { throw new Error('synthetic database failure'); };
+  create = async () => { throw rejectedInsert(); };
   const unlink = fs.promises.unlink.bind(fs.promises), logged = mock.method(Logger.prototype, 'error', () => {});
   mock.method(fs.promises, 'unlink', async name => {
     if (String(name).endsWith('.pdf')) throw Object.assign(new Error('synthetic cleanup denial'), { code: 'EACCES' });
@@ -331,10 +332,20 @@ test('HTTP: unresolved database outcome is retained and reported, never blindly 
   assert.equal(files().length, 1); assert.match(files()[0], /\.pdf$/); assert.ok(logged.mock.callCount() > 0); untouched();
 });
 for (const mismatch of ['owner', 'path']) test(`HTTP: another record's ${mismatch} cannot confirm this upload`, async () => {
-  create = async () => { throw new Error('synthetic rejected insert'); };
+  create = async () => { throw rejectedInsert(); };
   mock.method(prisma.document, 'findUnique', async ({ where }) => ({ id: where.id,
     ownerId: mismatch === 'owner' ? 'another-synthetic-user' : actors.editor.id,
     path: mismatch === 'path' ? 'another-synthetic-file.pdf' : `${where.id}.pdf`,
   }));
   assert.equal((await upload()).status, 500); assert.equal(creates, 1); empty();
+});
+test('HTTP: a temporarily absent row after connection loss cannot justify deleting a late commit', async () => {
+  let pending;
+  create = args => { pending = args; throw Object.assign(new Error('synthetic connection lost while committing'), { code: 'P1017' }); };
+  const logged = mock.method(Logger.prototype, 'error', () => {});
+  assert.equal((await upload()).status, 500); assert.equal(records.length, 0);
+  assert.deepEqual(files(), [pending.data.path]); assert.ok(logged.mock.callCount() > 0);
+  persist(pending);
+  assert.deepEqual(files(), [records[0].path]);
+  assert.deepEqual(fs.readFileSync(path.join('uploads', records[0].path)), pdf); untouched();
 });

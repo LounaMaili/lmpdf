@@ -38,9 +38,12 @@ remplissage ni scénario d'abus n'a été exécuté sur l'instance active.
 
 ### Limites explicites
 
-Si la base reste inaccessible et que l'issue de l'insertion est indéterminée,
-le serveur conserve le fichier et journalise son UUID pour rapprochement : le
-supprimer pourrait détruire un document effectivement enregistré. Une erreur
+Après une erreur réseau ou une autre issue indéterminée de l'insertion, le
+serveur conserve le fichier et journalise son UUID pour rapprochement, même si
+une lecture immédiate ne voit pas encore de ligne : l'insertion peut toujours
+être en cours. Seul un rejet certain de validation/contrainte permet alors le
+nettoyage. Supprimer aveuglément pourrait détruire un document effectivement
+enregistré. Une erreur
 persistante d'unlink est également journalisée et renvoyée comme échec. Ces
 deux cas nécessitent une intervention ; aucune purge automatique n'est ajoutée.
 

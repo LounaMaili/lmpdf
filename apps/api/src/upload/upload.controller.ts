@@ -44,6 +44,14 @@ function extensionForMime(mime: string): string {
   return '.bin';
 }
 
+// Only definite statement/validation rejections prove that no INSERT can still
+// commit. A SELECT returning null after a transport error is not that proof.
+function isDefiniteInsertRejection(error: unknown): boolean {
+  const failure = error as { code?: string; name?: string } | null;
+  return failure?.name === 'PrismaClientValidationError'
+    || ['P2000', 'P2002', 'P2003', 'P2004', 'P2011', 'P2014', 'P2025', 'P2034'].includes(failure?.code ?? '');
+}
+
 @Controller('uploads')
 export class UploadController {
   constructor(private readonly prisma: PrismaService) {}
@@ -115,7 +123,11 @@ export class UploadController {
           upload.retainForReconciliation();
           throw error;
         }
-        if (!persisted || persisted.path !== finalName || persisted.ownerId !== req.user?.id) throw error;
+        if (!persisted) {
+          if (!isDefiniteInsertRejection(error)) upload.retainForReconciliation();
+          throw error;
+        }
+        if (persisted.path !== finalName || persisted.ownerId !== req.user?.id) throw error;
         created = persisted;
       }
       // Do not delete a committed document if the client disconnects during the
