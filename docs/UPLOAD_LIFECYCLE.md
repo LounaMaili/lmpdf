@@ -32,7 +32,9 @@ remplissage ni scénario d'abus n'a été exécuté sur l'instance active.
   documents existants. Après insertion confirmée, le fichier est conservé même
   si la réponse au client échoue.
 - L'identifiant de métadonnées est un UUID généré côté serveur, comme le
-  prévoit déjà le schéma. Après une erreur d'insertion, une lecture par cet
+  prévoit déjà le schéma. Un rejet certain de l'insertion entraîne directement
+  le nettoyage, sans dépendre d'une lecture SQL supplémentaire. Pour les
+  autres erreurs d'insertion, une lecture par cet
   identifiant, vérifiant aussi propriétaire et chemin, distingue une insertion
   confirmée d'un rejet avant de décider du nettoyage.
 
@@ -83,6 +85,40 @@ Relancer également `test:auth`, `test:settings`, `test:permissions`,
 nginx du même checkout monté en lecture seule via `LMPDF_TEST_NGINX_CONFIG`.
 Consigner les résultats et le SHA exact dans la PR. Aucun déploiement actif
 n'est nécessaire à cette validation.
+
+### Compléments de revue de la PR #11
+
+Le test ajouté au commit `f4c7ad3cb2ffb90511893494559e592e699cc2b3`
+reproduit un rejet certain `P2003`, suivi d'une lecture de rapprochement
+indisponible : 42 succès et **1 échec sur 43** avec le code précédent. Le
+contrôleur doit nettoyer directement après ce rejet ; les tests des issues
+indéterminées et des insertions tardives sont conservés.
+
+La recette `apps/api/tests/upload-integration.sh` utilise PostgreSQL temporaire
+en tmpfs, les images API du SHA poussé et **l'image exacte du service Vision
+actuel**. Elle initialise uniquement la base vide de test avec `prisma db push
+--skip-generate` depuis le schéma inchangé, sans exécuter de migration. Aucun
+port n'est publié, aucun fichier `.env` ni volume applicatif existant n'est
+monté. Les comptes locaux synthétiques se connectent par mot de passe puis TOTP.
+
+```bash
+LMPDF_ISOLATED_UPLOAD_TESTS=1 sh apps/api/tests/upload-integration.sh \
+  lmpdf-upload-build:<SHA> lmpdf-upload-runtime:<SHA> \
+  <IMAGE_ID_VISION_ACTUELLE> <SHA_COMPLET>
+```
+
+Les assertions couvrent deux formats valides générés (PNG/PDF), insertion et
+propriétaire réels, contenu relu identique, mode 0600, UID/GID de l'API,
+permissions HTTP, refus sans ligne/fichier supplémentaire et détection via API.
+Une lecture avec checksum et un décodage dans le conteneur Vision complètent
+le test : une réponse vide d'OpenCV ne suffirait pas à prouver l'accès.
+
+Vision s'exécute actuellement avec UID 0. La recette vérifie cet état et le
+refus de lecture par un UID non root distinct. Passer Vision à un autre UID
+nécessitera d'adapter explicitement les identités/droits partagés et de rejouer
+la recette ; aucune ouverture des fichiers à tous les utilisateurs n'est faite.
+Le nettoyage du harness porte uniquement sur ses conteneurs/réseau uniques et
+son répertoire de données synthétiques, jamais sur les volumes existants.
 
 ## File priorisée des anomalies restantes
 

@@ -115,6 +115,9 @@ export class UploadController {
           },
         });
       } catch (error) {
+        // A definite rejection needs no reconciliation, even if a subsequent
+        // database read is unavailable. Let finally remove this request's file.
+        if (isDefiniteInsertRejection(error)) throw error;
         // A transport failure can hide an already committed INSERT. Only this
         // server-generated ID, file and owner can confirm its outcome.
         let persisted: Document | null;
@@ -124,7 +127,7 @@ export class UploadController {
           throw error;
         }
         if (!persisted) {
-          if (!isDefiniteInsertRejection(error)) upload.retainForReconciliation();
+          upload.retainForReconciliation();
           throw error;
         }
         if (persisted.path !== finalName || persisted.ownerId !== req.user?.id) throw error;

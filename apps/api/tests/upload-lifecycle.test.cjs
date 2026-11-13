@@ -340,12 +340,13 @@ test('HTTP: unresolved database outcome is retained and reported, never blindly 
   assert.equal(files().length, 1); assert.match(files()[0], /\.pdf$/); assert.ok(logged.mock.callCount() > 0); untouched();
 });
 for (const mismatch of ['owner', 'path']) test(`HTTP: another record's ${mismatch} cannot confirm this upload`, async () => {
-  create = async () => { throw rejectedInsert(); };
-  mock.method(prisma.document, 'findUnique', async ({ where }) => ({ id: where.id,
+  create = async () => { throw Object.assign(new Error('synthetic connection lost'), { code: 'P1017' }); };
+  const lookup = mock.method(prisma.document, 'findUnique', async ({ where }) => ({ id: where.id,
     ownerId: mismatch === 'owner' ? 'another-synthetic-user' : actors.editor.id,
     path: mismatch === 'path' ? 'another-synthetic-file.pdf' : `${where.id}.pdf`,
   }));
   assert.equal((await upload()).status, 500); assert.equal(creates, 1); empty();
+  assert.equal(lookup.mock.callCount(), 1, 'the indeterminate outcome must still be reconciled');
 });
 test('HTTP: a temporarily absent row after connection loss cannot justify deleting a late commit', async () => {
   let pending;
