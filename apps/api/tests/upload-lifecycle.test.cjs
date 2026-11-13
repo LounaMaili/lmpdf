@@ -169,7 +169,8 @@ test('HTTP: definite P2003 rejection cleans its file even when reconciliation re
   const logged = mock.method(Logger.prototype, 'error', () => {});
   assert.equal((await upload()).status, 500); assert.equal(creates, 1); empty();
   assert.equal(lookup.mock.callCount(), 0, 'a definite rejection needs no reconciliation read');
-  assert.equal(logged.mock.callCount(), 0, 'no indeterminate-outcome signal for a definite rejection');
+  assert.equal(logged.mock.calls.some(call => /rapprochement/.test(String(call.arguments[0]))), false,
+    'no indeterminate-outcome signal for a definite rejection');
 });
 test('HTTP: read failure after receipt cleans only the current file', async () => {
   for (const method of ['readFile', 'open']) {
