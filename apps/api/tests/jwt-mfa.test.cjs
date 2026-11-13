@@ -1,6 +1,6 @@
 // Run against the compiled API in an isolated container. No database or real account.
 require('reflect-metadata');
-const { test, before, beforeEach, after } = require('node:test');
+const { test, before, beforeEach, after, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -111,6 +111,7 @@ before(async () => {
   jwt = app.get(JwtService);
 });
 beforeEach(() => {
+  mock.restoreAll();
   fs.rmSync(path.join(directory, 'config'), { recursive: true, force: true });
   lookupCount = 0;
   businessCalls = 0; lockCalls = 0; transactions = Promise.resolve();
@@ -137,6 +138,7 @@ beforeEach(() => {
   credentials = [credential];
 });
 after(async () => {
+  mock.restoreAll();
   try { if (app) await app.close(); }
   finally { process.chdir(originalCwd); fs.rmSync(directory, { recursive: true, force: true }); }
 });
@@ -343,6 +345,39 @@ test('HTTP: passwordless with a real signed assertion still issues explicit acce
   await expectAccess(await request('auth/login/passwordless-finish', { body: {
     email: 'passkey@synthetic.invalid', response: assertion(begin.body.options.challenge),
   } }), 'passkey');
+});
+test('HTTP: passwordless finish refuses a local to LDAP mode change after begin', async () => {
+  const begin = await request('auth/login/passwordless-begin', { body: { email: 'passkey@synthetic.invalid' } });
+  assert.equal(begin.status, 201);
+  process.env.AUTH_MODE = 'ldap';
+  const result = await request('auth/login/passwordless-finish', { body: {
+    email: 'passkey@synthetic.invalid', response: assertion(begin.body.options.challenge),
+  } });
+  assert.equal(result.status, 401); assert.equal(result.body.token, undefined); assert.equal(credential.counter, 0n);
+});
+test('HTTP: passwordless finish honors a persisted hybrid fallback revocation over local env', async () => {
+  const begin = await request('auth/login/passwordless-begin', { body: { email: 'passkey@synthetic.invalid' } });
+  assert.equal(begin.status, 201);
+  const { writeAdminSettingsFile } = require('../dist/config/settings-file');
+  await writeAdminSettingsFile({ auth: { mode: 'hybrid', allowLocalAdminFallback: false } });
+  assert.equal(process.env.AUTH_MODE, 'local');
+  const result = await request('auth/login/passwordless-finish', { body: {
+    email: 'passkey@synthetic.invalid', response: assertion(begin.body.options.challenge),
+  } });
+  assert.equal(result.status, 401); assert.equal(result.body.token, undefined); assert.equal(credential.counter, 0n);
+});
+test('HTTP: passwordless rechecks mode after an in-flight real WebAuthn verification', async () => {
+  const begin = await request('auth/login/passwordless-begin', { body: { email: 'passkey@synthetic.invalid' } });
+  assert.equal(begin.status, 201);
+  const service = app.get(WebAuthnService), verify = service.finishPasswordlessAuthentication.bind(service);
+  mock.method(service, 'finishPasswordlessAuthentication', async (...args) => {
+    const user = await verify(...args); process.env.AUTH_MODE = 'ldap'; return user;
+  });
+  const result = await request('auth/login/passwordless-finish', { body: {
+    email: 'passkey@synthetic.invalid', response: assertion(begin.body.options.challenge),
+  } });
+  assert.equal(credential.counter, 1n, 'the real signed assertion was verified');
+  assert.equal(result.status, 401); assert.equal(result.body.token, undefined);
 });
 
 async function enrollment(id = 'ordinary') {
