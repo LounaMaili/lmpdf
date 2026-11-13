@@ -10,7 +10,7 @@ export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 
 /** Own only this request's files until PostgreSQL acknowledges their metadata. */
 export class DocumentUpload {
-  private readonly id = randomUUID();
+  readonly id = randomUUID();
   private readonly temporary = join('uploads', `${this.id}.bin`);
   private readonly owned = new Set<string>();
   private readonly logger = new Logger(DocumentUpload.name);
@@ -19,7 +19,7 @@ export class DocumentUpload {
   private writing: Promise<void> = Promise.resolve();
   private rejectReceive?: (error: Error) => void;
   private interrupted = false;
-  private committed = false;
+  private retained = false;
 
   private readonly onAbort = () => {
     this.interrupted = true;
@@ -113,11 +113,16 @@ export class DocumentUpload {
     return name;
   }
 
-  markCommitted(): void { this.committed = true; }
+  markCommitted(): void { this.retained = true; }
+
+  retainForReconciliation(): void {
+    this.retained = true;
+    this.logger.error(`État des métadonnées de l’import ${this.id} indéterminé ; fichier conservé pour rapprochement`);
+  }
 
   async dispose(): Promise<void> {
     try {
-      if (!this.committed) { this.input?.destroy(); this.output?.destroy(); }
+      if (!this.retained) { this.input?.destroy(); this.output?.destroy(); }
       await this.removeUncommitted();
     } finally {
       this.request.removeListener('aborted', this.onAbort);
@@ -128,7 +133,7 @@ export class DocumentUpload {
   private async removeUncommitted(): Promise<void> {
     // Do not unlink until the pending exclusive open/write has actually closed.
     await this.writing;
-    if (this.committed) return;
+    if (this.retained) return;
     let failed = false;
     for (const name of this.owned) {
       try { await fs.unlink(name); this.owned.delete(name); }

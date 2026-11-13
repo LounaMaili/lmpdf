@@ -10,6 +10,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { resolve, sep } from 'path';
+import type { Document } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { canUser } from '../config/permission-matrix';
 import { DocumentUpload } from './document-upload';
@@ -97,12 +98,26 @@ export class UploadController {
       }
       const finalName = await upload.promote(extensionForMime(detectedMime));
       upload.assertConnected();
-      const created = await this.prisma.document.create({
-        data: {
-          originalName: file.originalname, mimeType: detectedMime,
-          size: file.size, path: finalName, ownerId: req.user?.id,
-        },
-      });
+      let created: Document;
+      try {
+        created = await this.prisma.document.create({
+          data: {
+            id: upload.id, originalName: file.originalname, mimeType: detectedMime,
+            size: file.size, path: finalName, ownerId: req.user?.id,
+          },
+        });
+      } catch (error) {
+        // A transport failure can hide an already committed INSERT. Only this
+        // server-generated ID, file and owner can confirm its outcome.
+        let persisted: Document | null;
+        try { persisted = await this.prisma.document.findUnique({ where: { id: upload.id } }); }
+        catch {
+          upload.retainForReconciliation();
+          throw error;
+        }
+        if (!persisted || persisted.path !== finalName || persisted.ownerId !== req.user?.id) throw error;
+        created = persisted;
+      }
       // Do not delete a committed document if the client disconnects during the
       // insert or the delivery of the response. Wait for the database outcome.
       upload.markCommitted();

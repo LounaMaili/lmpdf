@@ -37,7 +37,10 @@ const completions = new Map();
 const prisma = {
   user: { findUnique: async ({ where }) => Object.values(actors).find(u => u.id === where.id) ?? null },
   userWebAuthnCredential: { count: async () => 0 },
-  document: { create: async args => { creates++; return create(args); } },
+  document: {
+    create: async args => { creates++; return create(args); },
+    findUnique: async ({ where }) => records.find(r => r.id === where.id) ?? null,
+  },
 };
 class UploadTestModule {}
 Module({ imports: [PassportModule.register({ defaultStrategy: 'jwt' })], controllers: [UploadController],
@@ -312,4 +315,26 @@ test('HTTP: authorized upload initializes a missing uploads directory', async ()
   fs.rmSync('uploads', { recursive: true });
   assert.equal((await upload()).status, 201); assert.equal(records.length, 1);
   assert.deepEqual(fs.readdirSync('uploads'), [records[0].path]);
+});
+test('HTTP: lost insert acknowledgement is reconciled by server ID, file and owner', async () => {
+  create = args => { persist(args); throw Object.assign(new Error('synthetic lost acknowledgement'), { code: 'P1017' }); };
+  const result = await upload();
+  assert.equal(result.status, 201); assert.equal(creates, 1); assert.equal(records.length, 1);
+  assert.equal(result.body.id, records[0].id); assert.deepEqual(files(), [records[0].path]);
+  assert.deepEqual(fs.readFileSync(path.join('uploads', records[0].path)), pdf); untouched();
+});
+test('HTTP: unresolved database outcome is retained and reported, never blindly unlinked', async () => {
+  create = () => { throw Object.assign(new Error('synthetic connection lost'), { code: 'P1001' }); };
+  mock.method(prisma.document, 'findUnique', async () => { throw new Error('synthetic database still unavailable'); });
+  const logged = mock.method(Logger.prototype, 'error', () => {});
+  assert.equal((await upload()).status, 500); assert.equal(creates, 1); assert.equal(records.length, 0);
+  assert.equal(files().length, 1); assert.match(files()[0], /\.pdf$/); assert.ok(logged.mock.callCount() > 0); untouched();
+});
+for (const mismatch of ['owner', 'path']) test(`HTTP: another record's ${mismatch} cannot confirm this upload`, async () => {
+  create = async () => { throw new Error('synthetic rejected insert'); };
+  mock.method(prisma.document, 'findUnique', async ({ where }) => ({ id: where.id,
+    ownerId: mismatch === 'owner' ? 'another-synthetic-user' : actors.editor.id,
+    path: mismatch === 'path' ? 'another-synthetic-file.pdf' : `${where.id}.pdf`,
+  }));
+  assert.equal((await upload()).status, 500); assert.equal(creates, 1); empty();
 });
