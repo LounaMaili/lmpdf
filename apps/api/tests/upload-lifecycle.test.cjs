@@ -7,7 +7,11 @@ const http = require('node:http');
 const { Writable } = require('node:stream');
 const { setTimeout: delay } = require('node:timers/promises');
 require('reflect-metadata');
-const { Module } = require('@nestjs/common');
+const originalCwd = process.cwd();
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lmpdf-upload-lifecycle-'));
+process.chdir(root);
+fs.mkdirSync('config'); fs.mkdirSync('uploads');
+const { Module, Logger } = require('@nestjs/common');
 const { NestFactory, APP_GUARD } = require('@nestjs/core');
 const { PassportModule } = require('@nestjs/passport');
 const { JwtService } = require('@nestjs/jwt');
@@ -19,10 +23,6 @@ const { PrismaService } = require('../dist/prisma/prisma.service');
 
 // Never mount the application uploads volume or real config when running this suite.
 // PDF/PNG bytes exercise the existing signature contract, not full format decoding.
-const originalCwd = process.cwd();
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lmpdf-upload-lifecycle-'));
-process.chdir(root);
-fs.mkdirSync('config'); fs.mkdirSync('uploads');
 const maxBytes = 25 * 1024 * 1024;
 const pdf = Buffer.from('%PDF-1.7\nsynthetic upload only\n');
 const existing = path.resolve('uploads/existing-synthetic.pdf');
@@ -36,6 +36,7 @@ let app, base, signer, records, creates, create;
 const completions = new Map();
 const prisma = {
   user: { findUnique: async ({ where }) => Object.values(actors).find(u => u.id === where.id) ?? null },
+  userWebAuthnCredential: { count: async () => 0 },
   document: { create: async args => { creates++; return create(args); } },
 };
 class UploadTestModule {}
@@ -124,7 +125,8 @@ for (const role of ['admin', 'editor']) test(`HTTP: ${role} upload commits one f
   const result = await upload({ role }); assert.equal(result.status, 201); assert.equal(creates, 1);
   assert.equal(records.length, 1); assert.equal(records[0].ownerId, actors[role].id); assert.equal(result.body.id, records[0].id);
   assert.equal(records[0].mimeType, 'application/pdf'); assert.deepEqual(files(), [records[0].path]);
-  assert.deepEqual(fs.readFileSync(path.join('uploads', records[0].path)), pdf); untouched();
+  assert.deepEqual(fs.readFileSync(path.join('uploads', records[0].path)), pdf);
+  assert.equal(fs.statSync(path.join('uploads', records[0].path)).mode & 0o777, 0o600); untouched();
 });
 test('HTTP: an explicit viewer override is respected, no hard-coded role list', async () => {
   settings({ viewer: { uploadDocument: true } }); assert.equal((await upload({ role: 'viewer' })).status, 201); assert.equal(records.length, 1); untouched();
@@ -227,4 +229,87 @@ test('HTTP: one failed concurrent upload cannot delete a successful upload or ex
   create = args => args.data.originalName === 'rejected.pdf' ? Promise.reject(new Error('synthetic rejection')) : persist(args);
   const results = await Promise.all([upload({ form: body(pdf, { name: 'accepted.pdf' }) }), upload({ form: body(pdf, { name: 'rejected.pdf' }) })]);
   assert.deepEqual(results.map(r => r.status), [201, 500]); assert.equal(records.length, 1); assert.deepEqual(files(), [records[0].path]); untouched();
+});
+
+test('HTTP: invalid JWT signature cannot open disk storage', async () => {
+  const jwt = new JwtService({ secret: 'synthetic-incorrect-signature-only' }).sign({ sub: actors.admin.id, purpose: 'access' });
+  const write = mock.method(fs, 'createWriteStream');
+  assert.equal((await upload({ jwt })).status, 401); assert.equal(write.mock.callCount(), 0); empty();
+});
+test('HTTP: disabled account cannot open disk storage', async () => {
+  actors.editor.isActive = false;
+  try {
+    const write = mock.method(fs, 'createWriteStream');
+    assert.equal((await upload()).status, 401); assert.equal(write.mock.callCount(), 0); empty();
+  } finally { actors.editor.isActive = true; }
+});
+test('HTTP: mandatory MFA enrollment cannot upload, including an admin', async () => {
+  fs.writeFileSync('config/admin-settings.json', JSON.stringify({ auth: { mode: 'local' }, mfa: { policy: 'required' } }));
+  const write = mock.method(fs, 'createWriteStream');
+  assert.equal((await upload({ jwt: token('admin', { purpose: 'mfa-enrollment', mfaEnrollment: true }) })).status, 403);
+  assert.equal(write.mock.callCount(), 0); empty();
+});
+test('HTTP: upload permission revoked while receiving the body is rechecked', { timeout: 6000 }, async () => {
+  const opened = deferred(), original = fs.createWriteStream.bind(fs);
+  mock.method(fs, 'createWriteStream', (...args) => { const stream = original(...args); stream.once('open', opened.resolve); return stream; });
+  const client = rawRequest('revoked');
+  const response = new Promise((resolve, reject) => { client.once('response', res => { res.resume(); res.once('end', () => resolve(res.statusCode)); }); client.once('error', reject); });
+  try {
+    const end = rawBody.length - 19;
+    client.write(rawBody.subarray(0, end)); await opened.promise; settings({ editor: { uploadDocument: false } });
+    client.end(rawBody.subarray(end)); assert.equal(await response, 403); assert.equal(creates, 0); empty();
+  } finally { client.destroy(); }
+});
+test('HTTP: exactly 25 MiB accepted and committed without a leftover temporary link', async () => {
+  const bytes = Buffer.alloc(maxBytes, 65); bytes.write('%PDF-');
+  assert.equal((await upload({ form: body(bytes) })).status, 201); assert.equal(records[0].size, maxBytes);
+  assert.deepEqual(files(), [records[0].path]); assert.equal(fs.statSync(path.join('uploads', records[0].path)).nlink, 1); untouched();
+});
+test('HTTP: an unexpected file field is rejected without disk output', async () => {
+  const write = mock.method(fs, 'createWriteStream');
+  assert.equal((await upload({ form: body(pdf, { field: 'unexpected' }) })).status, 400);
+  assert.equal(write.mock.callCount(), 0); empty();
+});
+test('HTTP: missing multipart boundary is a controlled 400 with no output', async () => {
+  const response = await fetch(`${base}/api/uploads/document`, { method: 'POST', headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'multipart/form-data' }, body: pdf });
+  assert.equal(response.status, 400); assert.equal(creates, 0); empty();
+});
+test('HTTP: truncated multipart body is a controlled 400 and leaves no partial file', { timeout: 6000 }, async () => {
+  const response = await fetch(`${base}/api/uploads/document`, { method: 'POST', headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'multipart/form-data; boundary=synthetic' }, body: rawBody.subarray(0, rawBody.length - 17) });
+  assert.equal(response.status, 400); assert.equal(creates, 0); empty();
+});
+test('HTTP: multipart field bytes and count are bounded, cleanup includes the first file', async () => {
+  for (const many of [false, true]) {
+    const form = body();
+    if (many) for (let i = 0; i < 9; i++) form.append(`synthetic-${i}`, 'x');
+    else form.append('synthetic', 'x'.repeat(1025));
+    assert.equal((await upload({ form })).status, 400); assert.equal(creates, 0); empty();
+  }
+});
+for (const extension of ['bin', 'pdf']) test(`HTTP: existing UUID.${extension} never overwritten on collision`, async () => {
+  const id = '44444444-4444-4444-8444-444444444444', name = `${id}.${extension}`;
+  fs.writeFileSync(path.join('uploads', name), sentinel);
+  mock.method(require('node:crypto'), 'randomUUID', () => id);
+  assert.equal((await upload()).status, 500); assert.equal(creates, 0); assert.equal(records.length, 0);
+  assert.deepEqual(files(), [name]); assert.deepEqual(fs.readFileSync(path.join('uploads', name)), sentinel); untouched();
+});
+test('HTTP: a failure delivering committed metadata does not delete the committed file', async () => {
+  create = args => { const record = persist(args); return { ...record, get originalName() { throw new Error('synthetic response failure'); } }; };
+  assert.equal((await upload()).status, 500); assert.equal(records.length, 1);
+  assert.deepEqual(files(), [records[0].path]); assert.deepEqual(fs.readFileSync(path.join('uploads', records[0].path)), pdf); untouched();
+});
+test('HTTP: persistent unlink failure is reported, never silently treated as cleanup success', async () => {
+  create = async () => { throw new Error('synthetic database failure'); };
+  const unlink = fs.promises.unlink.bind(fs.promises), logged = mock.method(Logger.prototype, 'error', () => {});
+  mock.method(fs.promises, 'unlink', async name => {
+    if (String(name).endsWith('.pdf')) throw Object.assign(new Error('synthetic cleanup denial'), { code: 'EACCES' });
+    return unlink(name);
+  });
+  assert.equal((await upload()).status, 500); assert.equal(records.length, 0);
+  assert.equal(files().length, 1); assert.ok(logged.mock.callCount() > 0); untouched();
+});
+test('HTTP: authorized upload initializes a missing uploads directory', async () => {
+  fs.rmSync('uploads', { recursive: true });
+  assert.equal((await upload()).status, 201); assert.equal(records.length, 1);
+  assert.deepEqual(fs.readdirSync('uploads'), [records[0].path]);
 });

@@ -8,16 +8,11 @@ import {
   Post,
   Request,
   Res,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { randomUUID } from 'crypto';
-import { readFile, rename } from 'fs/promises';
-import { join, resolve, sep } from 'path';
+import { resolve, sep } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { canUser } from '../config/permission-matrix';
+import { DocumentUpload } from './document-upload';
 
 const MAGIC_SIGNATURES: Array<{ mime: string; bytes: number[] }> = [
   { mime: 'application/pdf', bytes: [0x25, 0x50, 0x44, 0x46] },
@@ -81,51 +76,42 @@ export class UploadController {
   }
 
   @Post('document')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: 'uploads',
-        filename: (_, _file, cb) => cb(null, `${randomUUID()}.bin`),
-      }),
-      limits: { fileSize: 25 * 1024 * 1024 },
-    }),
-  )
-  async uploadDocument(@UploadedFile() file: Express.Multer.File | undefined, @Request() req: any) {
+  async uploadDocument(@Request() req: any, @Res({ passthrough: true }) res: any) {
+    // Authentication/enrollment guards have already run. Check the configurable
+    // upload permission before Multer can parse or write any multipart content.
     if (!(await canUser(req.user?.role, 'uploadDocument'))) {
       throw new ForbiddenException('Droits insuffisants pour importer un document');
     }
-    if (!file) throw new BadRequestException('Fichier manquant');
-
-    const buffer = await readFile(file.path);
-    const detectedMime = checkMagicBytes(buffer);
-    if (!detectedMime || file.mimetype.includes('svg')) {
-      const { unlink } = await import('fs/promises');
-      await unlink(file.path).catch(() => {});
-      throw new BadRequestException('Format non supporté (PDF/Image uniquement)');
-    }
-
-    const ext = extensionForMime(detectedMime);
-    const safeBase = file.filename.replace(/\.bin$/i, '');
-    const finalName = `${safeBase}${ext}`;
-    if (finalName !== file.filename) await rename(file.path, `uploads/${finalName}`);
-
-    const created = await this.prisma.document.create({
-      data: {
-        originalName: file.originalname,
-        mimeType: detectedMime,
-        size: file.size,
-        path: finalName,
-        ownerId: req.user?.id,
-      },
-    });
-
-    return {
-      id: created.id,
-      originalName: created.originalName,
-      mimeType: created.mimeType,
-      size: created.size,
-      url: `/api/uploads/file/${created.id}`,
-    };
+    const upload = new DocumentUpload(req, res);
+    try {
+      const file = await upload.receive();
+      if (!file) throw new BadRequestException('Fichier manquant');
+      // A permission may have been revoked while an authorized body was streaming.
+      if (!(await canUser(req.user?.role, 'uploadDocument'))) {
+        throw new ForbiddenException('Droits insuffisants pour importer un document');
+      }
+      upload.assertConnected();
+      const detectedMime = checkMagicBytes(await upload.header());
+      if (!detectedMime || file.mimetype.includes('svg')) {
+        throw new BadRequestException('Format non supporté (PDF/Image uniquement)');
+      }
+      const finalName = await upload.promote(extensionForMime(detectedMime));
+      upload.assertConnected();
+      const created = await this.prisma.document.create({
+        data: {
+          originalName: file.originalname, mimeType: detectedMime,
+          size: file.size, path: finalName, ownerId: req.user?.id,
+        },
+      });
+      // Do not delete a committed document if the client disconnects during the
+      // insert or the delivery of the response. Wait for the database outcome.
+      upload.markCommitted();
+      return {
+        id: created.id, originalName: created.originalName,
+        mimeType: created.mimeType, size: created.size,
+        url: `/api/uploads/file/${created.id}`,
+      };
+    } finally { await upload.dispose(); }
   }
 
   @Get('file/:id')
