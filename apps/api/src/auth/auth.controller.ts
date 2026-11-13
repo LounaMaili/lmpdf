@@ -215,6 +215,12 @@ export class AuthController {
 
   // ─── V3: Passwordless WebAuthn Login ─────────────────────────────────────
 
+  private async assertPasswordlessAllowed(): Promise<void> {
+    const settings = await loadRuntimeSettings();
+    const allowLocal = settings.auth.mode === 'local' || (settings.auth.mode === 'hybrid' && settings.auth.allowLocalAdminFallback);
+    if (!allowLocal) throw new UnauthorizedException(PASSWORDLESS_FAIL);
+  }
+
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login/passwordless-begin')
@@ -223,11 +229,7 @@ export class AuthController {
       throw new UnauthorizedException(PASSWORDLESS_FAIL);
     }
 
-    const settings = await loadRuntimeSettings();
-    const allowLocal = settings.auth.mode === 'local' || (settings.auth.mode === 'hybrid' && settings.auth.allowLocalAdminFallback);
-    if (!allowLocal) {
-      throw new UnauthorizedException(PASSWORDLESS_FAIL);
-    }
+    await this.assertPasswordlessAllowed();
 
     const result = await this.webauthn.beginPasswordlessAuthentication(body.email.trim());
     if (!result) {
@@ -246,6 +248,7 @@ export class AuthController {
       throw new UnauthorizedException(PASSWORDLESS_FAIL);
     }
 
+    await this.assertPasswordlessAllowed();
     const user = await this.webauthn.finishPasswordlessAuthentication(
       body.email.trim(),
       body.response,
@@ -255,6 +258,9 @@ export class AuthController {
       throw new UnauthorizedException(PASSWORDLESS_FAIL);
     }
 
+    // Verification awaits database/crypto work; policy may change in that time.
+    // A verified factor alone must not override the current login policy.
+    await this.assertPasswordlessAllowed();
     const token = this.signToken(user, true);
     return {
       token,
