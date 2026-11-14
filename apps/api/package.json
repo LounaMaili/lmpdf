@@ -18,7 +18,8 @@
     "test:exports": "node --test tests/export-boundaries.test.cjs",
     "test:export-paths": "node --test tests/export-paths.test.cjs",
     "test:uploads": "node --test tests/upload-lifecycle.test.cjs",
-    "test:template-draft": "node --test tests/template-draft-transfer.test.cjs"
+    "test:template-draft": "node --test tests/template-draft-transfer.test.cjs",
+    "test:draft-clear": "node --test tests/draft-clear.test.cjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.13",
