@@ -3,6 +3,26 @@
 Toutes les modifications significatives du projet sont documentées ici. Format `AAAA-MM-DD`.
 
 ---
+## [2026-11-14] Déploiement groupé uploads et passwordless
+
+### Fixed
+- PR #11 : permission d'upload avant toute écriture, réception bornée et nettoyage
+  des fichiers de requête après refus/erreur/interruption ; conservation signalée
+  lorsque l'issue SQL reste indéterminée et traitement direct des rejets certains.
+- PR #12 : relecture de la politique passwordless avant la vérification WebAuthn
+  et avant émission du JWT ; politique hybride et contrôles MFA conservés.
+
+### Deployment
+- Backend déployé au SHA `f75d7b3f0aae3f5f285d0dbfe486d7080a961815`, par
+  recréation du seul backend. PostgreSQL, frontend, Vision, les trois volumes
+  critiques, les 6 documents et les 29 fichiers de référence sont préservés.
+- Debian : 213 tests API, 115 réexécutions runtime, 4 tests d'intégration isolés,
+  builds et Compose réussis ; aucune migration et aucun rollback nécessaire.
+- Voir [le rapport technique](docs/DEPLOYMENT_2026-11-14.md). La
+  [recette navigateur](docs/BROWSER_ACCEPTANCE_PLAN.md) reste à autoriser pour
+  ses écritures QA ; le déploiement ne prouve pas les parcours utilisateur réels.
+
+---
 ## [2026-05-02] Déploiement Docker production
 
 ### Added

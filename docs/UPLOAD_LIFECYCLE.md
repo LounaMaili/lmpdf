@@ -1,5 +1,10 @@
 # Uploads refusés : correction et preuves ciblées
 
+La PR #11 est désormais fusionnée et déployée avec #12 au SHA
+`f75d7b3f0aae3f5f285d0dbfe486d7080a961815` le 14 novembre 2026.
+Voir le [rapport de déploiement](DEPLOYMENT_2026-11-14.md) pour les validations
+finales et la distinction entre succès technique et recette utilisateur.
+
 ## Défaut reproduit
 
 La référence est `main` au SHA
@@ -126,10 +131,13 @@ Cette liste complète l'audit historique `REGRESSION_CHECKLIST.md` sans en
 réécrire les observations. Une constatation de code ne vaut pas une recette
 réussie ni une exploitation démontrée.
 
+Le défaut de finalisation passwordless est corrigé et déployé par #12 : la
+politique est relue avant et après vérification. Il sort des corrections à faire ;
+la recette passkey réelle et sa configuration RP/origin restent distinctes.
+
 | Priorité | Sujet | Niveau de preuve / suite |
 |---|---|---|
 | P1 conditionnel | LDAP/hybride : client LDAP absent, réactivation de compte, MFA local non appliqué au chemin LDAP, fallback plus large que son nom « admin » | Établi par lecture ; LDAP désactivé sur l'instance inventoriée. Clarifier la politique avant activation/correction ; aucun test sur annuaire réel. |
-| P2, prochaine étape | Passwordless : revérification du mode d'authentification au finish | Écart établi par le code ; reproduire en HTTP isolé avec changement de mode, puis corriger séparément. |
 | P2 | WebAuthn : RP/origin par défaut incompatibles avec le domaine de test | Configuration constatée ; parcours HTTPS avec authentificateur réel non testé. Ne pas contourner les protections pour la recette. |
 | P2 | Export rich-text : formatage et sauts de paragraphes | Implémentation incomplète constatée ; ajouter comparaison visuelle avec documents synthétiques. |
 | P2 | Validation interne PDF/image, quotas, rapprochement fichiers/base après crash | Risques ou protections absentes, distincts du défaut HTTP reproduit. Quantifier et tester avant d'annoncer une vulnérabilité supplémentaire. |
@@ -138,5 +146,6 @@ réussie ni une exploitation démontrée.
 | P3 | CI absente, lint/format placeholders, App.tsx et bundle volumineux | Dettes de qualité établies ; aucun traitement dans cette branche. |
 
 Les correctifs JWT/MFA, permissions/export et persistance administrateur déjà
-intégrés ne sont pas à recommencer. Passwordless et actualisation documentaire
-générale restent des travaux séparés.
+intégrés ne sont pas à recommencer. La prochaine étape est la recette
+authentifiée autorisée sur un jeu QA isolé, selon
+[BROWSER_ACCEPTANCE_PLAN.md](BROWSER_ACCEPTANCE_PLAN.md).

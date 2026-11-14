@@ -8,6 +8,36 @@ Au début des contrôles, la VM `lmpdf-dev` exécutait encore
 même arbre Git**. Aucun code ni donnée applicative n’avait été modifié pour
 cet audit initial ; les corrections ultérieures sont distinguées ci-dessous.
 
+## État courant — déploiement et préparation de recette du 14 novembre 2026
+
+Les PR [#11](https://github.com/LounaMaili/lmpdf/pull/11) (uploads) et
+[#12](https://github.com/LounaMaili/lmpdf/pull/12) (politique passwordless) sont
+fusionnées et déployées en une seule bascule backend au SHA
+`f75d7b3f0aae3f5f285d0dbfe486d7080a961815`. Frontend, PostgreSQL et Vision
+n'ont pas été recréés. Voir le [rapport de déploiement](DEPLOYMENT_2026-11-14.md).
+
+- **I14** : preuves isolées Debian au SHA exact : 213 tests API (auth 72,
+  paramètres 12, permissions 43, exports 25, chemins 18, uploads 43),
+  115 réexécutions runtime et 4 tests PostgreSQL/API/Vision réussis. Les
+  réexécutions ne sont pas des cas indépendants supplémentaires. Builds API,
+  Prisma generate et Compose dev/prod réussis, sans migration.
+- **D14** : contrôles après bascule : HTTP 200 frontend/API/Vision, PostgreSQL
+  sain et accessible par l'API, empreintes base/fichiers inchangées, 6 documents
+  et 29 fichiers conservés, volumes identiques, zéro redémarrage du backend et
+  aucune erreur critique/inattendue d'authentification observée.
+- **V14** : préparation actuelle en lecture seule : HTTPS → Authelia observé,
+  aucune connexion effectuée ; mode local, MFA facultative, aucun TOTP actif
+  ni credential WebAuthn sur les 3 comptes locaux actifs ; RP/origin WebAuthn encore
+  localhost ; export serveur désactivé, sans racine/destination. Aucun groupe
+  ni partage existant. Aucun compte/document/réglage créé ou modifié.
+
+La [recette navigateur préparée](BROWSER_ACCEPTANCE_PLAN.md) sépare les
+prérequis humains, les blocages de configuration et les écritures QA à faire
+approuver. Elle ne déclare pas les parcours authentifiés réussis. Les validations
+plus anciennes, dont les 17 tests autosave, restent acquises et n'ont pas été
+relancées dans cette préparation. Les sections datées ci-dessous sont
+historiques ; leur mention « non déployé » décrit leur étape initiale.
+
 ## Validation combinée des PR #8, #10 et #7 — 22 octobre 2026
 
 **Aucun déploiement sur les services actifs.** Les preuves nouvelles viennent de
@@ -105,9 +135,10 @@ effectué.
 | Garde JWT et accès anonyme | OK | C : [`jwt.strategy.ts`](../apps/api/src/auth/jwt.strategy.ts), garde global ; V : trois routes protégées répondent `401` sans jeton | Ne prouve pas les droits après authentification. | P1 |
 | Expiration et isolation JWT | OK | I : accès valide/ancien compatible, challenge MFA, enrollment, type inattendu, signature invalide et expiration testés en HTTP | Retour à la connexion dans le navigateur à revalider. | P1 |
 | Logout / révocation | Dette technique | C : [`auth.ts`](../apps/web/src/auth.ts) efface le jeton du stockage local | Pas de révocation serveur ; un JWT copié reste valable jusqu'à expiration ou désactivation du compte. | P2 |
-| MFA TOTP et codes de secours | OK | I : enrôlement/connexion réels synthétiques, erreurs, génération des codes et transactions PostgreSQL | Recette utilisateur et récupération sur navigateur restent à faire. | P1 |
+| MFA TOTP et codes de secours | OK | I / I14 : vérifications synthétiques ; V14 : clé configurée, MFA optional, aucun compte local actif enrôlé | Recette réelle après enrôlement QA autorisé ; ne pas consommer des codes de secours existants. | P1 |
 | Enrôlement MFA obligatoire | OK | I : session restreinte, aucune route métier/admin avant activation, TOTP/WebAuthn, concurrence et désactivation testés ; config admin required prioritaire | Politique LDAP/hybride conservée ; configuration réelle à recetter. | P1 |
-| WebAuthn et passkeys | Bug confirmé | C : [`webauthn.service.ts`](../apps/api/src/auth/webauthn.service.ts) a pour défaut RP `localhost` / origin `http://localhost:4173` ; [`docker-compose.prod.yml`](../docker-compose.prod.yml) ne transmet aucun `WEBAUTHN_RP_ID`/`WEBAUTHN_RP_ORIGIN` | Le domaine/origin de l'instance de test ne correspond pas à ces défauts ; l'enrôlement/vérification WebAuthn ne peut pas aboutir dans cette configuration. Aucun test avec authentificateur réel. | P1 |
+| WebAuthn et passkeys | Bug confirmé | V14 : RP effectif `localhost`, origin `http://localhost:4173`, aucun credential enrôlé ; C : Compose ne transmet pas les variables RP/origin | Configuration incompatible avec le domaine HTTPS ; correction autorisée distincte nécessaire avant recette matérielle. La cryptographie synthétique I14 est validée. | P1 |
+| Politique à la finalisation passwordless | OK | PR #12 déployée ; I14 : politique relue avant/après vérification, révocation/fichier corrompu/refus/rejeu, JWT/MFA compatibles | Ne révoque pas globalement les JWT déjà émis ; politique hybride conservée. Recette passkey réelle bloquée par RP/origin. | P1 |
 | LDAP / Active Directory | Bug confirmé | C : [`ldap.service.ts`](../apps/api/src/auth/ldap.service.ts) fait `require('ldapjs')` ; absent de [`apps/api/package.json`](../apps/api/package.json) et du lockfile ; V : `ldapjs_resolvable=false` dans le backend | Si LDAP est activé, `authenticate()` retourne `null` avant de contacter l'annuaire. Aucun annuaire de test sollicité. | P1 |
 | Fallback admin local en mode hybride | Bug confirmé | C : [`auth.controller.ts`](../apps/api/src/auth/auth.controller.ts), condition `allowLocal` | Le drapeau nommé `allowLocalAdminFallback` permet la connexion de **tout** compte local valide en mode hybride ; aucun filtre `role === 'admin'`. À clarifier et tester selon la politique voulue. | P1 |
 
@@ -115,13 +146,13 @@ effectué.
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Upload PDF | À revalider | C : [`upload.controller.ts`](../apps/api/src/upload/upload.controller.ts), limite 25 Mo, nom UUID ; V : PDF historiques présents | Aucun nouvel upload de test ni vérification rendu/métadonnées ; aucun test automatisé. | P2 |
-| Upload image | À revalider | I : PNG synthétique valide uploadé, relu et traité par Vision dans le stack | Autres formats et affichage navigateur non validés. | P2 |
+| Upload PDF | À revalider | I14 : HTTP, plafond 25 Mio, PDF synthétique valide inséré en PostgreSQL, relu et décodé par Vision | Contrat technique validé ; import/rendu navigateur encore à recetter sur QA autorisé. | P2 |
+| Upload image | À revalider | I / I14 : PNG synthétique valide uploadé, relu et décodé par Vision | Autres formats et affichage navigateur non validés. | P2 |
 | MIME / magic bytes | À revalider | C : détection par signature, extension dérivée, SVG exclu | Signatures courtes : la validité interne d'un PDF ou d'une image n'est pas prouvée. Ajouter des fixtures valides, tronquées et malformées. | P1 |
 | Lecture d'un document existant | À revalider | C : [`api.ts`](../apps/web/src/api.ts) récupère le fichier protégé puis crée une blob URL ; V : route protégée inaccessible sans JWT | Pas de téléchargement authentifié ni rendu du document existant pendant cet audit. | P1 |
 | Permissions d’accès au fichier | OK | I : matrice API et lecture authentifiée d’un PNG partagé dans le stack | La matrice complète des partages reste à recetter au navigateur. | P1 |
-| Persistance `uploads-data` | OK | V : même volume nommé monté dans API et Vision ; 28 PDF et 1 image comptés | Contrôle de présence seulement, pas de comparaison de checksum ni de restauration. | P1 |
-| Upload refusé après réception | Dette technique | C : l'intercepteur écrit sur disque avant le contrôle `canUser()` dans le contrôleur | Un utilisateur authentifié sans droit d'upload peut laisser un fichier temporaire orphelin. Scénario non exécuté. | P2 |
+| Persistance `uploads-data` | OK | D14 : volume et 29 empreintes de fichiers identiques avant/après recréation, archive vérifiée | Pas de restauration automatique ni de purge des fichiers historiques. | P1 |
+| Upload refusé / erreurs / interruptions | OK | PR #11 déployée ; I14 : 43 tests lifecycle, droit avant écriture, nettoyage, collisions, Prisma et interruptions | Issue SQL indéterminée : fichier conservé avec signalement ; crash brutal ou refus d'unlink peut nécessiter rapprochement manuel. Voir [UPLOAD_LIFECYCLE.md](UPLOAD_LIFECYCLE.md). | P2 |
 
 ## Éditeur
 
@@ -202,7 +233,7 @@ Sources : [`detect.controller.ts`](../apps/api/src/detect/detect.controller.ts),
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
 | Communication API → Vision | OK | V historique : health 200 ; I : appel /detect sur PNG partagé réellement traité | Précision et timeout/panne restent à mesurer. | P2 |
-| Accès au fichier partagé | OK | V historique : montages ; I : PNG uploadé par l’API puis lu réellement par Vision dans le stack | Précision de détection non évaluée. | P2 |
+| Accès au fichier partagé | OK | I14 : PNG/PDF, empreintes et décodage dans l'image Vision actuelle, fichiers 0600 ; D14 : montage préservé | Vision actuel root ; un changement d'UID exige une adaptation et une validation distinctes. Précision non évaluée. | P2 |
 | Détection de champs | À revalider | C : extraction grille/contours et OCR | Mesurer précision et faux positifs sur PDF/image de test ; aucun test automatisé. | P2 |
 | Sensibilité et lignes pointillées | À revalider | C : profils low/normal/high et `dottedAsLine` | Aucun comparatif sur documents de référence. | P2 |
 | PDF multi-page | Incomplet | C : `load_image()` ne convertit que `first_page=1, last_page=1` | La détection ne parcourt pas les pages suivantes ; première page à valider sur référence. | P2 |
@@ -221,7 +252,7 @@ Sources : [`exportPdf.ts`](../apps/web/src/exportPdf.ts),
 |---|---|---|---|---|
 | PDF navigateur | À revalider | C : `pdf-lib`, conversion coordonnées page→PDF, fichier téléchargé | Comparaison visuelle avec source, rotations et tous types de champs absente. | P1 |
 | Rich-text dans le PDF final | Bug confirmé | C : les deux chemins d'export convertissent le HTML en texte brut via [`richTextToPlainText.ts`](../apps/web/src/utils/richTextToPlainText.ts) | Gras/couleurs/surlignage disparaissent. En outre `div`/`p` ne produisent pas de saut de ligne dans `textContent`, sauf `<br>` ; risque de concaténation. | P1 |
-| Export serveur | OK | I : resolve/run réels avec octets PDF synthétiques écrits et relus dans une destination temporaire ; tests HTTP des refus et limites | Rendu PDF fourni par le navigateur et recette visuelle non couverts. | P2 |
+| Export serveur | OK | I / I14 : writer, droits et limites isolés ; V14 : désactivé, zéro racine/destination active | Pas disponible dans la configuration actuelle ; activation et destination QA à autoriser séparément. Le téléchargement navigateur est distinct. | P2 |
 | `allowedRoots` et chemins | OK | I : 18 tests disque de chemins, symlinks/hardlinks et remplacements ; writer vérifie aussi les racines | Linux requis ; racines et droits POSIX à contrôler au déploiement. | P1 |
 | Règles de destination | À revalider | I : nom canonique vérifié distinct du nom de sortie, règle réelle dans le stack ; tests de contexte et droits | Combinaisons de règles utilisateur/groupe non exhaustives. | P2 |
 | Conflits overwrite/rename/skip | OK | I : trois stratégies sur disque, collisions concurrentes rename/skip et normalisation des extensions | Overwrite existant non transactionnel en erreur I/O. | P2 |
@@ -236,7 +267,7 @@ Sources : [`exportPdf.ts`](../apps/web/src/exportPdf.ts),
 | Permissions configurables | OK | I : override editor.exportPdf désactivé par PATCH puis refus serveur 403 observé | Autres overrides et recette UI à compléter. | P1 |
 | Paramètres LDAP | Bug confirmé | C : formulaire et test LDAP existent ; bibliothèque runtime absente (voir Authentification) | Le test de connexion LDAP ne peut pas réussir dans l'image actuelle si activé. | P1 |
 | Configuration export | À revalider | I : réglages privés relus par le backend, destination temporaire et règle canonique testées | Formulaire admin, preview et toutes combinaisons de règles à recetter. | P2 |
-| Persistance `config/admin-settings.json` | OK | I : 12 tests, deux conteneurs successifs, stack complet, modes 0700/0600 et refus d’écriture ; volume admin-config déclaré dans les deux Compose | Non déployé. Sauvegarder/importer tout fichier existant avant bascule. | P1 |
+| Persistance `config/admin-settings.json` | OK | I / I14 : 12 tests et persistance isolée ; D14 : volume admin-config monté et préservé, répertoire 0700 UID100/GID101 | Déployé ; fichier absent avant/après bascule. Aucune écriture de réglages UI testée sur l'instance active. | P1 |
 
 ## Historique — persistance admin validée séparément (non déployée)
 
@@ -257,9 +288,9 @@ récentes et les fusions sont consignées en tête du document.
 | `uploads-data` | OK | V : volume monté dans API et Vision ; 29 fichiers présents | Même réserve sur sauvegarde/restauration. | P1 |
 | API | OK | V : conteneur actif sans restart ; `/api/health` `200`, lecture PostgreSQL réussie | Endpoint santé ne contrôle pas lui-même la DB. | P1 |
 | Frontend | OK | V : conteneur actif, page HTTP `200` | Flux authentifié et navigateur non couverts. | P1 |
-| Vision | OK | V historique : health 200 ; I : démarrage de l’image et /detect sur PNG partagé | PDF et qualité des résultats à revalider. | P2 |
+| Vision | OK | I14 : PNG/PDF réellement décodés ; D14 : API → health 200 et même conteneur | Qualité des résultats et parcours navigateur à revalider. | P2 |
 | Garage / Redis absents | OK | C : aucun service dans les Compose actifs ; V : aucun conteneur actif ni volume nommé de ces services | Absence volontaire, aucune dépendance à réintroduire. | P3 |
-| Recréation d’un conteneur applicatif | À revalider | I : persistance des réglages entre deux conteneurs et démarrage complet temporaire ; V : montages actifs inchangés | Aucune recréation active effectuée ; recette après déploiement encore requise. | P1 |
+| Recréation du backend | OK | D14 : seul backend recréé, trois volumes et empreintes base/uploads préservés, autres IDs inchangés | Validation technique réussie ; ne vaut pas recette utilisateur. Rollback 3ecac12 et image intermédiaire c7fe463 conservés. | P1 |
 
 ## Dettes transversales et niveau de preuve
 
@@ -267,7 +298,7 @@ récentes et les fusions sont consignées en tête du document.
 |---|---|---|---|---|
 | CI | Dette technique | C : aucun workflow `.github/workflows` suivi | Aucun gate automatique de build/tests avant merge. | P2 |
 | Lint et format | Dette technique | C : scripts web/API `echo 'todo …'` | `pnpm lint` et `pnpm format` ne vérifient pas réellement ces applications. | P2 |
-| Couverture de tests | Dette technique | I : 154 tests API, 7 PostgreSQL réels, 34 frontend et 7 stack ; détail en tête du document | Pas de navigateur complet ni d’export visuel ; Vision limitée à un PNG synthétique. | P1 |
+| Couverture de tests | Dette technique | I14 : 213 API, 115 réexécutions runtime, 4 PostgreSQL/API/Vision ; autres suites historiques conservées | Pas de nouvelle recette navigateur complète ni d'export visuel. Tests frontend/autosave historiques non relancés ici. | P1 |
 | Taille de `App.tsx` | Dette technique | C : 3 049 lignes | État, rendu, droits et overflow fortement couplés ; rend les corrections difficiles à isoler. | P2 |
 | Bundle frontend | Dette technique | V : asset JS principal servi d'environ 1,8 Mo non compressé sur disque | Performance à mesurer dans le navigateur ; optimisation hors audit. | P3 |
 | Warning `canvas` facultatif | À revalider | Mention historique ; builds isolés réussis | Impact sur un rendu PDF réel non couvert par ces tests. | P3 |
@@ -276,12 +307,11 @@ récentes et les fusions sont consignées en tête du document.
 
 ## Prochaines étapes après intégration
 
-1. Recette navigateur authentifiée : enrôlement MFA, restauration/autosave,
-   matrice owner/editor/filler, partage, export et impression, sans contourner Authelia.
-2. Déploiement explicitement autorisé : sauvegarder les réglages non montés,
-   préparer le volume admin-config privé, préserver PostgreSQL et uploads-data,
-   puis ne recréer que les services approuvés avec rollback disponible. Aucune
-   migration nouvelle n’est requise par ces corrections.
+1. Approuver la session Authelia, les acteurs/fixtures QA et leur conservation
+   avant les écritures ; voir [BROWSER_ACCEPTANCE_PLAN.md](BROWSER_ACCEPTANCE_PLAN.md).
+2. Recetter progressivement login, permissions, import, éditeur, autosave,
+   restauration, Vision et téléchargement PDF sur ce seul jeu QA. Le déploiement
+   groupé est terminé ; ne pas le recommencer pour cette recette.
 3. Traiter séparément les bugs restants : LDAP manquant et politique fallback
    à clarifier, RP/origin WebAuthn, fidélité rich-text, puis parcours éditeur/Vision.
 4. Ajouter les gates CI et compléter les tests visuels/navigateur.
