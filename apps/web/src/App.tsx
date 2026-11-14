@@ -24,7 +24,7 @@ const DEBUG_FUSED = false;
 /** Global toggle for the experimental fused overflow interaction mode. */
 const ENABLE_FUSED_MODE = false;
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { clearDraft, deleteTemplate, detectFields, getDraft, getDocumentUrl, getMyDocRole, getMyPermissions, listFolders, listTemplates, moveTemplateToFolder, renameTemplate, resolveExportDestination, runServerExport, saveTemplate, upsertDraft, uploadDocument, type DraftRecord, type RolePermissions } from './api';
 import FieldOverlay from './components/FieldOverlay';
 import PdfViewer from './components/PdfViewer';
@@ -47,6 +47,7 @@ import type { Rotation } from './utils';
 import type { DocumentPreset, FieldModel, FieldType, TemplateModel } from './types';
 import { getStoredUser } from './auth';
 import { useAutosave } from './hooks/useAutosave';
+import { captureTemplateDraft, isDraftSaveContextCurrent, preserveTemplateDraft, sameDraftKey, type DraftSaveContext } from './utils/preserveTemplateDraft';
 import { canApplyDetection, canApplyFieldPatch, editorPermissions, type DocumentRole } from './utils/editorPermissions';
 import { useTranslation } from './i18n';
 
@@ -288,6 +289,13 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
     pageCount,
     preset,
   }), [name, fields, rotation, pageCount, preset]);
+
+  // Only committed editor state is used to decide whether a late structural
+  // save can adopt its new template. The write itself uses the captured snapshot.
+  const draftSaveContextRef = useRef<DraftSaveContext>({ key: draftKey, revision: autosaveChangeVersion, payloadVersion: buildDraftPayload });
+  useLayoutEffect(() => {
+    draftSaveContextRef.current = { key: draftKey, revision: autosaveChangeVersion, payloadVersion: buildDraftPayload };
+  }, [draftKey, autosaveChangeVersion, buildDraftPayload]);
 
   const autosaveState = useAutosave(
     dirty,
@@ -2170,29 +2178,45 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       setStatus(t('status.insufficientRightsSave'));
       return;
     }
+    const snapshot = captureTemplateDraft({ key: draftKey, revision: autosaveChangeVersion, payloadVersion: buildDraftPayload }, buildDraftPayload());
+    const actorId = currentUser?.id;
+    const sameSession = () => !!actorId && getStoredUser()?.id === actorId;
     try {
       setStatus(t('status.savingTemplate'));
-      const filledDraftPayload = buildDraftPayload();
       const templateFields = stripTemplateFieldValues(fields);
       const created = await saveTemplate({ name, sourceFileId, rotation, fields: templateFields });
       setTemplates((prev) => [created, ...prev]);
-      setLoadedTemplateId(created.id);
-      setDirty(false);
-
-      if (currentUser && created.id) {
-        try {
-          await upsertDraft({ templateId: created.id, sourceFileId }, filledDraftPayload);
-          if (draftKey && draftKey.templateId !== created.id) {
-            await clearDraft(draftKey);
-          }
-        } catch {
-          // Silent – preserving the working draft is best-effort
+      let result;
+      try {
+        result = await preserveTemplateDraft(created.id, snapshot, {
+          upsert: upsertDraft, clear: clearDraft, sameSession,
+          adopt: () => {
+            if (!isDraftSaveContextCurrent(snapshot, draftSaveContextRef.current)) return false;
+            setLoadedTemplateId(created.id);
+            setDirty(false);
+            return true;
+          },
+        });
+      } catch {
+        // The structure exists, but never discard or claim preservation of a
+        // working draft whose transfer has not been confirmed.
+        if (sameSession() && sameDraftKey(snapshot.key, draftSaveContextRef.current.key)) {
+          setStatus(t('status.templateSavedDraftFailed'));
         }
+        return;
       }
-
-      setStatus(t('status.templateSavedStructure'));
+      if (!sameSession()) return;
+      const current = draftSaveContextRef.current;
+      if (!result.adopted) {
+        if (sameDraftKey(snapshot.key, current.key)) setStatus(t('status.templateSavedNewerChanges'));
+      } else if (current.revision === snapshot.revision
+        && (sameDraftKey(current.key, snapshot.key) || current.key?.templateId === created.id)) {
+        setStatus(t(result.cleanupFailed ? 'status.templateSavedDraftCleanupFailed' : 'status.templateSavedStructure'));
+      }
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t('status.errorFallback'));
+      if (sameSession() && sameDraftKey(snapshot.key, draftSaveContextRef.current.key)) {
+        setStatus(err instanceof Error ? err.message : t('status.errorFallback'));
+      }
     }
   };
 
