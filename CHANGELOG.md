@@ -19,8 +19,16 @@ Toutes les modifications significatives du projet sont documentées ici. Format 
 - Debian : 213 tests API, 115 réexécutions runtime, 4 tests d'intégration isolés,
   builds et Compose réussis ; aucune migration et aucun rollback nécessaire.
 - Voir [le rapport technique](docs/DEPLOYMENT_2026-11-14.md). La
-  [recette navigateur](docs/BROWSER_ACCEPTANCE_PLAN.md) reste à autoriser pour
-  ses écritures QA ; le déploiement ne prouve pas les parcours utilisateur réels.
+  [recette navigateur](docs/BROWSER_ACCEPTANCE_PLAN.md) fait l'objet de preuves
+  distinctes ; le déploiement ne prouve pas les parcours utilisateur réels.
+
+### Acceptance
+- Recette HTTPS authentifiée avec quatre comptes et deux imports synthétiques
+  persistants, 42 contrôles HTTP de permissions/refus, autosaves successifs,
+  changement de clé, restauration, Vision et export PDF réel comparé sur Debian.
+- Données historiques, conteneurs et volumes préservés. Bugs de préservation du
+  brouillon après sauvegarde structurelle et de pages PDF documentés ; perte de
+  formatage rich-text reproduite. Voir [le bilan](docs/BROWSER_ACCEPTANCE_RESULTS_2026-11-14.md).
 
 ---
 ## [2026-05-02] Déploiement Docker production

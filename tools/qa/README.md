@@ -24,6 +24,13 @@ des services, paramètres actifs ou utilisateurs historiques.
   sans écrire dans `/uploads` ; importer ensuite avec le navigateur normal.
 - Garder comptes, documents, brouillons et partages QA. Inventorier leurs IDs
   séparément. Aucun nettoyage automatique ; ne pas utiliser des données réelles.
+- `http.py PRIVATE_QA_DIRECTORY prepare|share|matrix` utilise les logins QA
+  normaux sur le domaine HTTPS. Il exige l'inventaire privé `qa-objects.json`
+  et ne cible que ses imports synthétiques appartenant au QA Owner. `prepare`
+  crée une base vide uniquement si l'import n'a aucun template ; `share` ajoute
+  les rôles editor/filler convenus ; `matrix` vérifie lectures et refus. Les
+  JWT restent en mémoire et aucun paramètre actif n'est modifié. Respecter les
+  limites de login et arrêter devant un refus inattendu.
 
 Ne pas publier les inventaires bruts, dumps, empreintes individuelles,
 identifiants historiques, mots de passe, JWT, cookies ou secrets MFA. Les

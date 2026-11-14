@@ -1,4 +1,12 @@
-# Recette navigateur authentifiée LMPDF — préparation du 14 novembre 2026
+# Recette navigateur authentifiée LMPDF — plan du 14 novembre 2026
+
+**Suivi** : les comptes, fixtures et écritures QA ont depuis été autorisés et
+la première recette réelle a été exécutée. Voir les
+[résultats, IDs persistants et bugs observés](BROWSER_ACCEPTANCE_RESULTS_2026-11-14.md).
+Les mentions d'accord manquant ci-dessous décrivent la préparation initiale ;
+elles restent applicables aux facteurs MFA, groupes ou changements de politique
+qui n'ont pas été autorisés séparément. Le bypass Authelia du VLAN, configuré
+par l'utilisateur, permet maintenant l'accès HTTPS à l'authentification LMPDF.
 
 ## Périmètre et acquis
 
@@ -9,7 +17,7 @@ La [checklist de régression](REGRESSION_CHECKLIST.md) et le
 Les 213 tests API, 115 réexécutions runtime, 4 tests d'intégration et 17 tests
 autosave historiques ne sont pas à recommencer sans changement ou anomalie.
 
-Cette préparation n'a créé aucun compte, facteur MFA, document, partage ou
+La préparation initiale n'avait créé aucun compte, facteur MFA, document, partage ou
 brouillon. Aucun document existant n'a été ouvert dans l'éditeur, aucune
 configuration active n'a été modifiée. Les parcours ci-dessous sont un plan,
 pas des résultats acquis.
@@ -109,7 +117,7 @@ ou un service instable impose l'arrêt de la recette et un rapport ; pas de
 correction directe sur la VM, reset, migration, redémarrage ou rollback implicite.
 Un refus conforme à la politique ou un parcours non configuré n'est pas une panne.
 
-Les validations autorisées immédiatement restent l'accès HTTPS non authentifié,
-la lecture des preuves et l'inventaire anonymisé. La prochaine autorisation doit
-préciser session humaine, acteurs, objets QA et conservation/nettoyage avant
-toute création, édition, partage, restauration ou activation d'un facteur.
+La recette autorisée conserve quatre acteurs et deux imports synthétiques,
+leurs templates, brouillons et partages. Les opérations futures se limitent à
+ce jeu QA ; aucune donnée historique ne devient une fixture. Enrôlement MFA,
+groupes, configuration et déploiements nécessitent toujours leur accord propre.

@@ -120,8 +120,13 @@ utilisateurs comptés), et routes templates/drafts/admin sans JWT `401`.
 PostgreSQL est sain ; ses données comprennent 6 documents, 1 template, 3
 brouillons et 102 champs. Le volume d'uploads contient 28 PDF et 1 image.
 Les quatre conteneurs actifs sont PostgreSQL, backend, frontend et Vision ;
-Garage et Redis ne sont pas actifs. Aucun test authentifié de l'éditeur n'a été
-réalisé : l'accès navigateur externe passe par Authelia et son second facteur.
+Garage et Redis ne sont pas actifs. Ces nombres décrivent l'inventaire historique
+avant QA. La [recette réelle B14/H14](BROWSER_ACCEPTANCE_RESULTS_2026-11-14.md)
+a depuis ajouté, avec autorisation, 4 comptes, 2 documents, 4 templates,
+8 brouillons et 4 partages synthétiques persistants. Toutes les empreintes des
+lignes historiques et des 29 fichiers antérieurs sont inchangées. Les IDs,
+images et montages des quatre conteneurs sont inchangés. `B14` désigne le
+navigateur réel ; `H14`, les contrôles HTTPS normaux avec les comptes QA.
 Le `pnpm` de l'hôte VM n'est pas disponible dans la session SSH non interactive,
 donc `T17` n'a pas été relancé pendant cet audit. Aucun contournement de
 l'authentification, écriture de données, migration, build ou redémarrage n'a été
@@ -131,7 +136,7 @@ effectué.
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Login local | OK | I : 56 tests auth et connexions mot de passe + TOTP dans le stack isolé | Recette navigateur et paramètres de l’instance réelle encore à vérifier. | P2 |
+| Login local | OK | I : connexions isolées ; B14 : logins frais des quatre QA, navigation et logout réels sur HTTPS | Admin lu via sa session existante ; TOTP réel distinct. | P2 |
 | Garde JWT et accès anonyme | OK | C : [`jwt.strategy.ts`](../apps/api/src/auth/jwt.strategy.ts), garde global ; V : trois routes protégées répondent `401` sans jeton | Ne prouve pas les droits après authentification. | P1 |
 | Expiration et isolation JWT | OK | I : accès valide/ancien compatible, challenge MFA, enrollment, type inattendu, signature invalide et expiration testés en HTTP | Retour à la connexion dans le navigateur à revalider. | P1 |
 | Logout / révocation | Dette technique | C : [`auth.ts`](../apps/web/src/auth.ts) efface le jeton du stockage local | Pas de révocation serveur ; un JWT copié reste valable jusqu'à expiration ou désactivation du compte. | P2 |
@@ -146,10 +151,10 @@ effectué.
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Upload PDF | À revalider | I14 : HTTP, plafond 25 Mio, PDF synthétique valide inséré en PostgreSQL, relu et décodé par Vision | Contrat technique validé ; import/rendu navigateur encore à recetter sur QA autorisé. | P2 |
-| Upload image | À revalider | I / I14 : PNG synthétique valide uploadé, relu et décodé par Vision | Autres formats et affichage navigateur non validés. | P2 |
+| Upload PDF | OK | I14 : HTTP, plafond, PostgreSQL/Vision ; B14 : import PDF QA réel et rendu ; H14 : lecture protégée | Compte et fond des pages incorrects dans l'éditeur, voir Multi-page. | P2 |
+| Upload image | OK | I14 et B14 : PNG QA uploadé, relu, affiché et détecté par Vision réel | Autres formats non recettés au navigateur. | P2 |
 | MIME / magic bytes | À revalider | C : détection par signature, extension dérivée, SVG exclu | Signatures courtes : la validité interne d'un PDF ou d'une image n'est pas prouvée. Ajouter des fixtures valides, tronquées et malformées. | P1 |
-| Lecture d'un document existant | À revalider | C : [`api.ts`](../apps/web/src/api.ts) récupère le fichier protégé puis crée une blob URL ; V : route protégée inaccessible sans JWT | Pas de téléchargement authentifié ni rendu du document existant pendant cet audit. | P1 |
+| Lecture d'un document existant | OK | B14 : réouvertures des seuls imports QA via templates ; H14 : métadonnées et octets lus selon les rôles, 401 anonyme | Les six documents historiques restent volontairement non ouverts. | P1 |
 | Permissions d’accès au fichier | OK | I : matrice API et lecture authentifiée d’un PNG partagé dans le stack | La matrice complète des partages reste à recetter au navigateur. | P1 |
 | Persistance `uploads-data` | OK | D14 : volume et 29 empreintes de fichiers identiques avant/après recréation, archive vérifiée | Pas de restauration automatique ni de purge des fichiers historiques. | P1 |
 | Upload refusé / erreurs / interruptions | OK | PR #11 déployée ; I14 : 43 tests lifecycle, droit avant écriture, nettoyage, collisions, Prisma et interruptions | Issue SQL indéterminée : fichier conservé avec signalement ; crash brutal ou refus d'unlink peut nécessiter rapprochement manuel. Voir [UPLOAD_LIFECYCLE.md](UPLOAD_LIFECYCLE.md). | P2 |
@@ -164,14 +169,14 @@ hooks/DOM simulés sont suivis. Aucun test navigateur complet n'est encore suivi
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Création, modification, suppression de champs | À revalider | C : handlers présents dans `App.tsx` ; aucun test interactif | Tester chaque type, page et mode édition/remplissage. | P2 |
-| Texte riche et sanitation | À revalider | C : `RichTextEditor`, DOMPurify côté web, `sanitize-html` côté API pour templates/brouillons | Tester formatage, rechargement, contenu hostile et rendu ; l'export a un défaut confirmé plus bas. | P1 |
+| Création, modification, suppression de champs | À revalider | B14 : création/édition texte, checkbox, numérique, date, coordonnées/dimensions, page 2, modes édition/remplissage | Suppression, tally et toutes les variantes restent à tester. | P2 |
+| Texte riche et sanitation | À revalider | B14 : saisie overlay, `div/strong` sauvegardés puis restaurés avec formatage | Whitelist `p` restrictive, contenu hostile non injecté sur l'instance ; export défectueux plus bas. | P1 |
 | Checkbox | À revalider | C : overlay et export PDF spécialisés | Valeur, taille de coche et rotations 0/90/180/270 non comparées visuellement. | P2 |
 | Compteurs tally/numeric | À revalider | C : rendu et valeurs par défaut présents | Incrément, remise à zéro, export et bornes non testés. | P2 |
 | Dates | À revalider | C : formats DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, valeur du jour optionnelle | L'initialisation `dateDefaultToday` appelle `onValueChange` au montage d'un champ vide : vérifier si ouvrir un template vierge provoque un brouillon voulu. | P2 |
 | Déplacement/redimensionnement | À revalider | C : conversion coordonnées écran→page et limites | Zoom et rotations non testés visuellement ; cas filler décrit dans Permissions. | P2 |
 | Rotation | À revalider | C : transformations CSS et export PDF dédiés | Superposition champ/fond et export à quatre angles non vérifiés. | P2 |
-| Multi-page | À revalider | C : pages empilées et `pageNumber` par champ | Ajout, duplication, suppression, navigation et export de plusieurs pages non testés. | P2 |
+| Multi-page | Bug confirmé | B14 : PDF QA à 2 pages importé comme 1 ; ajout manuel de page : fond page 1 répété ; export contient les 2 fonds réels | `PdfViewer` sans page contrôlée ni remontée du total dans App. `addPage` sans champ reporté ne marque pas dirty. Voir bilan B14. | P2 |
 | Zoom | À revalider | C : facteur 0,25–5 et ajustement à la largeur | Alignement des champs après zoom/resize non testé. | P2 |
 | Navigation clavier | À revalider | C : écouteur clavier, navigation et raccourcis | Focus, sélection multiple, suppression et chaînes d'overflow non testés. | P2 |
 | Overflow `distributed` | À revalider | C : distribution et estimation de capacité dans `App.tsx` | Risque de troncature/reflow non mesuré ; aucun test automatisé. | P2 |
@@ -198,29 +203,29 @@ Sources : [`useAutosave.ts`](../apps/web/src/hooks/useAutosave.ts),
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Première modification → autosave | OK | T17 : debounce et première révision | Test du scheduler, pas du navigateur dans cet audit. | P2 |
-| Modifications successives, rafale et périodicité | OK | T17 : deuxième save, coalescence, intervalle sans modification, save périodique utile | Intégration React/API à revalider sur compte de test. | P2 |
+| Première modification → autosave | OK | T17 et B14 : indicateur visible, payload QA enregistré en PostgreSQL | Aucun brouillon historique modifié. | P2 |
+| Modifications successives, rafale et périodicité | OK | T17 : rafale/périodicité ; B14 : deux révisions successives réelles et dates distinctes en base | Rafale, panne et périodicité forcées non rejouées sur l'instance. | P2 |
 | Masquage d'onglet, `pagehide`, concurrence, erreurs/réessai | OK | T17 : `saveNow`, écriture série, états `error` puis `saved` | Fermeture effective du navigateur non testée ici. | P2 |
-| Changement de document/template A → B | OK | T17 : snapshot clé+payload de A, flush de A, édition B, transition pendant requête, erreur de A | Test d'intégration UI/API à refaire avec deux documents temporaires avant toute évolution. | P1 |
+| Changement de document/template A → B | OK | T17 ; B14 : PNG modifié puis ouverture PDF avant debounce ; valeur uniquement sous clé PNG, brouillon PDF inchangé avant restauration | Échec réseau pendant transition couvert en isolation, pas provoqué sur l'instance. | P1 |
 | Chargement simple sans édition | À revalider | T17 : scheduler n'enregistre pas un load propre ; C : `loadTemplate()` fait `setDirty(false)` | L'effet `dateDefaultToday` peut créer une modification réelle au montage ; cas non couvert par T17. | P2 |
-| Restauration d'un brouillon | À revalider | C : comparaison `draft.updatedAt > tpl.updatedAt`, modal de restauration ; V : 3 brouillons existants | Pas de restauration authentifiée ni vérification des données. | P2 |
-| Sauvegarde explicite | À revalider | C : `onSaveDraft()` → `PUT /drafts` | Résultat et interaction avec autosave non testés ; aucun test API. | P2 |
-| Nettoyage après sauvegarde structurelle | À revalider | C : création d'un template, upsert du nouveau brouillon, puis clear de l'ancienne clé en `best-effort` | Vérifier erreurs/réponses tardives et cohérence des deux clés. Aucun scénario mutatif exécuté. | P2 |
+| Restauration d'un brouillon | OK | B14 : restauration QA réelle, 6 champs et 2 pages, valeurs et rich-text compatible retrouvés | Les trois brouillons historiques restent intacts. | P2 |
+| Sauvegarde explicite | OK | B14 : bouton Brouillon pour Owner/Editor/Filler ; lignes et valeurs QA vérifiées | Collision de sauvegarde structurelle distincte ci-dessous. | P2 |
+| Nettoyage après sauvegarde structurelle | Bug confirmé | B14 : nouveau template créé mais upsert `{templateId,sourceFileId}` refuse P2002 si slot source existant ; catch silencieux et faux succès | Pas de brouillon associé au nouveau template ; valeurs conservées sous ancienne clé. Correction dédiée requise, sans migration. | P1 |
 
 ## Permissions et partage
 
 Sources : [`permissions.service.ts`](../apps/api/src/permissions/permissions.service.ts),
 [`permission-matrix.ts`](../apps/api/src/config/permission-matrix.ts),
 [`ShareModal.tsx`](../apps/web/src/components/ShareModal.tsx).
-L’audit initial comptait 0 permission documentaire et 0 groupe : une matrice
-multi-utilisateur nécessite des données de test isolées et nettoyées ensuite.
+L'audit initial comptait 0 permission et 0 groupe. B14 conserve volontairement
+quatre partages synthétiques et quatre acteurs QA autorisés ; aucun groupe.
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
 | Rôle documentaire `owner` | OK | I : matrice API et template/export autorisés dans le stack | Partage/retrait via l’interface à revalider. | P1 |
-| Rôle `editor` | OK | I : 43 tests API, 13 frontend et création de template partagé dans le stack | Édition structurelle interactive à revalider. | P1 |
-| Rôle `filler` | OK | Correction du 22/10 : permissions frontend combinées, handlers réels de FieldOverlay et panneau testés avec dépendances simulées | Structure bloquée même sur champ non verrouillé ; valeurs conservées. Validation dans le navigateur encore nécessaire. | P1 |
-| Partage direct utilisateur | À revalider | C : `DocumentPermission` et contrôle owner pour partager/révoquer | Aucun test avec deux utilisateurs. | P1 |
+| Rôle `editor` | OK | I et B14 : ajout de champ et sauvegarde d'un template dérivé sur document partagé ; H14 : lectures autorisées | Modification en place du template d'autrui non recettée. | P1 |
+| Rôle `filler` | OK | I et B14 : valeur QA conservée, structure/rotation/type/export/impression bloqués ; H14 : refus 403 structure/détection/partage | Source lisible selon politique ; icônes secondaires encore trompeuses, sans contournement démontré. | P1 |
+| Partage direct utilisateur | OK | H14 : owner partage les 2 imports à Editor/Filler ; B14 : matrice des quatre acteurs ; Outsider sans accès | Création/révocation via la modale UI non testée. | P1 |
 | Partage par groupe | À revalider | C : résolution des appartenances, rôle le plus élevé parmi groupes | Aucun groupe ni permission dans l'instance observée ; aucun test automatisé. | P1 |
 | Création de template depuis un document `filler` | OK | Correction du 22/10 : permission globale + `requireDocRole(editor)` ; matrice owner/editor/filler/aucun/admin testée | Filler refusé ; existence du document vérifiée même pour admin. Pas de déploiement. | P1 |
 | Restrictions d'export / impression | À revalider | Correction du 22/10 : resolve/run exigent contexte cohérent et rôle editor ; refus avant écriture testés. Flags export/print frontend testés | Correctif automatisé validé ; export visuel et impression restent à vérifier dans le navigateur. | P1 |
@@ -232,10 +237,10 @@ Sources : [`detect.controller.ts`](../apps/api/src/detect/detect.controller.ts),
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| Communication API → Vision | OK | V historique : health 200 ; I : appel /detect sur PNG partagé réellement traité | Précision et timeout/panne restent à mesurer. | P2 |
+| Communication API → Vision | OK | I, B14 : détection PNG réelle depuis UI ; H14 : PDF réel aux trois sensibilités | Précision et timeout/panne restent à mesurer. | P2 |
 | Accès au fichier partagé | OK | I14 : PNG/PDF, empreintes et décodage dans l'image Vision actuelle, fichiers 0600 ; D14 : montage préservé | Vision actuel root ; un changement d'UID exige une adaptation et une validation distinctes. Précision non évaluée. | P2 |
-| Détection de champs | À revalider | C : extraction grille/contours et OCR | Mesurer précision et faux positifs sur PDF/image de test ; aucun test automatisé. | P2 |
-| Sensibilité et lignes pointillées | À revalider | C : profils low/normal/high et `dottedAsLine` | Aucun comparatif sur documents de référence. | P2 |
+| Détection de champs | À revalider | B14 : PNG QA, 13 suggestions ajoutées ; H14 : PDF de référence traité | Faux positifs sur les libellés ; aucune checkbox suggérée. Qualité non validée. | P2 |
+| Sensibilité et lignes pointillées | À revalider | B14 : PNG normal + pointillés ; H14 : PDF low/normal/high, 9/17/23 suggestions texte | Comparaison qualitative seulement, aucun seuil de précision adopté. | P2 |
 | PDF multi-page | Incomplet | C : `load_image()` ne convertit que `first_page=1, last_page=1` | La détection ne parcourt pas les pages suivantes ; première page à valider sur référence. | P2 |
 | Détection sur image | À revalider | C : chemins OpenCV puis PIL présents dans `load_image()` | Aucun résultat comparé à une image de référence. | P2 |
 | Erreurs Vision | À revalider | C : exception renvoyée dans `{ error, suggestedFields: [] }`, API convertit les échecs HTTP/timeout | Les exceptions internes renvoient `200` avec `error` ; UI les affiche, mais observabilité et tests de panne manquent. | P2 |
@@ -250,8 +255,8 @@ Sources : [`exportPdf.ts`](../apps/web/src/exportPdf.ts),
 
 | Fonction | Statut | Validation / test | Anomalie et risque | Priorité |
 |---|---|---|---|---|
-| PDF navigateur | À revalider | C : `pdf-lib`, conversion coordonnées page→PDF, fichier téléchargé | Comparaison visuelle avec source, rotations et tous types de champs absente. | P1 |
-| Rich-text dans le PDF final | Bug confirmé | C : les deux chemins d'export convertissent le HTML en texte brut via [`richTextToPlainText.ts`](../apps/web/src/utils/richTextToPlainText.ts) | Gras/couleurs/surlignage disparaissent. En outre `div`/`p` ne produisent pas de saut de ligne dans `textContent`, sauf `<br>` ; risque de concaténation. | P1 |
+| PDF navigateur | À revalider | B14 : téléchargement réel ; rendu Poppler Debian, deux pages, texte/case/numérique/date alignés à rotation 0 | Rich-text défectueux ; autres angles, tally et overflow non comparés. | P1 |
+| Rich-text dans le PDF final | Bug confirmé | C : conversion en texte brut ; B14 : `div/strong` en deux lignes dans l'éditeur → « QA grasligne 2 » sans gras dans le PDF | Gras/couleurs/surlignage et sauts de paragraphes perdus. Voir preuves du bilan B14. | P1 |
 | Export serveur | OK | I / I14 : writer, droits et limites isolés ; V14 : désactivé, zéro racine/destination active | Pas disponible dans la configuration actuelle ; activation et destination QA à autoriser séparément. Le téléchargement navigateur est distinct. | P2 |
 | `allowedRoots` et chemins | OK | I : 18 tests disque de chemins, symlinks/hardlinks et remplacements ; writer vérifie aussi les racines | Linux requis ; racines et droits POSIX à contrôler au déploiement. | P1 |
 | Règles de destination | À revalider | I : nom canonique vérifié distinct du nom de sortie, règle réelle dans le stack ; tests de contexte et droits | Combinaisons de règles utilisateur/groupe non exhaustives. | P2 |
@@ -307,14 +312,16 @@ récentes et les fusions sont consignées en tête du document.
 
 ## Prochaines étapes après intégration
 
-1. Approuver la session Authelia, les acteurs/fixtures QA et leur conservation
-   avant les écritures ; voir [BROWSER_ACCEPTANCE_PLAN.md](BROWSER_ACCEPTANCE_PLAN.md).
-2. Recetter progressivement login, permissions, import, éditeur, autosave,
-   restauration, Vision et téléchargement PDF sur ce seul jeu QA. Le déploiement
-   groupé est terminé ; ne pas le recommencer pour cette recette.
-3. Traiter séparément les bugs restants : LDAP manquant et politique fallback
-   à clarifier, RP/origin WebAuthn, fidélité rich-text, puis parcours éditeur/Vision.
-4. Ajouter les gates CI et compléter les tests visuels/navigateur.
+1. Corriger séparément le transfert du brouillon après sauvegarde structurelle
+   (P1 confirmé), puis le rendu/compte et le signal de modification des pages.
+2. Réutiliser les comptes/documents QA conservés du
+   [bilan B14](BROWSER_ACCEPTANCE_RESULTS_2026-11-14.md) ; ne pas recommencer le
+   déploiement ni traiter les six documents historiques comme fixtures.
+3. Traiter séparément rich-text export, LDAP manquant et politique fallback à
+   clarifier ; RP/origin WebAuthn et enrôlement TOTP nécessitent leur décision
+   puis une intervention humaine. Ne pas changer la politique pour passer un test.
+4. Compléter groupes/dossiers, souris, tally, overflow, dates par défaut,
+   clavier, impression et angles d'export ; ajouter CI et tests visuels.
 
 ## Ordre historique proposé pour les petites PR de correction
 
