@@ -27,7 +27,7 @@ def request(method, path, actor=None, body=None, raw=None, content_type=None):
         if actor not in tokens:
             a = actors[actor]
             status, result = request("POST", "/auth/login", body={"email": a["email"], "password": a["password"]})
-            assert status == 200 and result.get("token") and not result.get("mfaRequired"), "Normal QA login unavailable"
+            assert status in (200, 201) and result.get("token") and not result.get("mfaRequired"), "Normal QA login unavailable"
             tokens[actor] = result["token"]
         headers["Authorization"] = "Bearer " + tokens[actor]
     if body is not None:
