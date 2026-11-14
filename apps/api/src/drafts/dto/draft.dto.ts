@@ -1,4 +1,4 @@
-import { IsObject, IsOptional, IsString, IsArray, IsNumber, ValidateNested } from 'class-validator';
+import { IsDefined, IsObject, IsOptional, IsString, IsArray, IsNumber, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class FieldStyleDto {
@@ -77,4 +77,13 @@ export class UpsertDraftDto {
   @ValidateNested()
   @Type(() => DraftPayloadDto)
   payload!: DraftPayloadDto;
+}
+
+export class ClearPreservedDraftDto {
+  /** Required on the conditional route; the ordinary DELETE stays unchanged. */
+  @IsDefined()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => DraftPayloadDto)
+  preservedPayload!: DraftPayloadDto;
 }

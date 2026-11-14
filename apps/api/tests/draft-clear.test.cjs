@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const { isDeepStrictEqual } = require('node:util');
 const { Module, ValidationPipe } = require('@nestjs/common');
 const { NestFactory, APP_GUARD } = require('@nestjs/core');
 const { PassportModule } = require('@nestjs/passport');
@@ -23,11 +24,12 @@ const { PrismaService } = require('../dist/prisma/prisma.service');
 const { JwtStrategy } = require('../dist/auth/jwt.strategy');
 const { JwtAuthGuard } = require('../dist/auth/auth.guard');
 const user = { id: 'synthetic-user', role: 'editor', isActive: true, authSource: 'local' };
-let app, base, token, web, rows, deletionFailure, deleteCalls, stub, stubBase, stubStatus, stubBody;
+let app, base, token, web, rows, deletionFailure, lookupFailure, deleteCalls, stub, stubBase, stubStatus, stubBody, stubPaths;
 function matches(row, where) {
   const key = where.userId_templateId || where.userId_sourceFileId || where;
   return row.userId === key.userId && (!key.templateId || row.templateId === key.templateId)
-    && (!key.sourceFileId || row.sourceFileId === key.sourceFileId);
+    && (!key.sourceFileId || row.sourceFileId === key.sourceFileId)
+    && (!where.payload || isDeepStrictEqual(row.payload, where.payload.equals));
 }
 function remove(where, unique) {
   deleteCalls++;
@@ -43,7 +45,12 @@ function remove(where, unique) {
 const prisma = {
   user: { findUnique: async ({ where }) => where.id === user.id ? user : null },
   userWebAuthnCredential: { count: async () => 0 },
-  draft: { delete: async ({ where }) => remove(where, true), deleteMany: async ({ where }) => remove(where, false) },
+  draft: { delete: async ({ where }) => remove(where, true), deleteMany: async ({ where }) => remove(where, false),
+    findUnique: async ({ where }) => {
+      if (lookupFailure) throw new Error('synthetic absence check unavailable');
+      return rows.find(row => matches(row, where)) || null;
+    },
+  },
 };
 class TestModule {}
 Module({ imports: [PassportModule.register({ defaultStrategy: 'jwt' })], controllers: [DraftsController],
@@ -57,7 +64,8 @@ before(async () => {
   await app.listen(0, '127.0.0.1'); base = await app.getUrl();
   token = new JwtService({ secret: process.env.JWT_SECRET }).sign({ sub: user.id, purpose: 'access' });
   web = loadWebDraftClient(base, () => token);
-  stub = http.createServer((_request, response) => {
+  stub = http.createServer((request, response) => {
+    stubPaths.push(request.url);
     response.writeHead(stubStatus, { 'Content-Type': 'application/json' }); response.end(stubBody);
   });
   await new Promise(resolve => stub.listen(0, '127.0.0.1', resolve));
@@ -67,23 +75,26 @@ beforeEach(() => {
   rows = [{ id: 'own-source', userId: user.id, sourceFileId: 'source-A', templateId: null },
     { id: 'own-template', userId: user.id, templateId: 'template-A', sourceFileId: null },
     { id: 'other-source', userId: 'another-user', sourceFileId: 'source-A', templateId: null }];
-  deletionFailure = null; deleteCalls = 0; stubStatus = 200; stubBody = '{}';
+  for (const row of rows) row.payload = { name: 'preserved', fields: [], rotation: 0, pageCount: 1 };
+  deletionFailure = null; lookupFailure = false; deleteCalls = 0; stubStatus = 200; stubBody = '{}'; stubPaths = [];
 });
 after(async () => {
   await app?.close(); await new Promise(resolve => stub?.close(resolve));
   process.chdir(cwd); fs.rmSync(temporary, { recursive: true, force: true });
 });
-async function deletion(key, authenticated = true) {
-  const response = await fetch(base + '/api/drafts?' + new URLSearchParams(key), {
-    method: 'DELETE', headers: authenticated ? { Authorization: `Bearer ${token}` } : {},
+async function deletion(key, authenticated = true, preservedPayload) {
+  const response = await fetch(base + '/api/drafts' + (preservedPayload ? '/if-unchanged' : '') + '?' + new URLSearchParams(key), {
+    method: 'DELETE', headers: { ...(authenticated ? { Authorization: `Bearer ${token}` } : {}),
+      ...(preservedPayload ? { 'Content-Type': 'application/json' } : {}) },
+    body: preservedPayload ? JSON.stringify({ preservedPayload }) : undefined,
   });
   return { status: response.status, body: await response.json() };
 }
 
 for (const key of [{ sourceFileId: 'source-A' }, { templateId: 'template-A' }]) {
   test(`DELETE distinguishes a deleted row from established absence: ${Object.keys(key)[0]}`, async () => {
-    assert.deepEqual(await web.clearDraft(key), { cleared: true, outcome: 'deleted' });
-    assert.deepEqual(await web.clearDraft(key), { cleared: true, outcome: 'absent' });
+    assert.deepEqual({ ...await web.clearDraft(key) }, { cleared: true, outcome: 'deleted' });
+    assert.deepEqual({ ...await web.clearDraft(key) }, { cleared: true, outcome: 'absent' });
     assert.equal(rows.some(row => row.id === 'other-source'), true);
   });
 }
@@ -100,13 +111,44 @@ test('DELETE with lost commit acknowledgement is an error, only a successful ret
   const first = await deletion({ sourceFileId: 'source-A' });
   assert.equal(first.status, 500); assert.notEqual(first.body.cleared, true);
   deletionFailure = null;
-  assert.deepEqual(await web.clearDraft({ sourceFileId: 'source-A' }), { cleared: true, outcome: 'absent' });
+  assert.deepEqual({ ...await web.clearDraft({ sourceFileId: 'source-A' }) }, { cleared: true, outcome: 'absent' });
 });
 test('DELETE without a key is rejected before touching Prisma', async () => {
   assert.equal((await deletion({})).status, 400); assert.equal(deleteCalls, 0);
+  assert.equal((await deletion({}, true, rows[0].payload)).status, 400); assert.equal(deleteCalls, 0);
 });
 test('DELETE still requires an access JWT', async () => {
   assert.equal((await deletion({ sourceFileId: 'source-A' }, false)).status, 401); assert.equal(deleteCalls, 0);
+  assert.equal((await deletion({ sourceFileId: 'source-A' }, false, rows[0].payload)).status, 401); assert.equal(deleteCalls, 0);
+});
+test('conditional DELETE requires its payload and never silently becomes unconditional', async () => {
+  const response = await fetch(base + '/api/drafts/if-unchanged?sourceFileId=source-A', {
+    method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 400); assert.equal(deleteCalls, 0); assert.equal(rows.length, 3);
+});
+test('conditional DELETE proves matching deletion and subsequent absence', async () => {
+  const key = { sourceFileId: 'source-A' }, copy = structuredClone(rows[0].payload);
+  assert.equal((await web.clearDraft(key, copy)).outcome, 'deleted');
+  assert.equal((await web.clearDraft(key, copy)).outcome, 'absent');
+});
+test('conditional DELETE refuses a changed payload instead of claiming absence', async () => {
+  const key = { sourceFileId: 'source-A' }, copy = structuredClone(rows[0].payload);
+  rows[0].payload = { ...copy, name: 'newer old-key changes' };
+  assert.equal((await deletion(key, true, copy)).status, 409);
+  await assert.rejects(() => web.clearDraft(key, copy));
+  assert.equal(rows[0].payload.name, 'newer old-key changes');
+});
+test('a failed absence lookup after conditional DELETE remains an error', async () => {
+  const key = { sourceFileId: 'source-A' }, copy = { ...rows[0].payload, name: 'not current payload' };
+  lookupFailure = true;
+  assert.equal((await deletion(key, true, copy)).status, 500);
+  await assert.rejects(() => web.clearDraft(key, copy)); assert.equal(rows.length, 3);
+});
+test('a backend without conditional deletion receives no fallback unconditional DELETE', async () => {
+  stubStatus = 404; stubBody = '{"message":"route unavailable"}';
+  await assert.rejects(() => loadWebDraftClient(stubBase, () => token).clearDraft({ sourceFileId: 'source-A' }, rows[0].payload));
+  assert.deepEqual(stubPaths, ['/api/drafts/if-unchanged?sourceFileId=source-A']);
 });
 for (const [label, status, body] of [
   ['HTTP error', 500, '{"message":"synthetic failure"}'],

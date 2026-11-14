@@ -29,11 +29,13 @@ export function isDraftSaveContextCurrent(saved: DraftSaveContext, current: Draf
 
 interface DraftTransport {
   upsert(key: DraftKey, payload: DraftPayload): Promise<unknown>;
-  clear(key: DraftKey): Promise<unknown>;
+  clear(key: DraftKey, preservedPayload?: DraftPayload): Promise<unknown>;
   /** A late response must not write with another signed-in account. */
   sameSession(): boolean;
   /** Adopt only if the captured document/revision is still being edited. */
   adopt(): boolean;
+  /** Fence confirmed old revisions; false keeps an unsettled old slot intact. */
+  prepareCleanup?(key: DraftKey, revision: number): boolean;
 }
 
 /** Preserve filled values separately from the newly saved, blank structure. */
@@ -54,7 +56,10 @@ export async function preserveTemplateDraft(
     try {
       // The editor has adopted the new key before old-slot cleanup begins.
       if (!transport.sameSession()) return { adopted: true, cleanupFailed: true };
-      await transport.clear(snapshot.key);
+      if (transport.prepareCleanup && !transport.prepareCleanup(snapshot.key, snapshot.revision)) {
+        return { adopted: true, cleanupFailed: true };
+      }
+      await transport.clear(snapshot.key, snapshot.payload);
     } catch {
       return { adopted: true, cleanupFailed: true };
     }

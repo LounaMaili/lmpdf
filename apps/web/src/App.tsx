@@ -2190,6 +2190,7 @@ export default function App({ currentUser: currentUserProp, onLogout, onShowAdmi
       try {
         result = await preserveTemplateDraft(created.id, snapshot, {
           upsert: upsertDraft, clear: clearDraft, sameSession,
+          prepareCleanup: (key, revision) => autosaveState.retireKey(key, revision),
           adopt: () => {
             if (!isDraftSaveContextCurrent(snapshot, draftSaveContextRef.current)) return false;
             setLoadedTemplateId(created.id);

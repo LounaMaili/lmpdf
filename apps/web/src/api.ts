@@ -794,12 +794,21 @@ export async function getDraft(key: { templateId?: string; sourceFileId?: string
   return data.draft ?? null;
 }
 
-export async function clearDraft(key: { templateId?: string; sourceFileId?: string }): Promise<void> {
+export type DraftClearResult = { cleared: true; outcome: 'deleted' | 'absent' };
+
+export async function clearDraft(key: { templateId?: string; sourceFileId?: string }, preservedPayload?: DraftPayload): Promise<DraftClearResult> {
   const params = new URLSearchParams();
   if (key.templateId) params.set('templateId', key.templateId);
   if (key.sourceFileId) params.set('sourceFileId', key.sourceFileId);
-  await fetch(`${API_URL}/drafts?${params.toString()}`, {
+  const res = await fetch(`${API_URL}/drafts${preservedPayload ? '/if-unchanged' : ''}?${params.toString()}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: { ...authHeaders(), ...(preservedPayload ? { 'Content-Type': 'application/json' } : {}) },
+    body: preservedPayload ? JSON.stringify({ preservedPayload }) : undefined,
   });
+  if (!res.ok) throw new Error('Erreur suppression brouillon');
+  const result = await res.json();
+  if (result?.cleared !== true || !['deleted', 'absent'].includes(result.outcome)) {
+    throw new Error('Suppression du brouillon non confirmée');
+  }
+  return { cleared: true, outcome: result.outcome };
 }

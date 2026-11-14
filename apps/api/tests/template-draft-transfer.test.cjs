@@ -54,6 +54,12 @@ const prisma = {
     },
     findUnique: async ({ where }) => find(where) || null,
     async delete({ where }) { deletes++; const row = find(where); rows = rows.filter(r => r !== row); return row; },
+    async deleteMany({ where }) {
+      deletes++;
+      const matches = row => row.userId === where.userId && (!where.templateId || row.templateId === where.templateId)
+        && (!where.sourceFileId || row.sourceFileId === where.sourceFileId);
+      const count = rows.filter(matches).length; rows = rows.filter(row => !matches(row)); return { count };
+    },
   },
 };
 class TestModule {}

@@ -123,3 +123,16 @@ test('a session changed during the upsert prevents adoption and cleanup', async 
   });
   assert.equal(result.adopted, false);
 });
+
+test('unsettled old autosave keeps the old draft and reports cleanup unconfirmed', async () => {
+  let preserved = false;
+  const result = await preserveTemplateDraft('new', snapshot, {
+    sameSession: session, upsert: async () => { preserved = true; }, adopt: session,
+    prepareCleanup: (key, revision) => {
+      assert.equal(preserved, true); assert.deepEqual(key, snapshot.key); assert.equal(revision, snapshot.revision);
+      return false;
+    },
+    clear: async () => assert.fail('do not delete an unsettled old slot'),
+  });
+  assert.deepEqual(result, { adopted: true, cleanupFailed: true });
+});
