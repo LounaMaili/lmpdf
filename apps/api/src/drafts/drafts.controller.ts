@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Put, Query, Request } from '@nestjs/common';
 import { DraftsService } from './drafts.service';
-import { UpsertDraftDto } from './dto/draft.dto';
+import { ClearPreservedDraftDto, UpsertDraftDto } from './dto/draft.dto';
 
 @Controller('drafts')
 export class DraftsController {
@@ -48,5 +48,17 @@ export class DraftsController {
   ) {
     const userId = req.user.id;
     return this.draftsService.clear(userId, { templateId, sourceFileId });
+  }
+
+  /** A distinct route makes older backends fail safely instead of ignoring a precondition. */
+  @Delete('if-unchanged')
+  @HttpCode(200)
+  async clearPreserved(
+    @Body() body: ClearPreservedDraftDto,
+    @Query('templateId') templateId?: string,
+    @Query('sourceFileId') sourceFileId?: string,
+    @Request() req?: any,
+  ) {
+    return this.draftsService.clear(req.user.id, { templateId, sourceFileId }, body.preservedPayload);
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { sanitizeRichTextHtml } from '../utils/sanitizeRichText';
 
@@ -104,24 +104,27 @@ export class DraftsService {
   /**
    * Clear draft after explicit save.
    */
-  async clear(userId: string, key: { templateId?: string; sourceFileId?: string }) {
-    try {
-      if (key.templateId) {
-        await this.prisma.draft.delete({
-          where: {
-            userId_templateId: { userId, templateId: key.templateId },
-          },
-        });
-      } else if (key.sourceFileId) {
-        await this.prisma.draft.delete({
-          where: {
-            userId_sourceFileId: { userId, sourceFileId: key.sourceFileId },
-          },
-        });
+  async clear(userId: string, key: { templateId?: string; sourceFileId?: string }, preservedPayload?: DraftPayload) {
+    const where = key.templateId ? { userId, templateId: key.templateId }
+      : key.sourceFileId ? { userId, sourceFileId: key.sourceFileId } : null;
+    if (!where) throw new BadRequestException('templateId ou sourceFileId requis');
+
+    // The unique user/key indexes allow at most one match. A completed DELETE
+    // with count=0 proves absence; an exception (including P2025) does not.
+    // Do not turn a lost acknowledgement or a database failure into success.
+    const { count } = await this.prisma.draft.deleteMany({ where: {
+      ...where,
+      // Equality is part of the DELETE itself, not a racy read-then-delete.
+      ...(preservedPayload ? { payload: { equals: this.sanitizePayloadFields(preservedPayload) as any } } : {}),
+    } });
+    if (count === 0) {
+      if (preservedPayload) {
+        const existing = await this.get(userId, key);
+        if (existing) throw new ConflictException('Brouillon modifié depuis sa copie : suppression refusée');
       }
-    } catch {
-      // Not found → no-op
+      return { cleared: true, outcome: 'absent' as const };
     }
-    return { cleared: true };
+    if (count === 1) return { cleared: true, outcome: 'deleted' as const };
+    throw new Error('Résultat de suppression de brouillon inattendu');
   }
 }

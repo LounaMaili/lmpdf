@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { upsertDraft, type DraftPayload } from '../api';
 import { AutosaveScheduler, type AutosaveState } from './autosaveScheduler';
 
@@ -113,5 +113,8 @@ export function useAutosave(
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [dirty]);
 
-  return state;
+  const retireKey = useCallback((key: { templateId?: string; sourceFileId?: string }, revision: number) =>
+    schedulerRef.current?.retireKey(key, revision) ?? false, []);
+
+  return { ...state, retireKey };
 }

@@ -392,3 +392,64 @@ test('a failed A flush does not block B and remains visible until A retries', as
   assert.deepEqual(writes.map(({ key }) => key), [keyA, keyB, keyA]);
   assert.equal(states.at(-1)?.status, 'saved');
 });
+
+test('confirmed old revisions are retired without preventing a future edit of that key', async () => {
+  const writes: AutosaveSnapshot<TestPayload>[] = [];
+  const { scheduler, timers } = createHarness(async snapshot => { writes.push(snapshot); });
+  observeEdit(scheduler, 1, keyA, 'already copied to new template');
+  assert.equal(scheduler.retireKey(keyA, 1), true);
+  scheduler.notifyChange({ key: keyA, revision: 1, data: { name: 'late obsolete revision' } });
+  timers.advanceBy(3000); await flushAsyncWork();
+  assert.equal(writes.length, 0);
+  observeEdit(scheduler, 2, keyA, 'legitimate reopened document');
+  await scheduler.saveNow();
+  assert.deepEqual(writes.map(s => s.data.name), ['legitimate reopened document']);
+});
+
+test('retired in-flight A keeps its key and cannot acknowledge or overwrite newer B', async () => {
+  const writes: AutosaveSnapshot<TestPayload>[] = [];
+  let release!: () => void;
+  const { scheduler, states } = createHarness(snapshot => {
+    writes.push(snapshot);
+    return writes.length === 1 ? new Promise<void>(resolve => { release = resolve; }) : Promise.resolve();
+  });
+  observeEdit(scheduler, 1, keyA, 'old request');
+  const inFlight = scheduler.saveNow();
+  observeEdit(scheduler, 2, keyA, 'preserved copy');
+  assert.equal(scheduler.retireKey(keyA, 2), false, 'an unfinished old write prevents cleanup');
+  observeCleanLoad(scheduler, 2, keyB);
+  observeEdit(scheduler, 3, keyB, 'newer B');
+  const before = states.length;
+  release(); await inFlight;
+  assert.equal(states.length, before, 'late A must not mark B saved');
+  await scheduler.saveNow();
+  assert.deepEqual(writes.map(s => ({ key: s.key, value: s.data.name })), [
+    { key: keyA, value: 'old request' }, { key: keyB, value: 'newer B' },
+  ]);
+});
+
+test('an uncertain retired write is never retried or mistaken for a clearable absence', async () => {
+  let reject!: (error: Error) => void;
+  let writes = 0;
+  const { scheduler, timers, states } = createHarness(() => {
+    writes++; return new Promise<void>((_resolve, fail) => { reject = fail; });
+  });
+  observeEdit(scheduler, 1, keyA);
+  const inFlight = scheduler.saveNow();
+  assert.equal(scheduler.retireKey(keyA, 1), false);
+  observeCleanLoad(scheduler, 1, keyB);
+  const before = states.length;
+  reject(new Error('lost acknowledgement')); await inFlight;
+  timers.advanceBy(3000); await flushAsyncWork();
+  assert.equal(writes, 1); assert.equal(states.length, before);
+  assert.equal(scheduler.retireKey(keyA, 1), false);
+});
+
+test('retirement never discards an old-key revision newer than the preserved copy', async () => {
+  const writes: AutosaveSnapshot<TestPayload>[] = [];
+  const { scheduler } = createHarness(async snapshot => { writes.push(snapshot); });
+  observeEdit(scheduler, 3, keyA, 'newer A not copied yet');
+  assert.equal(scheduler.retireKey(keyA, 2), false);
+  await scheduler.saveNow();
+  assert.equal(writes[0]?.data.name, 'newer A not copied yet');
+});

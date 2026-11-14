@@ -54,6 +54,10 @@ function sameKey(a: DraftKey | null, b: DraftKey | null): boolean {
   return a.templateId === b.templateId && a.sourceFileId === b.sourceFileId;
 }
 
+function keyId(key: DraftKey): string {
+  return JSON.stringify([key.templateId ?? null, key.sourceFileId ?? null]);
+}
+
 /** Coordinates autosave timing independently from React rendering. */
 export class AutosaveScheduler<T> {
   #debounceMs: number;
@@ -73,6 +77,9 @@ export class AutosaveScheduler<T> {
   #debounceTimer: TimerHandle | null = null;
   #intervalTimer: TimerHandle | null = null;
   #isSaving = false;
+  #inFlightSnapshot: AutosaveSnapshot<T> | null = null;
+  #retiredThrough = new Map<string, number>();
+  #unconfirmedWrites = new Set<string>();
   #stopped = false;
 
   constructor(options: AutosaveSchedulerOptions<T>, initialRevision = 0) {
@@ -140,6 +147,7 @@ export class AutosaveScheduler<T> {
   }
 
   notifyChange(snapshot: AutosaveSnapshot<T>): void {
+    if (this.#isRetired(snapshot)) return;
     if (snapshot.revision <= this.#latestChangeRevision) return;
     if (!sameKey(this.#activeKey, snapshot.key)) this.switchKey(snapshot.key);
     this.#latestChangeRevision = snapshot.revision;
@@ -156,6 +164,32 @@ export class AutosaveScheduler<T> {
       || this.#failedPreviousDocuments.length > 0;
   }
 
+  /**
+   * Retire only revisions confirmed in a new template draft. A late response
+   * keeps its captured key and cannot retry an obsolete revision. Never clear
+   * the old slot if its write is still in flight or has an uncertain outcome.
+   */
+  retireKey(key: DraftKey, throughRevision: number): boolean {
+    if (!Number.isSafeInteger(throughRevision) || throughRevision < 0) return false;
+    const work = [this.#pending, this.#inFlightSnapshot,
+      ...this.#previousDocuments, ...this.#failedPreviousDocuments];
+    if (work.some(snapshot => snapshot && sameKey(snapshot.key, key) && snapshot.revision > throughRevision)) return false;
+
+    const id = keyId(key);
+    this.#retiredThrough.set(id, Math.max(throughRevision, this.#retiredThrough.get(id) ?? -1));
+    if (this.#pending && this.#isRetired(this.#pending)) {
+      this.#pending = null;
+      this.#clearDebounce();
+    }
+    this.#previousDocuments = this.#previousDocuments.filter(snapshot => !this.#isRetired(snapshot));
+    const failedBefore = this.#failedPreviousDocuments.length;
+    this.#failedPreviousDocuments = this.#failedPreviousDocuments.filter(snapshot => !this.#isRetired(snapshot));
+    if (failedBefore !== this.#failedPreviousDocuments.length && this.#failedPreviousDocuments.length === 0) {
+      this.#previousDocumentError = null;
+    }
+    return !(this.#inFlightSnapshot && sameKey(this.#inFlightSnapshot.key, key)) && !this.#unconfirmedWrites.has(id);
+  }
+
   async saveNow(): Promise<boolean> {
     if (this.#stopped || this.#isSaving || !this.hasPendingChanges()) return false;
 
@@ -168,31 +202,40 @@ export class AutosaveScheduler<T> {
       this.#clearDebounce();
     }
     this.#isSaving = true;
+    this.#inFlightSnapshot = snapshot;
     if (sameKey(snapshot.key, this.#activeKey)) this.#emit('saving', null);
 
     let succeeded = false;
     try {
       await this.#save(snapshot);
       succeeded = true;
-      if (this.#failedPreviousDocuments.length === 0) this.#previousDocumentError = null;
-      if (sameKey(snapshot.key, this.#activeKey)) {
-        this.#lastSavedAt = this.#now();
-        this.#emit(this.#previousDocumentError ? 'error' : 'saved', this.#previousDocumentError);
-      } else if (!this.#previousDocumentError && !this.#pending && !this.#previousDocuments.length) {
-        this.#emit(this.#lastSavedAt ? 'saved' : 'idle', null);
+      // A late retired-key response cannot announce the current document saved.
+      if (!this.#isRetired(snapshot)) {
+        if (this.#failedPreviousDocuments.length === 0) this.#previousDocumentError = null;
+        if (sameKey(snapshot.key, this.#activeKey)) {
+          this.#lastSavedAt = this.#now();
+          this.#emit(this.#previousDocumentError ? 'error' : 'saved', this.#previousDocumentError);
+        } else if (!this.#previousDocumentError && !this.#pending && !this.#previousDocuments.length) {
+          this.#emit(this.#lastSavedAt ? 'saved' : 'idle', null);
+        }
       }
     } catch (error) {
-      if (sameKey(snapshot.key, this.#activeKey)) {
-        if (!this.#pending || this.#pending.revision < snapshot.revision) this.#pending = snapshot;
-      } else {
-        this.#failedPreviousDocuments.push(snapshot);
+      this.#unconfirmedWrites.add(keyId(snapshot.key));
+      // Retired snapshots are already preserved elsewhere: no obsolete retry.
+      if (!this.#isRetired(snapshot)) {
+        if (sameKey(snapshot.key, this.#activeKey)) {
+          if (!this.#pending || this.#pending.revision < snapshot.revision) this.#pending = snapshot;
+        } else {
+          this.#failedPreviousDocuments.push(snapshot);
+        }
+        const message = error instanceof Error ? error.message : 'Erreur autosave';
+        if (!sameKey(snapshot.key, this.#activeKey)) {
+          this.#previousDocumentError = `Document précédent : ${message}`;
+        }
+        this.#emit('error', this.#previousDocumentError ?? message);
       }
-      const message = error instanceof Error ? error.message : 'Erreur autosave';
-      if (!sameKey(snapshot.key, this.#activeKey)) {
-        this.#previousDocumentError = `Document précédent : ${message}`;
-      }
-      this.#emit('error', this.#previousDocumentError ?? message);
     } finally {
+      this.#inFlightSnapshot = null;
       this.#isSaving = false;
       if (this.#previousDocuments.length > 0) void this.saveNow();
       else if (this.#pending && !this.#debounceTimer
@@ -200,6 +243,10 @@ export class AutosaveScheduler<T> {
     }
 
     return true;
+  }
+
+  #isRetired(snapshot: AutosaveSnapshot<T>): boolean {
+    return snapshot.revision <= (this.#retiredThrough.get(keyId(snapshot.key)) ?? -1);
   }
 
   #scheduleDebounce(): void {
