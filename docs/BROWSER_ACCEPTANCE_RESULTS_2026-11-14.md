@@ -196,10 +196,57 @@ pas utilisées comme preuve de compatibilité rich-text.
 | HTTP | Frontend 200, /api/health 200 ; accès PostgreSQL réel via Prisma/API, accès Vision réel via détections |
 | Logs | Aucune réapparition du TypeError sanitize-html ; erreurs P2002 du bug de brouillon ci-dessus, pas de redémarrage |
 
+Le contrôle final confirme également `ALLOW_SELF_REGISTER=false`, mode local et
+MFA optional. Le dump après QA correspond encore à l'empreinte logique de la
+base ; ses deux archives passent leurs empreintes. Les builds isolés suivants
+n'ont modifié ni la base, ni les comptes, ni les fichiers de l'instance.
+
 Les preuves brutes sont hors Git, dans `evidence/` sous la racine QA privée.
 Captures utiles : `browser-owner-reference.jpg`, `browser-editor-qa.jpg`,
 `browser-filler-permissions.jpg`, `browser-outsider-qa.jpg`,
 `browser-vision-qa.jpg`. Elles ne contiennent que l'interface et les données QA.
+
+## Correctif P1 préparé après la recette, non déployé
+
+Branche indépendante de `main` : `codex/fix-template-draft-preservation`.
+SHA poussé et validé sur Debian :
+`1c6eaaf0ce725516ed40dfae29fbdd6537cd8d39`.
+Le diff concerne le flux web de sauvegarde de template/brouillon, ses messages
+FR/EN, les tests et leur documentation. Aucune source métier API, dépendance,
+permission, migration ou configuration de production modifiée.
+
+Le nouveau brouillon utilise uniquement `templateId`. Une capture indépendante
+conserve clé/révision/données ; les réponses tardives n'adoptent pas un document
+ou une session qui a changé. L'ancien slot n'est nettoyé qu'après préservation
+et adoption ; un refus conserve l'ancien contexte et affiche un avertissement.
+
+| Validation isolée sur ce SHA | Résultat |
+|---|---|
+| Build frontend production | Réussi ; avertissement de gros bundle conservé |
+| Build API et Prisma generate | Réussis ; aucune migration |
+| Autosave existant | 17/17 |
+| Permissions frontend existantes | 13/13 |
+| MFA frontend existant | 4/4 |
+| Transfert de brouillon : snapshots, refus, nettoyage, changement de contexte/session | 11/11 |
+| HTTP Nest avec vrais guards/DTO/controller/service, JWT et Prisma synthétiques | 6/6, dont reproduction du refus de l'ancienne requête puis succès du transfert corrigé |
+
+Total : **51 tests réussis**, en plus des contrôles B14/H14 sur l'application
+active. Aucun accès réseau externe ou volume réel dans les conteneurs de tests.
+Le helper web monté en lecture seule dans la suite HTTP provient de ce même SHA.
+Disque vérifié avant chaque build ; aucune purge Docker globale.
+
+Les 213 tests API historiques et Compose inchangés n'ont pas été rejoués pour
+ce correctif web. Les six nouveaux tests HTTP simulent Prisma : ils ne sont pas
+une nouvelle validation PostgreSQL réelle ni une recette navigateur du correctif
+actif. Le nettoyage DELETE existant et les modifications concurrentes depuis
+plusieurs onglets restent des limites documentées dans
+`docs/TEMPLATE_DRAFT_PRESERVATION.md` de la branche de correction.
+
+Les deux branches sont poussées pour revue. Aucune PR ouverte ou fusionnée
+automatiquement, aucun déploiement du correctif. L'image backend active reste
+`f75d7b3f0aae3f5f285d0dbfe486d7080a961815`, les quatre IDs de conteneurs et
+les trois volumes sont inchangés ; Fedora et le checkout Debian sont propres.
+Preuve privée complémentaire : `evidence/fix-validation.json`.
 
 ## Suite priorisée
 

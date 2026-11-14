@@ -210,7 +210,7 @@ Sources : [`useAutosave.ts`](../apps/web/src/hooks/useAutosave.ts),
 | Chargement simple sans édition | À revalider | T17 : scheduler n'enregistre pas un load propre ; C : `loadTemplate()` fait `setDirty(false)` | L'effet `dateDefaultToday` peut créer une modification réelle au montage ; cas non couvert par T17. | P2 |
 | Restauration d'un brouillon | OK | B14 : restauration QA réelle, 6 champs et 2 pages, valeurs et rich-text compatible retrouvés | Les trois brouillons historiques restent intacts. | P2 |
 | Sauvegarde explicite | OK | B14 : bouton Brouillon pour Owner/Editor/Filler ; lignes et valeurs QA vérifiées | Collision de sauvegarde structurelle distincte ci-dessous. | P2 |
-| Nettoyage après sauvegarde structurelle | Bug confirmé | B14 : nouveau template créé mais upsert `{templateId,sourceFileId}` refuse P2002 si slot source existant ; catch silencieux et faux succès | Pas de brouillon associé au nouveau template ; valeurs conservées sous ancienne clé. Correction dédiée requise, sans migration. | P1 |
+| Nettoyage après sauvegarde structurelle | Bug confirmé | B14 : nouveau template créé mais upsert `{templateId,sourceFileId}` refuse P2002 si slot source existant ; catch silencieux et faux succès | Correctif indépendant `1c6eaaf` : 51 tests/builds isolés réussis, non fusionné/non déployé. Le défaut demeure sur l'instance ; valeurs gardées sous ancienne clé. | P1 |
 
 ## Permissions et partage
 
